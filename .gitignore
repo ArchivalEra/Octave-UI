@@ -1,0 +1,77 @@
+# ==============================================================================
+# Strict Whitelist Mode (.gitignore)
+# 默认忽略所有文件与目录，仅显式放行允许追踪的文件与目录
+# ==============================================================================
+
+# 1. 默认忽略一切
+*
+.*
+
+# 2. 根目录通用规范与说明文件
+!/.gitignore
+!/LICENSE
+!/README.md
+!/CONTEXT.md
+!/AGENTS.md
+!/STATE.md
+!/FACTS.json
+
+# 3. 前端/项目常见配置文件
+!/package.json
+!/pnpm-lock.yaml
+!/yarn.lock
+!/package-lock.json
+!/bun.lockb
+!/tsconfig.json
+!/tsconfig.*.json
+!/vite.config.*
+!/webpack.config.*
+!/index.html
+
+# 4. Rust/其它语言配置文件（备用）
+!/Cargo.toml
+!/Cargo.lock
+!/rust-toolchain.toml
+
+# 5. 常见源码与资源目录及递归内容放行
+!/.github/
+!/.github/**
+!/.githooks/
+!/.githooks/**
+!/src/
+!/src/**
+!/public/
+!/public/**
+!/docs/
+!/docs/**
+!/tests/
+!/tests/**
+!/scripts/
+!/scripts/**
+
+# 6. 二次排除构建产物、依赖和系统/缓存文件（防止上述目录通配符误带入）
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+out/
+**/out/
+target/
+**/target/
+.cache/
+**/.cache/
+test-results/
+coverage/
+*.log
+.DS_Store
+Thumbs.db
+__pycache__/
+**/__pycache__/
+*.pyc
+*.swp
+*.bak
+.env
+.env.*
+!.env.example
