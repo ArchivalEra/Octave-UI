@@ -15,6 +15,18 @@
 !/AGENTS.md
 !/STATE.md
 !/FACTS.json
+!/retractions.json
+!/gates-selftest.sh
+
+# 2.1 Einfacht 事实系统与 Hooks
+!/zreflect/
+!/zreflect/**
+!/reflect-hooks/
+!/reflect-hooks/**
+!/questions/
+!/questions/**
+!/.zcode/
+!/.zcode/**
 
 # 3. 前端/项目常见配置文件
 !/package.json
