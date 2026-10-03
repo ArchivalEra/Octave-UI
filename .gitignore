@@ -38,6 +38,9 @@
 !/tsconfig.*.json
 !/vite.config.*
 !/webpack.config.*
+!/astro.config.*
+!/svelte.config.*
+!/vitest.config.*
 !/index.html
 
 # 4. Rust/其它语言配置文件（备用）
@@ -62,6 +65,9 @@
 !/scripts/**
 
 # 6. 二次排除构建产物、依赖和系统/缓存文件（防止上述目录通配符误带入）
+*.wasm
+*.data
+*.oct
 node_modules/
 **/node_modules/
 dist/

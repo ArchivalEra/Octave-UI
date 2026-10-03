@@ -34,60 +34,47 @@ DOC = os.environ.get("REFLECT_DOC", "STATE.md")
 
 # ══ 你的部分 ══════════════════════════════════════════════════════════════════
 def measure_example():
-    """**占位实现 —— 换掉它。** 系统只提供机制，你的输入只有你知道怎么量。
-
-    这里量的东西和「事实」无关，只是为了让仓库开箱能跑。真要落地时，把每条
-    `fact(值, 复跑命令, 出处)` 换成你自己量出来的数；特别是那条复跑命令 ——
-    它必须**真的能跑**，否则这条事实就又变成了一句散文。
-    """
     facts = {}
-    n_py = 0
-    n_md = 0
-    lines_py = 0
-    for root, _dirs, files in os.walk(GATE_REPO):
-        if "/.git" in root:
-            continue
-        for f in files:
-            if f.endswith(".py"):
-                n_py += 1
-                try:
-                    lines_py += sum(1 for _ in open(os.path.join(root, f), encoding="utf-8",
-                                                    errors="replace"))
-                except OSError:
-                    pass                      # 数不出来的文件不计数 —— 宁缺勿假
-            elif f.endswith(".md"):
-                n_md += 1
-    facts["py_files"] = fact(n_py, "find . -name '*.py' -not -path './.git/*' | wc -l",
-                             "repo", "示例事实：换掉 measure_example()")
-    facts["md_files"] = fact(n_md, "find . -name '*.md' -not -path './.git/*' | wc -l", "repo")
-    # 这条刻意大于 BARE_MIN（check_facts 的裸数字阈值 = 100），好在 STATE.md 里
-    # 演示「手抄这个数字会被闸门拦下」。太小的数字遍地都是，查了全是噪音 ⇒ 不查。
-    facts["py_lines"] = fact(lines_py, "find . -name '*.py' -not -path './.git/*' "
-                             "-exec cat {} + | wc -l", "repo",
-                             "刻意 ≥100，用来示范裸数字判据")
-    # ⑥ 块排除模式（issue #4 ⑥）：md_lines 数**块以外**的行 —— 机器块
-    # 就渲染在这些文档里，数进去 ⇒ 渲染一遍值就过期 ⇒ 复跑恒定失败
-    # （而 check_facts 比的是「块↔台账」，两边一起陈旧 ⇒ 全绿）。
-    # awk 的 FNR==1{b=0} 是必需的：find -exec {} + 会把多个文件喂给
-    # 同一个 awk 进程，漏了按文件重置，第一个带块的文件之后全被跳过，
-    # 而输出仍然「像个行数」。起始标记与 render.py 的输出逐字一致。
-    md_lines_cmd = ("find . -name '*.md' -not -path './.git/*'"
+    
+    # 1. 前端与组件资产统计
+    ts_cmd = "find . \\( -path './src/*' -o -path './tests/*' \\) -name '*.ts' | wc -l"
+    n_ts = int(subprocess.run(ts_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
+    facts["ts_files"] = fact(n_ts, ts_cmd, "repo", "TypeScript 源码与测试文件数")
+
+    svelte_cmd = "find . -path './src/*' -name '*.svelte' | wc -l"
+    n_svelte = int(subprocess.run(svelte_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
+    facts["svelte_files"] = fact(n_svelte, svelte_cmd, "repo", "Svelte 5 组件与 Islands 数量")
+
+    astro_cmd = "find . -path './src/*' -name '*.astro' | wc -l"
+    n_astro = int(subprocess.run(astro_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
+    facts["astro_files"] = fact(n_astro, astro_cmd, "repo", "Astro 静态页面与布局数")
+
+    test_cmd = "find . -path './tests/*' -name '*.test.ts' | wc -l"
+    n_test = int(subprocess.run(test_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
+    facts["test_files"] = fact(n_test, test_cmd, "repo", "Vitest 单元测试套件数")
+
+    # 2. 闸门与文档统计
+    py_files_cmd = "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l"
+    n_py = int(subprocess.run(py_files_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
+    facts["py_files"] = fact(n_py, py_files_cmd, "repo")
+
+    py_lines_cmd = "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l"
+    lines_py = int(subprocess.run(py_lines_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
+    facts["py_lines"] = fact(lines_py, py_lines_cmd, "repo", "刻意 ≥100，用来示范裸数字判据")
+
+    md_files_cmd = "find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l"
+    n_md = int(subprocess.run(md_files_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
+    facts["md_files"] = fact(n_md, md_files_cmd, "repo")
+
+    md_lines_cmd = ("find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*'"
                     " -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l")
-    # cwd=GATE_REPO：计数（os.walk(GATE_REPO)）与复跑（闸门在仓库根
-    # 逐字执行 cmd）都锚定 GATE_REPO —— 不传 cwd 时，在夹具里量到的是
-    # 调用方仓库的行数，换名自证会红（跨仓库可配置性自证抓到的回归）。
     facts["md_lines"] = fact(
         int(subprocess.run(md_lines_cmd, shell=True, capture_output=True,
-                             text=True, check=True,
-                             cwd=GATE_REPO).stdout.strip()),
+                           text=True, check=True,
+                           cwd=GATE_REPO).stdout.strip()),
         md_lines_cmd, "repo",
         "不含机器块：块就渲染在文档里，数进去会让渲染一遍值就过期")
 
-    # 例：**量不到就不写**。把 UPSTREAM_VERSION 设上才有这条事实。
-    v = os.environ.get("UPSTREAM_VERSION", "").strip()
-    if v:
-        facts["upstream_version"] = fact(v, "echo \"$UPSTREAM_VERSION\"", "env",
-                                         "量不到就不写 —— 宁缺勿假")
     return facts
 
 

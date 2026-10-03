@@ -1,0 +1,146 @@
+/* src/styles/theme.css */
+/* 白根（Shirone）设计规范 CSS 变量与全局样式 */
+
+:root, [data-theme="dark"] {
+  --bg-canvas: #0e1117;
+  --bg-surface: #161b22;
+  --bg-surface-hover: #21262d;
+  --bg-terminal: #0d1117;
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+
+  --text-main: #e6edf3;
+  --text-muted: #8b949e;
+  --text-dim: #6e7681;
+
+  --border-subtle: #30363d;
+  --border-muted: #21262d;
+
+  --accent-primary: #388bfd;
+  --accent-primary-hover: #58a6ff;
+  --accent-success: #3fb950;
+  --accent-warning: #d29922;
+  --accent-danger: #f85149;
+  --accent-idle: #3fb950;
+  --accent-busy: #d29922;
+
+  /* Terminal ANSI Colors (Dark) */
+  --term-black: #484f58;
+  --term-red: #ff7b72;
+  --term-green: #7ee787;
+  --term-yellow: #f2cc60;
+  --term-blue: #79c0ff;
+  --term-magenta: #d2a8ff;
+  --term-cyan: #56d4dd;
+  --term-white: #f0f6fc;
+  --term-bright-black: #6e7681;
+  --term-bright-red: #ffa198;
+  --term-bright-green: #56d364;
+  --term-bright-yellow: #e3b341;
+  --term-bright-blue: #58a6ff;
+  --term-bright-magenta: #bc8cff;
+  --term-bright-cyan: #39c5cf;
+  --term-bright-white: #ffffff;
+}
+
+[data-theme="light"] {
+  --bg-canvas: #f6f8fa;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f3f4f6;
+  --bg-terminal: #24292e;
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+
+  --text-main: #24292f;
+  --text-muted: #57606a;
+  --text-dim: #8c959f;
+
+  --border-subtle: #d0d7de;
+  --border-muted: #e1e4e8;
+
+  --accent-primary: #0969da;
+  --accent-primary-hover: #218bff;
+  --accent-success: #1a7f37;
+  --accent-warning: #9a6700;
+  --accent-danger: #cf222e;
+  --accent-idle: #1a7f37;
+  --accent-busy: #bf8700;
+
+  /* Terminal ANSI Colors (Light - terminal remains dark for contrast) */
+  --term-black: #484f58;
+  --term-red: #ff7b72;
+  --term-green: #7ee787;
+  --term-yellow: #f2cc60;
+  --term-blue: #79c0ff;
+  --term-magenta: #d2a8ff;
+  --term-cyan: #56d4dd;
+  --term-white: #f0f6fc;
+  --term-bright-black: #6e7681;
+  --term-bright-red: #ffa198;
+  --term-bright-green: #56d364;
+  --term-bright-yellow: #e3b341;
+  --term-bright-blue: #58a6ff;
+  --term-bright-magenta: #bc8cff;
+  --term-bright-cyan: #39c5cf;
+  --term-bright-white: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-canvas);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  border-color: var(--text-muted);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input, select {
+  background: var(--bg-surface);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-family: inherit;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+/* 隐藏底层 Octave DOM 挂载节点 */
+#octave-raw-output {
+  display: none !important;
+  visibility: hidden;
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+}

@@ -6,6 +6,10 @@
 - 本仓的脚本数：[[py_files]]（引用，不是手抄）。
 - 本仓的文档数：[[md_files]]。
 - 本仓 Python 代码行数：[[py_lines]]。
+- 本仓 TypeScript 文件数：[[ts_files]]。
+- 本仓 Svelte 5 组件与 Islands 数：[[svelte_files]]。
+- 本仓 Astro 页面与布局数：[[astro_files]]。
+- 本仓 Vitest 测试套件数：[[test_files]]。
 
 > ⚠️ 上面三行就是正确写法。若把最后一行写成「本仓有 486 行 Python」，
 > `check_facts.py` 会报**正文裸数字** —— 因为那个数字从写下的那一刻起就开始腐烂：
@@ -42,10 +46,14 @@
 
 | 键 | 值 | 测于 | 复跑命令 |
 |---|---|---|---|
-| `md_files` | **5** | 2026-10-03T13:59:00+0800 | `find . -name '*.md' -not -path './.git/*' | wc -l` |
-| `md_lines` | **221** | 2026-10-03T13:59:00+0800 | `find . -name '*.md' -not -path './.git/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
-| `py_files` | **15** | 2026-10-03T13:59:00+0800 | `find . -name '*.py' -not -path './.git/*' | wc -l` |
-| `py_lines` | **2049** | 2026-10-03T13:59:00+0800 | `find . -name '*.py' -not -path './.git/*' -exec cat {} + | wc -l` |
+| `astro_files` | **2** | 2026-10-03T15:18:34+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
+| `md_files` | **5** | 2026-10-03T15:18:34+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `md_lines` | **225** | 2026-10-03T15:18:34+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
+| `py_files` | **16** | 2026-10-03T15:18:34+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `py_lines` | **2103** | 2026-10-03T15:18:34+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
+| `svelte_files` | **6** | 2026-10-03T15:18:33+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
+| `test_files` | **7** | 2026-10-03T15:18:34+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
+| `ts_files` | **19** | 2026-10-03T15:18:33+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
 
-4 条事实。
+8 条事实。
 <!-- /AUTO:FACTS -->
