@@ -8,9 +8,23 @@
     {
       "id": "R-001",
       "text": "ZCODE_REFLECT_TYPO",
-      "why": "（示例）把一条**假**的翻案条目留在仓里，是为了让这条机制开箱就有一次真实运行 —— 删掉它即可。",
-      "evidence": "python3 zreflect/check_retractions.py（它必须扫到 STATE.md / AGENTS.md / README.md / README.zh.md / README.de.md）",
-      "fixed_in": "本文件（示例条目）"
+      "why": "（示例）把一条假的翻案条目留在仓里，是为了让这条机制开箱就有一次真实运行。",
+      "evidence": "python3 zreflect/check_retractions.py",
+      "fixed_in": "本文件"
+    },
+    {
+      "id": "R-002",
+      "text": "HANDOFF.md 作为长期交接文档",
+      "why": "静态手写交接文档极易漂移，内容已全部分流至事实系统（STATE.md/FACTS.json/CONTEXT.md），开发方向收敛至 maintaince.md。",
+      "evidence": "maintaince.md 规范与 commit 9af160d 原则",
+      "fixed_in": "maintaince.md"
+    },
+    {
+      "id": "R-003",
+      "text": "v1 embed 页面直接触发 plot",
+      "why": "Wasm 64 位 Embed 页面存在 E6 GL 纹理未结边界，直接绘图会导致 WebGL 上下文崩溃击穿 Wasm 堆栈。",
+      "evidence": "ArchivalEra/Octave-Full-Wasm#1 语义边界与 probe-embed-inventory.mjs 实测 §1.9",
+      "fixed_in": "CONTEXT.md §三与 src/modules/figure/FigureBoundary.ts"
     }
   ]
 }

@@ -2,6 +2,14 @@
 
 给在这个仓里工作的 agent 的硬规矩。**这些不是建议，是闸门会拦的东西。**
 
+**AI 从 maintaince.md 读起**：了解全局地图与开发方向；测出来的现状由事实系统承载（`STATE.md` + `FACTS.json`），使用方法看 `README.md`，契约边界看 `CONTEXT.md`。如果非无人值守目标处于进行状态，则不懂就问。
+
+## 仓级铁律
+
+1. **绝对禁止向本仓外部目录写入产物**：Astro 的 `root` 和 `outDir` 已在 `astro.config.mjs` 中锁死至本仓 `./dist`。严禁将产物写入或拷贝到 `octave-wasm-build/` 或 `Shirone-personalized/` 等外部目录。
+2. **上游引擎仓库绝对只读**：`ArchivalEra/Octave-Full-Wasm` 保持绝对只读，严禁任何代码修改或侵入；接口需求与技术建议一律走 GitHub Issues 提单（如 Issue #3 RFC）。
+3. **100% 纯客户端计算与静态 gzip 交付**：不引入任何后端计算服务或代理；交付物仅为纯静态文件与 `.gz` 预压缩包。
+
 ## 七条纪律
 
 1. **数值/行为只认实测**，并把复跑方式写在断言旁边。

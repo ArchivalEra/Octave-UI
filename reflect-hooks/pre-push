@@ -6,10 +6,15 @@
 # 文件、不动历史**：不新鲜就直接拒推，强制先提交再推。
 set -e
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# 可拔插件（issue #8）：repo-local REFLECT_* 载体 = Einfacht.env，
+# 由 einfacht-env.sh 加载（钩子目录优先、仓库根次之；形状见
+# Einfacht.env.example）。钩子虽继承调用 shell 的环境，但那份
+# 来源靠「谁记得 export」—— 换机器 / 换 CI / 换人就没了；
+# 文件才是钩子可复现的来源。删掉插件 ⇒ 本行守卫跳过，钩子
+# 什么都不改地回落纯环境变量 —— 机制能拔，钩子本体通用。
+[ -f "$HERE/einfacht-env.sh" ] && . "$HERE/einfacht-env.sh"
 REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
 cd "$REPO"
-export REFLECT_READMES=${REFLECT_READMES:-README.md}
-export REFLECT_DOCS=${REFLECT_DOCS:-STATE.md,AGENTS.md,README.md}
 
 DOC=${REFLECT_DOC:-STATE.md}
 if [ -f "$DOC" ]; then

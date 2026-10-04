@@ -6,11 +6,15 @@
 #   · 提交时刻是**检查活状态断言**的最后一道闸（过了这一刻，过时断言就进了历史）。
 set -e
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# 可拔插件（issue #8）：repo-local REFLECT_* 载体 = Einfacht.env，
+# 由 einfacht-env.sh 加载（钩子目录优先、仓库根次之；形状见
+# Einfacht.env.example）。钩子虽继承调用 shell 的环境，但那份
+# 来源靠「谁记得 export」—— 换机器 / 换 CI / 换人就没了；
+# 文件才是钩子可复现的来源。删掉插件 ⇒ 本行守卫跳过，钩子
+# 什么都不改地回落纯环境变量 —— 机制能拔，钩子本体通用。
+[ -f "$HERE/einfacht-env.sh" ] && . "$HERE/einfacht-env.sh"
 REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
 cd "$REPO"
-
-export REFLECT_READMES=${REFLECT_READMES:-README.md}
-export REFLECT_DOCS=${REFLECT_DOCS:-STATE.md,AGENTS.md,README.md}
 
 # ① 机器块重渲染（REFLECT_DOC 名字跟随环境；默认 STATE.md）
 #    ⚠️ 这里**只渲染，不重测**（issue #4 ③）：重测由人负责 ——
