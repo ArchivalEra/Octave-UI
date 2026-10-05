@@ -4,7 +4,7 @@
     workspaceStore,
     filesystemStore,
     historyStore,
-    engineSession,
+    supervisor,
     terminalController,
   } from '../modules/appContext';
   import { WorkspaceStore } from '../modules/workspace/WorkspaceStore';
@@ -81,7 +81,7 @@
     if (!docQuery.trim()) return;
     docLoading = true;
     try {
-      docContent = await engineSession.queryDocumentation(docQuery.trim());
+      docContent = await supervisor.queryDocumentation(docQuery.trim());
     } catch (err: any) {
       docContent = `查询失败: ${err.message || String(err)}`;
     } finally {

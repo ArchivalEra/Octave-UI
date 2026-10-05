@@ -60,6 +60,10 @@ export class MockEmbedAdapter implements OctaveEmbedPort {
     }
   }
 
+  public emitError(err: any) {
+    this._emitError(err);
+  }
+
   on = {
     output: (cb: OutputCallback): boolean => {
       this._subs.output.push(cb);
@@ -178,9 +182,17 @@ export class MockEmbedAdapter implements OctaveEmbedPort {
     return this.eval('history;');
   }
 
+  public terminated = false;
+
   interrupt(): boolean {
     this._interrupted = true;
     return true;
+  }
+
+  terminate(): void {
+    this.terminated = true;
+    this._interrupted = true;
+    this._setState('idle');
   }
 
   input(text: string): number {

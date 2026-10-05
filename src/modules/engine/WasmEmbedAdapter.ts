@@ -83,6 +83,14 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     return this._embed.interrupt();
   }
 
+  terminate(): void {
+    if (typeof this._embed?.terminate === 'function') {
+      try {
+        this._embed.terminate();
+      } catch {}
+    }
+  }
+
   input(text: string): number {
     return this._embed.input(text);
   }

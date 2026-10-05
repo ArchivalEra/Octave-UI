@@ -1,8 +1,6 @@
 <!-- src/components/BootModal.svelte -->
 <script lang="ts">
-  import { engineSession } from '../modules/appContext';
-  import { WasmEmbedAdapter } from '../modules/engine/WasmEmbedAdapter';
-  import { MockEmbedAdapter } from '../modules/engine/MockEmbedAdapter';
+  import { supervisor } from '../modules/appContext';
 
   let { isOpen = false, onClose } = $props<{
     isOpen?: boolean;
@@ -19,19 +17,8 @@
     statusText = '正在校验跨源隔离 (COI) 与 Memory64 支持…';
 
     try {
-      // 检查环境与胶水可用性
-      if (typeof window !== 'undefined' && window.OctaveEmbed) {
-        statusText = '正在通过 OctaveEmbed.create() 启动 64 位 WebAssembly 内核…';
-        const adapter = await WasmEmbedAdapter.boot({});
-        statusText = '正在初始化引擎会话与工作区通道…';
-        engineSession.attachAdapter(adapter);
-      } else {
-        // 如果在非完整 Wasm 离线环境（或测试/降级开发），启用 MockEmbedAdapter
-        statusText = '未检测到浏览器 Wasm 桥，正在启用开发测试适配器…';
-        await new Promise((r) => setTimeout(r, 600));
-        const mock = new MockEmbedAdapter();
-        engineSession.attachAdapter(mock);
-      }
+      statusText = '正在启动 64 位 WebAssembly 内核与初始化会话…';
+      await supervisor.boot();
 
       statusText = 'GNU Octave 11.3.0 就绪！';
       setTimeout(() => {

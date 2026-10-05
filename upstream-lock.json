@@ -1,0 +1,25 @@
+{
+  "locked": [
+    {
+      "name": "octave-core.js",
+      "version": "bridge",
+      "url": "public/bridge/octave-core.js",
+      "file": "public/bridge/octave-core.js",
+      "sha256": "a6f2555bff355c0b55e82b528d76ed904f27ad94d680cead1e38d65df5cce52a"
+    },
+    {
+      "name": "octave-page.js",
+      "version": "bridge",
+      "url": "public/bridge/octave-page.js",
+      "file": "public/bridge/octave-page.js",
+      "sha256": "3f5c9a0ab9997fe8721971d2afa778f01d60652c1ed2d50ce25c9f9d5f1e13a1"
+    },
+    {
+      "name": "octave-w64.wasm",
+      "version": "w64",
+      "url": "public/bridge/w64/octave.wasm",
+      "file": "public/bridge/w64/octave.wasm",
+      "sha256": "4eda3a79a0abb7821b80a190659b0388a6ae68b0c29be0a36046a46b4670881f"
+    }
+  ]
+}

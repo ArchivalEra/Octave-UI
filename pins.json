@@ -1,0 +1,11 @@
+{
+  "pins": [
+    {
+      "name": "octave-full-wasm",
+      "kind": "version",
+      "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
+      "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short wasm64-NEXT",
+      "expect_version": "d8d6f30"
+    }
+  ]
+}

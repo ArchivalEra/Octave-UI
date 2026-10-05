@@ -1,7 +1,7 @@
 <!-- src/components/HeaderBar.svelte -->
 <script lang="ts">
-  import { engineSession, themeManager } from '../modules/appContext';
-  import type { EngineState } from '../modules/engine/types';
+  import { supervisor, themeManager } from '../modules/appContext';
+  import type { SupervisorState } from '../modules/engine/types';
 
   let { onOpenBootModal, onToggleSidebar, sidebarOpen = true } = $props<{
     onOpenBootModal: () => void;
@@ -9,11 +9,11 @@
     sidebarOpen?: boolean;
   }>();
 
-  let state = $state<EngineState>(engineSession.state);
+  let state = $state<SupervisorState>(supervisor.state);
   let theme = $state<'dark' | 'light' | 'auto'>(themeManager.theme);
 
   $effect(() => {
-    const unsubState = engineSession.onStateChange((s) => {
+    const unsubState = supervisor.onStateChange((s) => {
       state = s;
     });
     const unsubTheme = themeManager.subscribe((t) => {
@@ -26,7 +26,15 @@
   });
 
   function handleInterrupt() {
-    engineSession.interrupt();
+    supervisor.abort(1500);
+  }
+
+  function handleKill() {
+    supervisor.kill('user-kill');
+  }
+
+  function handleRecover() {
+    supervisor.recover().catch(() => {});
   }
 
   function toggleTheme() {
@@ -59,6 +67,14 @@
           就绪 (Idle)
         {:else if state === 'busy'}
           计算中…
+        {:else if state === 'aborting'}
+          中断中…
+        {:else if state === 'crashed'}
+          已崩溃 (Crashed)
+        {:else if state === 'recovering'}
+          恢复中…
+        {:else if state === 'failed'}
+          不可用 (Failed)
         {:else}
           错误
         {/if}
@@ -76,6 +92,20 @@
     {#if state === 'busy'}
       <button class="btn btn-danger" onclick={handleInterrupt} title="协作式安全点中断">
         中断 (Interrupt)
+      </button>
+    {/if}
+
+    <!-- 挂起杀死按钮 -->
+    {#if state === 'aborting'}
+      <button class="btn btn-danger" onclick={handleKill} title="强制杀死假死引擎">
+        强制杀死 (Kill)
+      </button>
+    {/if}
+
+    <!-- 崩溃恢复按钮 -->
+    {#if state === 'crashed'}
+      <button class="btn btn-warning" onclick={handleRecover} title="原地自愈恢复引擎">
+        原地恢复 (Recover)
       </button>
     {/if}
 
@@ -173,6 +203,24 @@
     background: var(--accent-danger);
   }
 
+  .status-aborting .status-dot {
+    background: var(--accent-danger);
+    animation: pulse 0.3s infinite alternate;
+  }
+
+  .status-crashed .status-dot {
+    background: var(--accent-danger);
+  }
+
+  .status-recovering .status-dot {
+    background: var(--accent-warning);
+    animation: pulse 0.5s infinite alternate;
+  }
+
+  .status-failed .status-dot {
+    background: var(--accent-danger);
+  }
+
   @keyframes pulse {
     from { opacity: 0.4; }
     to { opacity: 1; }
@@ -191,5 +239,14 @@
     background: var(--accent-danger);
     color: #fff;
     border-color: var(--accent-danger);
+  }
+
+  .btn-warning {
+    background: var(--accent-warning);
+    color: #fff;
+    border-color: var(--accent-warning);
+  }
+  .btn-warning:hover {
+    opacity: 0.9;
   }
 </style>

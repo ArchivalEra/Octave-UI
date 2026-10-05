@@ -1,7 +1,39 @@
 // src/modules/engine/types.ts
 // 核心 Embed API 契约与引擎状态类型定义
 
-export type EngineState = 'unloaded' | 'booting' | 'idle' | 'busy' | 'error';
+export type SupervisorState =
+  | 'unloaded'
+  | 'booting'
+  | 'idle'
+  | 'busy'
+  | 'aborting'
+  | 'crashed'
+  | 'recovering'
+  | 'failed';
+
+export type EngineState = SupervisorState;
+
+export type CrashCause = 'trap' | 'oom' | 'hang' | 'user-kill' | 'boot-failed';
+
+export class EngineCrashedError extends Error {
+  readonly cause: CrashCause;
+  readonly started: boolean;
+  readonly epoch: number;
+  constructor(info: { cause: CrashCause; started: boolean; epoch: number; message?: string }) {
+    super(info.message || `Engine crashed due to ${info.cause} (epoch ${info.epoch}, started: ${info.started})`);
+    this.name = 'EngineCrashedError';
+    this.cause = info.cause;
+    this.started = info.started;
+    this.epoch = info.epoch;
+  }
+}
+
+export interface StateTransitionEvent {
+  from: SupervisorState;
+  to: SupervisorState;
+  epoch: number;
+  cause?: CrashCause;
+}
 
 export interface WorkspaceVariable {
   name: string;
@@ -57,6 +89,7 @@ export interface OctaveEmbedPort {
   help(name: string): Promise<EvalResult>;
   history(): Promise<EvalResult>;
   interrupt(): boolean;
+  terminate?(): void;
   input(text: string): number;
 
   on: {

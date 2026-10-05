@@ -42,9 +42,12 @@
         </p>
 
         <div class="details-box">
-          <strong>边界背景：</strong>
+          <strong>边界与能力策略背景（CapabilityPolicy）：</strong>
           <p>
-            在 GNU Octave WebAssembly 的 Embed 架构中，OpenGL/WebGL 纹理管线处于 E6 边界阶段。调用 <code>plot()</code> 或 <code>drawnow</code> 可能触发底层 WebGL 纹理容器空指针或零尺寸崩溃，导致整个 Wasm 实例与会话变量丢失。
+            在 GNU Octave WebAssembly 的 Embed 架构中，OpenGL/WebGL 纹理管线处于 E6 边界阶段，当前运行环境尚未就绪 WebGPU 离屏图形管线。调用 <code>plot()</code> 或 <code>drawnow</code> 可能触发底层 WebGL 纹理容器空指针异常。
+          </p>
+          <p>
+            <code>EngineSupervisor</code> 将为执行中异常提供自愈熔断保护，但建议在图形通道就绪前优先在脚本中输出数据或使用 <code>GraphicsSink</code> 安全离屏槽。
           </p>
         </div>
       </div>
