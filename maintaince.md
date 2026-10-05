@@ -37,6 +37,9 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 的 100% 纯客户端网页�
 ### 4. 极端大输出流的 WebGPU 终端文本渲染
 - 保持当前 Svelte 5 批量合并渲染为主；持续跟踪 `@xterm/addon-webgpu` 社区进展，预留 WebGPU 终端加速插件插槽。
 
+### 5. 解释器报错语言确定性与本地化
+- **已立工单**：已在上游提单 [`ArchivalEra/Octave-Full-Wasm#4`](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/4)（建议固化纯英文或通过 `OctaveEmbed.create({ locale })` 提供 gettext 本地化）。
+
 ## 开工与提交的顺序
 
 1. **开工前**：

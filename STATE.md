@@ -46,14 +46,14 @@
 
 | 键 | 值 | 测于 | 复跑命令 |
 |---|---|---|---|
-| `astro_files` | **2** | 2026-10-05T13:40:22+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
-| `md_files` | **7** | 2026-10-05T13:40:23+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `md_lines` | **339** | 2026-10-05T13:40:23+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
-| `py_files` | **22** | 2026-10-05T13:40:22+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `py_lines` | **3660** | 2026-10-05T13:40:22+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
-| `svelte_files` | **6** | 2026-10-05T13:40:22+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
-| `test_files` | **11** | 2026-10-05T13:40:22+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
-| `ts_files` | **32** | 2026-10-05T13:40:22+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
+| `astro_files` | **2** | 2026-10-05T13:51:51+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
+| `md_files` | **7** | 2026-10-05T13:51:51+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `md_lines` | **342** | 2026-10-05T13:51:51+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
+| `py_files` | **22** | 2026-10-05T13:51:51+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `py_lines` | **3660** | 2026-10-05T13:51:51+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
+| `svelte_files` | **6** | 2026-10-05T13:51:51+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
+| `test_files` | **11** | 2026-10-05T13:51:51+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
+| `ts_files` | **32** | 2026-10-05T13:51:51+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
 
 8 条事实。
 <!-- /AUTO:FACTS -->
