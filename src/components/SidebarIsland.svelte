@@ -6,6 +6,7 @@
     historyStore,
     supervisor,
     terminalController,
+    t,
   } from '../modules/appContext';
   import { WorkspaceStore } from '../modules/workspace/WorkspaceStore';
   import type { WorkspaceVariable, FsEntry } from '../modules/engine/types';
@@ -83,7 +84,7 @@
     try {
       docContent = await supervisor.queryDocumentation(docQuery.trim());
     } catch (err: any) {
-      docContent = `查询失败: ${err.message || String(err)}`;
+      docContent = t('docs.error', { error: err.message || String(err) });
     } finally {
       docLoading = false;
     }
@@ -96,23 +97,27 @@
     <button
       class="tab-btn"
       class:active={activeTab === 'workspace'}
+      title={t('sidebar.tab_workspace')}
       onclick={() => (activeTab = 'workspace')}
-    >工作区</button>
+    >{t('sidebar.tab_workspace')}</button>
     <button
       class="tab-btn"
       class:active={activeTab === 'files'}
+      title={t('sidebar.tab_files')}
       onclick={() => (activeTab = 'files')}
-    >文件</button>
+    >{t('sidebar.tab_files')}</button>
     <button
       class="tab-btn"
       class:active={activeTab === 'history'}
+      title={t('sidebar.tab_history')}
       onclick={() => (activeTab = 'history')}
-    >历史</button>
+    >{t('sidebar.tab_history')}</button>
     <button
       class="tab-btn"
       class:active={activeTab === 'docs'}
+      title={t('sidebar.tab_docs')}
       onclick={() => (activeTab = 'docs')}
-    >文档</button>
+    >{t('sidebar.tab_docs')}</button>
   </div>
 
   <div class="tab-content">
@@ -120,20 +125,20 @@
     {#if activeTab === 'workspace'}
       <div class="panel">
         <div class="panel-toolbar">
-          <span class="panel-title">变量表 ({variables.length})</span>
-          <button class="btn btn-sm" onclick={refreshWorkspace}>刷新</button>
+          <span class="panel-title">{t('workspace.title', { count: variables.length })}</span>
+          <button class="btn btn-sm" onclick={refreshWorkspace}>{t('workspace.refresh')}</button>
         </div>
         <div class="table-container">
           {#if variables.length === 0}
-            <div class="empty-state">当前工作区暂无变量</div>
+            <div class="empty-state">{t('workspace.empty')}</div>
           {:else}
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>名称</th>
-                  <th>类型</th>
-                  <th>尺寸</th>
-                  <th>大小</th>
+                  <th>{t('workspace.col_name')}</th>
+                  <th>{t('workspace.col_type')}</th>
+                  <th>{t('workspace.col_dimensions')}</th>
+                  <th>{t('workspace.col_size')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -155,12 +160,12 @@
     {:else if activeTab === 'files'}
       <div class="panel">
         <div class="panel-toolbar">
-          <span class="panel-title">路径: {currentDir}</span>
-          <button class="btn btn-sm" onclick={refreshFiles}>刷新</button>
+          <span class="panel-title">{t('files.path', { path: currentDir })}</span>
+          <button class="btn btn-sm" onclick={refreshFiles}>{t('files.refresh')}</button>
         </div>
         <div class="files-list">
           {#if files.length === 0}
-            <div class="empty-state">目录为空</div>
+            <div class="empty-state">{t('files.empty')}</div>
           {:else}
             {#each files as f (f.name)}
               <div class="file-item">
@@ -170,12 +175,12 @@
                   <div class="file-actions">
                     <button
                       class="btn-icon-xs"
-                      title="下载"
+                      title={t('files.download')}
                       onclick={() => handleFileDownload(f.name)}
                     >⬇</button>
                     <button
                       class="btn-icon-xs"
-                      title="删除"
+                      title={t('files.delete')}
                       onclick={() => handleFileDelete(f.name)}
                     >×</button>
                   </div>
@@ -192,11 +197,11 @@
         <div class="panel-toolbar">
           <input
             type="text"
-            placeholder="搜索命令历史…"
+            placeholder={t('history.search_placeholder')}
             class="input-sm"
             bind:value={historySearch}
           />
-          <button class="btn btn-sm" onclick={handleHistoryClear}>清空</button>
+          <button class="btn btn-sm" onclick={handleHistoryClear}>{t('history.clear')}</button>
         </div>
         <div class="history-list">
           {#each filteredHistory as cmd, idx (idx)}
@@ -219,28 +224,29 @@
         <div class="panel-toolbar">
           <input
             type="text"
-            placeholder="输入函数名 (例如 magic, svd)…"
+            placeholder={t('docs.search_placeholder')}
             class="input-sm"
             bind:value={docQuery}
             onkeydown={(e) => e.key === 'Enter' && handleQueryDoc()}
           />
           <button class="btn btn-sm" disabled={docLoading} onclick={handleQueryDoc}>
-            {docLoading ? '查询中…' : '查询'}
+            {docLoading ? t('docs.querying') : t('docs.query')}
           </button>
         </div>
         <div class="doc-viewport">
           {#if docLoading}
-            <div class="empty-state">正在通过带外通道静默查询…</div>
+            <div class="empty-state">{t('docs.loading_state')}</div>
           {:else if docContent}
             <pre class="doc-content">{docContent}</pre>
           {:else}
-            <div class="empty-state">输入 Octave 函数名以获取离线/内省帮助文档</div>
+            <div class="empty-state">{t('docs.empty_state')}</div>
           {/if}
         </div>
       </div>
     {/if}
   </div>
 </aside>
+
 
 <style>
   .sidebar {
@@ -262,6 +268,10 @@
 
   .tab-btn {
     flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;

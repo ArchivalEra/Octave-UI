@@ -100,6 +100,16 @@ html, body {
   line-height: 1.5;
 }
 
+html[lang="zh-Hans"], html[lang^="zh"] {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+}
+
+html[lang="de"] {
+  -webkit-hyphens: auto;
+  hyphens: auto;
+}
+
+
 button {
   cursor: pointer;
   border: 1px solid var(--border-subtle);

@@ -46,7 +46,8 @@ export class CapabilityPolicy {
       };
     }
 
-    if (typeof navigator === 'undefined' || !navigator.gpu) {
+    const nav = typeof navigator !== 'undefined' ? (navigator as any) : undefined;
+    if (!nav || !nav.gpu) {
       return {
         webgpuSupported: false,
         reason: '当前浏览器或宿主环境不支持 WebGPU 离屏图形管线。',
@@ -54,7 +55,7 @@ export class CapabilityPolicy {
     }
 
     try {
-      const adapter = await navigator.gpu.requestAdapter();
+      const adapter = await nav.gpu.requestAdapter();
       if (!adapter) {
         return {
           webgpuSupported: false,

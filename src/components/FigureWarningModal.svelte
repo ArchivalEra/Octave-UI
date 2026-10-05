@@ -1,6 +1,6 @@
 <!-- src/components/FigureWarningModal.svelte -->
 <script lang="ts">
-  import { terminalController } from '../modules/appContext';
+  import { terminalController, t } from '../modules/appContext';
 
   let {
     isOpen = false,
@@ -28,7 +28,7 @@
   <div class="modal-backdrop" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 class="modal-title">⚠️ E6 GL 绘图边界安全拦截</h3>
+        <h3 class="modal-title">{t('figure.title')}</h3>
         <button class="btn-close" onclick={onClose}>×</button>
       </div>
 
@@ -38,26 +38,22 @@
         </div>
 
         <p class="warning-text">
-          {reason || '已拦截图形绘制调用以防止 WebAssembly 解释器崩溃。'}
+          {reason || t('figure.default_reason')}
         </p>
 
         <div class="details-box">
-          <strong>边界与能力策略背景（CapabilityPolicy）：</strong>
-          <p>
-            在 GNU Octave WebAssembly 的 Embed 架构中，OpenGL/WebGL 纹理管线处于 E6 边界阶段，当前运行环境尚未就绪 WebGPU 离屏图形管线。调用 <code>plot()</code> 或 <code>drawnow</code> 可能触发底层 WebGL 纹理容器空指针异常。
-          </p>
-          <p>
-            <code>EngineSupervisor</code> 将为执行中异常提供自愈熔断保护，但建议在图形通道就绪前优先在脚本中输出数据或使用 <code>GraphicsSink</code> 安全离屏槽。
-          </p>
+          <strong>{t('figure.details_title')}</strong>
+          <p>{t('figure.details_p1')}</p>
+          <p>{t('figure.details_p2')}</p>
         </div>
       </div>
 
       <div class="modal-footer">
         <button class="btn btn-primary" onclick={onClose}>
-          安全取消（推荐）
+          {t('figure.btn_cancel')}
         </button>
         <button class="btn btn-outline-danger" onclick={handleForceExecute}>
-          强制执行（高风险）
+          {t('figure.btn_force')}
         </button>
       </div>
     </div>

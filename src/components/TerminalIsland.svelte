@@ -1,6 +1,6 @@
 <!-- src/components/TerminalIsland.svelte -->
 <script lang="ts">
-  import { terminalController, supervisor, capabilityPolicy } from '../modules/appContext';
+  import { terminalController, supervisor, capabilityPolicy, t } from '../modules/appContext';
   import type { SupervisorState, CrashCause } from '../modules/engine/types';
   import { EngineCrashedError } from '../modules/engine/types';
   import type { AnsiSpan } from '../modules/terminal/TerminalController';
@@ -64,28 +64,35 @@
 
       // 检查引擎状态
       if (supervisorState === 'crashed' || supervisorState === 'failed') {
-        terminalController.appendOutput(`\x1b[31m[错误] 引擎当前处于 '${supervisorState}' 状态。请先点击「原地恢复」自愈引擎。\x1b[0m\n`);
+        terminalController.appendOutput(t('terminal.err_crashed', { state: supervisorState }));
         terminalController.flushOutput();
         scrollBottom();
         return;
       }
 
       if (supervisorState === 'aborting') {
-        terminalController.appendOutput('\x1b[33m[提示] 引擎正在中断中，请等待中断完成或点击「强制杀死」。\x1b[0m\n');
+        terminalController.appendOutput(t('terminal.warn_aborting'));
         terminalController.flushOutput();
         scrollBottom();
         return;
       }
 
-      if (supervisorState === 'recovering' || supervisorState === 'booting') {
-        terminalController.appendOutput(`\x1b[33m[提示] 引擎正在${supervisorState === 'recovering' ? '恢复' : '启动'}中，请稍候…\x1b[0m\n`);
+      if (supervisorState === 'recovering') {
+        terminalController.appendOutput(t('terminal.warn_recovering'));
+        terminalController.flushOutput();
+        scrollBottom();
+        return;
+      }
+
+      if (supervisorState === 'booting') {
+        terminalController.appendOutput(t('terminal.warn_booting'));
         terminalController.flushOutput();
         scrollBottom();
         return;
       }
 
       if (!supervisor.isReady) {
-        terminalController.appendOutput('\x1b[33m[提示] GNU Octave 引擎尚未启动，请点击右上角「启动引擎」按钮加载。\x1b[0m\n');
+        terminalController.appendOutput(t('terminal.warn_not_ready'));
         terminalController.flushOutput();
         scrollBottom();
         return;
@@ -153,7 +160,7 @@
   bind:this={terminalContainer}
   onclick={handleContainerClick}
   role="region"
-  aria-label="Octave Terminal"
+  aria-label={t('terminal.aria_label')}
 >
   <!-- 历史输出行渲染区 -->
   <div class="terminal-output">
@@ -176,26 +183,27 @@
   <!-- 状态异常通知与自愈操作区 -->
   {#if supervisorState === 'aborting'}
     <div class="status-banner banner-aborting">
-      <span>⚠️ 正在尝试中断计算… 若引擎挂起死锁，可执行硬终止：</span>
-      <button class="btn btn-sm btn-danger" onclick={handleKill}>强制杀死 (Kill)</button>
+      <span>{t('terminal.banner_aborting')}</span>
+      <button class="btn btn-sm btn-danger" onclick={handleKill}>{t('action.kill')}</button>
     </div>
   {:else if supervisorState === 'crashed'}
     <div class="status-banner banner-crashed">
-      <span>💥 引擎已崩溃 (诱因: {crashCause || 'trap'})，命令历史与输出已保留。</span>
+      <span>{t('terminal.banner_crashed', { cause: crashCause || 'trap' })}</span>
       <div class="banner-actions">
-        <button class="btn btn-sm btn-warning" onclick={handleRecover}>原地恢复 (Recover)</button>
+        <button class="btn btn-sm btn-warning" onclick={handleRecover}>{t('action.recover')}</button>
         {#if unstartedCode}
           <button class="btn btn-sm btn-secondary" onclick={handleRetryUnstarted}>
-            重新填入未启动命令: {unstartedCode}
+            {t('terminal.retry_unstarted', { code: unstartedCode })}
           </button>
         {/if}
       </div>
     </div>
   {:else if supervisorState === 'failed'}
     <div class="status-banner banner-failed">
-      <span>🛑 熔断器已触发：连续恢复失败已达上限，引擎处于不可用终端态。</span>
+      <span>{t('terminal.banner_failed')}</span>
     </div>
   {/if}
+
 
   <!-- 当前输入提示行 -->
   <div class="terminal-prompt-line">

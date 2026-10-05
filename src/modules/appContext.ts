@@ -8,6 +8,7 @@ import { FilesystemStore } from './filesystem/FilesystemStore';
 import { ThemeManager } from './theme/ThemeManager';
 import { CapabilityPolicy } from './figure/CapabilityPolicy';
 import { GraphicsSink } from './figure/GraphicsSink';
+import { i18n, t } from './i18n/I18nManager.svelte';
 
 export const historyStore = new HistoryStore();
 export const supervisor = new EngineSupervisor();
@@ -18,6 +19,8 @@ export const terminalController = new TerminalController(historyStore, superviso
 export const workspaceStore = new WorkspaceStore(supervisor as any);
 export const filesystemStore = new FilesystemStore(supervisor as any);
 export const themeManager = new ThemeManager();
+export { i18n, t };
 
 export const capabilityPolicy = new CapabilityPolicy();
 export const graphicsSink = new GraphicsSink();
+

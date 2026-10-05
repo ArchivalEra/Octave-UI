@@ -2,17 +2,19 @@
 // src/layouts/Layout.astro
 import '../styles/theme.css';
 import { ThemeManager } from '../modules/theme/ThemeManager';
+import { I18nManager } from '../modules/i18n/I18nManager.svelte';
 
 interface Props {
   title?: string;
 }
 
 const { title = 'GNU Octave WebAssembly UI' } = Astro.props;
-const antiFlashScript = ThemeManager.getAntiFlashScript();
+const themeAntiFlashScript = ThemeManager.getAntiFlashScript();
+const i18nAntiFlashScript = I18nManager.getAntiFlashScript();
 ---
 
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -20,8 +22,9 @@ const antiFlashScript = ThemeManager.getAntiFlashScript();
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
 
-    <!-- 防闪烁内联脚本：在 DOM 绘制前确定主题 -->
-    <script is:inline set:html={antiFlashScript} />
+    <!-- 防闪烁内联脚本：在 DOM 绘制前确定主题与语言 -->
+    <script is:inline set:html={themeAntiFlashScript} />
+    <script is:inline set:html={i18nAntiFlashScript} />
 
     <!-- 静态引入上游胶水脚本（直通 public/bridge/，不经 Vite 打包混淆） -->
     <script is:inline src="/bridge/assets-loader.js"></script>

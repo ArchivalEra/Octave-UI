@@ -1,7 +1,8 @@
 <!-- src/components/HeaderBar.svelte -->
 <script lang="ts">
-  import { supervisor, themeManager } from '../modules/appContext';
+  import { supervisor, themeManager, i18n, t } from '../modules/appContext';
   import type { SupervisorState } from '../modules/engine/types';
+  import type { Locale } from '../modules/i18n/types';
 
   let { onOpenBootModal, onToggleSidebar, sidebarOpen = true } = $props<{
     onOpenBootModal: () => void;
@@ -41,6 +42,11 @@
     const next = theme === 'dark' ? 'light' : 'dark';
     themeManager.setTheme(next);
   }
+
+  function handleLocaleChange(e: Event) {
+    const target = e.currentTarget as HTMLSelectElement;
+    i18n.setLocale(target.value as Locale);
+  }
 </script>
 
 <header class="header-bar">
@@ -51,7 +57,7 @@
       <circle cx="65" cy="50" r="16" fill="#73d216" />
       <circle cx="50" cy="50" r="10" fill="#ffffff" />
     </svg>
-    <span class="title">GNU Octave 11.3.0 <span class="badge-lane">Wasm64</span></span>
+    <span class="title">{t('header.title')} <span class="badge-lane">{t('header.badge_wasm64')}</span></span>
   </div>
 
   <div class="actions">
@@ -60,63 +66,78 @@
       <span class="status-dot"></span>
       <span class="status-text">
         {#if state === 'unloaded'}
-          未就绪
+          {t('status.unloaded')}
         {:else if state === 'booting'}
-          启动中…
+          {t('status.booting')}
         {:else if state === 'idle'}
-          就绪 (Idle)
+          {t('status.idle')}
         {:else if state === 'busy'}
-          计算中…
+          {t('status.busy')}
         {:else if state === 'aborting'}
-          中断中…
+          {t('status.aborting')}
         {:else if state === 'crashed'}
-          已崩溃 (Crashed)
+          {t('status.crashed')}
         {:else if state === 'recovering'}
-          恢复中…
+          {t('status.recovering')}
         {:else if state === 'failed'}
-          不可用 (Failed)
+          {t('status.failed')}
         {:else}
-          错误
+          {t('status.error')}
         {/if}
       </span>
     </div>
 
     <!-- 按需启动按钮 -->
     {#if state === 'unloaded'}
-      <button class="btn btn-primary" onclick={onOpenBootModal}>
-        启动引擎 (Boot)
+      <button class="btn btn-primary" onclick={onOpenBootModal} title={t('action.boot_tooltip')}>
+        {t('action.boot')}
       </button>
     {/if}
 
     <!-- 协作式中断按钮 -->
     {#if state === 'busy'}
-      <button class="btn btn-danger" onclick={handleInterrupt} title="协作式安全点中断">
-        中断 (Interrupt)
+      <button class="btn btn-danger" onclick={handleInterrupt} title={t('action.interrupt_tooltip')}>
+        {t('action.interrupt')}
       </button>
     {/if}
 
     <!-- 挂起杀死按钮 -->
     {#if state === 'aborting'}
-      <button class="btn btn-danger" onclick={handleKill} title="强制杀死假死引擎">
-        强制杀死 (Kill)
+      <button class="btn btn-danger" onclick={handleKill} title={t('action.kill_tooltip')}>
+        {t('action.kill')}
       </button>
     {/if}
 
     <!-- 崩溃恢复按钮 -->
     {#if state === 'crashed'}
-      <button class="btn btn-warning" onclick={handleRecover} title="原地自愈恢复引擎">
-        原地恢复 (Recover)
+      <button class="btn btn-warning" onclick={handleRecover} title={t('action.recover_tooltip')}>
+        {t('action.recover')}
       </button>
     {/if}
 
+    <!-- 多语言切换 -->
+    <div class="lang-selector">
+      <select
+        value={i18n.currentLocale}
+        onchange={handleLocaleChange}
+        class="lang-select"
+        aria-label={t('header.select_language')}
+        title={t('header.select_language')}
+      >
+        <option value="en">🌐 English</option>
+        <option value="zh-Hans">🇨🇳 简体中文</option>
+        <option value="de">🇩🇪 Deutsch</option>
+      </select>
+    </div>
+
     <!-- 主题切换 -->
-    <button class="btn btn-icon" onclick={toggleTheme} title="切换浅色/深色主题">
-      {theme === 'dark' ? '☀️ 浅色' : '🌙 深色'}
+    <button class="btn btn-icon" onclick={toggleTheme} title={t('header.theme_tooltip')}>
+      {theme === 'dark' ? t('header.theme_light') : t('header.theme_dark')}
     </button>
 
     <!-- 侧边栏折叠按钮 -->
-    <button class="btn btn-icon" onclick={onToggleSidebar} title="切换侧边栏">
-      {sidebarOpen ? '⇥ 隐藏侧栏' : '⇤ 展开侧栏'}
+    <button class="btn btn-icon" onclick={onToggleSidebar} title={t('header.sidebar_tooltip')}>
+      {sidebarOpen ? t('header.sidebar_hide') : t('header.sidebar_show')}
     </button>
   </div>
 </header>
@@ -132,6 +153,7 @@
     padding: 0 16px;
     user-select: none;
     flex-shrink: 0;
+    gap: 12px;
   }
 
   .brand {
@@ -139,6 +161,7 @@
     align-items: center;
     gap: 10px;
     font-weight: 600;
+    flex-shrink: 0;
   }
 
   .title {
@@ -146,6 +169,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    white-space: nowrap;
   }
 
   .badge-lane {
@@ -160,7 +184,43 @@
   .actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
+    flex-shrink: 1;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .actions button,
+  .actions select {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .lang-selector {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .lang-select {
+    cursor: pointer;
+    font-size: 12px;
+    padding: 3px 8px;
+    height: 28px;
+    background: var(--bg-surface);
+    color: var(--text-main);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+  }
+
+  .lang-select:hover {
+    border-color: var(--text-muted);
+    background: var(--bg-surface-hover);
   }
 
   .status-badge {
@@ -172,6 +232,8 @@
     font-size: 12px;
     background: var(--bg-canvas);
     border: 1px solid var(--border-subtle);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .status-dot {
