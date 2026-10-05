@@ -53,6 +53,10 @@
   }
 
   function handleContainerClick() {
+    const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+    if (sel && sel.toString().length > 0) {
+      return;
+    }
     inputEl?.focus();
   }
 
@@ -243,10 +247,12 @@
   .terminal-output {
     white-space: pre-wrap;
     word-break: break-all;
+    user-select: text;
   }
 
   .terminal-line {
     min-height: 19px;
+    user-select: text;
   }
 
   .status-banner {
