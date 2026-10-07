@@ -2,9 +2,18 @@
 # scripts/sync-bridge.sh — 同步上游 Embed API 胶水与 Wasm 产物至 public/
 set -euo pipefail
 
-SRC_DIR="${1:-/mnt/hdd/octave-wasm-build/site-w64-embed}"
-UPSTREAM_BRIDGE="/mnt/hdd/zcode-projects/Octave-Full-Wasm/bridge"
+SRC_DIR="${1:-/mnt/hdd/octave-wasm-build/site-illegalperf}"
+UPSTREAM_REPO="/mnt/hdd/zcode-projects/Octave-Full-Wasm"
+UPSTREAM_BRIDGE="${UPSTREAM_REPO}/bridge"
 DEST_BRIDGE="public/bridge"
+
+TMP_EXTRACT=""
+if [ ! -d "${SRC_DIR}" ] && [ -d "${UPSTREAM_REPO}" ]; then
+  echo "    ${SRC_DIR} not found; falling back to git archive IllegalPerformance site (read-only)..."
+  TMP_EXTRACT="$(mktemp -d)"
+  git -C "${UPSTREAM_REPO}" archive IllegalPerformance site | tar -x -C "${TMP_EXTRACT}"
+  SRC_DIR="${TMP_EXTRACT}/site"
+fi
 
 echo "==> Syncing bridge assets from ${SRC_DIR}..."
 
@@ -58,6 +67,10 @@ fi
 
 if [ -d "${DEST_BRIDGE}/assets" ]; then
   ln -sfn "bridge/assets" "public/assets"
+fi
+
+if [ -n "${TMP_EXTRACT}" ] && [ -d "${TMP_EXTRACT}" ]; then
+  rm -rf "${TMP_EXTRACT}"
 fi
 
 echo "==> Bridge assets synced successfully to ${DEST_BRIDGE} and public/."

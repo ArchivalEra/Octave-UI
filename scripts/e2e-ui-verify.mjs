@@ -14,7 +14,8 @@ const browser = await chromium.launch({
   args: ['--no-proxy-server', '--no-sandbox', '--disable-dev-shm-usage'],
 });
 
-const page = await (await browser.newContext()).newPage();
+const context = await browser.newContext({ locale: 'zh-CN' });
+const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (msg) => {

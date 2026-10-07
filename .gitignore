@@ -75,6 +75,12 @@ node_modules/
 **/node_modules/
 dist/
 **/dist/
+wasm32-final/
+**/wasm32-final/
+master/
+**/master/
+IllegalPerformance/
+**/IllegalPerformance/
 build/
 **/build/
 out/

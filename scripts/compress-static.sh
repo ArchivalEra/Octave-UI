@@ -11,18 +11,7 @@ fi
 
 echo "==> Pre-compressing static files in ${TARGET_DIR} with gzip -9..."
 
-find "${TARGET_DIR}" -type f \( \
-  -name "*.html" -o \
-  -name "*.js" -o \
-  -name "*.mjs" -o \
-  -name "*.css" -o \
-  -name "*.wasm" -o \
-  -name "*.data" -o \
-  -name "*.json" -o \
-  -name "*.svg" -o \
-  -name "*.txt" -o \
-  -name "*.map" \
-\) | while IFS= read -r file; do
+find "${TARGET_DIR}" -type f ! -name "*.gz" | while IFS= read -r file; do
   gzip -k -9 --force "${file}"
 done
 

@@ -28,7 +28,18 @@ pnpm test
 
 # 运行真实浏览器 E2E 交互测试（需先启动 preview）
 pnpm test:e2e
+
+# 一键同步上游三车道并生成独立交付包（./wasm32-final, ./master, ./IllegalPerformance）
+pnpm build:lanes
 ```
+
+## 三车道交付矩阵
+
+本仓库支持同步上游三条独立维护车道并生成开箱即用的纯静态交付包（均含 `gzip -9` 预压缩）：
+- `./wasm32-final/`：wasm32 冻结归档车道
+- `./master/`：稳健 wasm64 车道
+- `./IllegalPerformance/`：激进 wasm64 性能先锋车道（带 Rust 排序内核）
+
 
 ## 事实系统与纪律
 

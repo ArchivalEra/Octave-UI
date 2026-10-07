@@ -12,6 +12,8 @@
     "test:watch": "vitest",
     "test:e2e": "node scripts/e2e-ui-verify.mjs http://127.0.0.1:8868/",
     "sync-bridge": "bash scripts/sync-bridge.sh",
+    "sync:lanes": "bash scripts/sync-lanes.sh",
+    "build:lanes": "bash scripts/sync-lanes.sh",
     "compress": "bash scripts/compress-static.sh"
   },
   "devDependencies": {
