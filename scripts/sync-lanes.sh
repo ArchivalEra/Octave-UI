@@ -32,8 +32,9 @@ for LANE in "${LANES[@]}"; do
   mkdir -p "${TARGET}/w64"
   mkdir -p "${TARGET}/assets"
 
-  # 1. 复制通用前端 UI 产物
-  cp -f "${REPO_ROOT}/dist/index.html" "${TARGET}/"
+  # 1. 复制通用前端 UI 产物并注入车道元数据
+  sed -e "s|<title>GNU Octave 11.3.0 WebAssembly UI</title>|<title>GNU Octave 11.3.0 UI [${LANE}]</title><script>window.__octaveLaneName = '${LANE}';</script>|g" \
+      "${REPO_ROOT}/dist/index.html" > "${TARGET}/index.html"
   cp -rf "${REPO_ROOT}/dist/_astro" "${TARGET}/"
   cp -f "${REPO_ROOT}/dist/favicon.svg" "${TARGET}/"
 

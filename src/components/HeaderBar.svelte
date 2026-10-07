@@ -26,6 +26,18 @@
     };
   });
 
+  let laneBadge = $state<string>(t('header.badge_wasm64'));
+  let currentPort = $state<string>('');
+
+  $effect(() => {
+    if (typeof window !== 'undefined') {
+      currentPort = window.location.port;
+      if ((window as any).__octaveLaneName) {
+        laneBadge = (window as any).__octaveLaneName;
+      }
+    }
+  });
+
   function handleInterrupt() {
     supervisor.abort(1500);
   }
@@ -57,7 +69,18 @@
       <circle cx="65" cy="50" r="16" fill="#73d216" />
       <circle cx="50" cy="50" r="10" fill="#ffffff" />
     </svg>
-    <span class="title">{t('header.title')} <span class="badge-lane">{t('header.badge_wasm64')}</span></span>
+    <span class="title">
+      {t('header.title')}
+      <span class="badge-lane">{laneBadge}</span>
+    </span>
+
+    {#if currentPort === '8881' || currentPort === '8882' || currentPort === '8883' || currentPort === '8880'}
+      <nav class="lane-nav" aria-label="Lane selector">
+        <a href="http://127.0.0.1:8881/" class="lane-tag" class:active={laneBadge === 'wasm32-final'} title="Wasm32 冻结基线 (8881)">wasm32-final</a>
+        <a href="http://127.0.0.1:8882/" class="lane-tag" class:active={laneBadge === 'master'} title="Master 稳定基线 (8882)">master</a>
+        <a href="http://127.0.0.1:8883/" class="lane-tag" class:active={laneBadge === 'IllegalPerformance'} title="IllegalPerformance 极限性能 (8883)">IllegalPerformance</a>
+      </nav>
+    {/if}
   </div>
 
   <div class="actions">
@@ -179,6 +202,36 @@
     padding: 1px 6px;
     border-radius: 4px;
     border: 1px solid var(--border-subtle);
+  }
+
+  .lane-nav {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    background: var(--bg-surface);
+    padding: 2px 4px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .lane-tag {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 1px 6px;
+    border-radius: 3px;
+    transition: all 0.15s ease;
+  }
+
+  .lane-tag:hover {
+    color: var(--text-primary);
+    background: var(--border-muted);
+  }
+
+  .lane-tag.active {
+    color: #ffffff;
+    background: var(--accent-primary);
+    font-weight: 500;
   }
 
   .actions {
