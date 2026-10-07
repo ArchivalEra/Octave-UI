@@ -148,13 +148,16 @@ const _zhHans = {
 
   // Diagnostics Modal
   'diagnostics.title': '内核与部署车道诊断',
-  'diagnostics.desc': '内部车道元数据、Wasm 运行隔离标志与基线切换器。',
+  'diagnostics.desc': '内部车道元数据、Wasm 运行隔离标志与架构规格。',
   'diagnostics.active_lane': '当前活动车道:',
+  'diagnostics.gear': '内核档位 (Gear):',
   'diagnostics.port': '端口:',
   'diagnostics.epoch': '引擎代际 (Epoch):',
   'diagnostics.coi_status': '跨源隔离 (COOP/COEP):',
   'diagnostics.sab_status': 'SharedArrayBuffer 状态:',
   'diagnostics.switch_lane': '切换部署车道',
+  'diagnostics.lane_specs': '内核车道架构规格',
+  'diagnostics.current_active': '当前运行中',
   'diagnostics.close': '关闭',
 
   // Variable Inspector

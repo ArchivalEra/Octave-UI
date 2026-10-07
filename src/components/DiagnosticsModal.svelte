@@ -8,17 +8,19 @@
   }>();
 
   let laneBadge = $state<string>('Wasm64');
-  let currentPort = $state<string>('');
+  let internalGear = $state<string>('w64');
   let coiStatus = $state(false);
   let sabStatus = $state(false);
 
   $effect(() => {
     if (typeof window !== 'undefined') {
-      currentPort = window.location.port;
       coiStatus = window.crossOriginIsolated === true;
       sabStatus = typeof SharedArrayBuffer !== 'undefined';
       if ((window as any).__octaveLaneName) {
         laneBadge = (window as any).__octaveLaneName;
+      }
+      if ((window as any).octaveLaneState?.lane) {
+        internalGear = (window as any).octaveLaneState.lane;
       }
     }
   });
@@ -42,8 +44,8 @@
           </div>
 
           <div class="meta-item">
-            <span class="label">{t('diagnostics.port')}</span>
-            <span class="val font-mono">{currentPort || '80/443'}</span>
+            <span class="label">{t('diagnostics.gear')}</span>
+            <span class="val font-mono">{internalGear}</span>
           </div>
 
           <div class="meta-item">
@@ -67,32 +69,44 @@
         </div>
 
         <div class="lane-switcher-box">
-          <h3 class="box-title">{t('diagnostics.switch_lane')}</h3>
+          <h3 class="box-title">{t('diagnostics.lane_specs')}</h3>
           <div class="lanes-nav">
-            <a
-              href="http://127.0.0.1:8881/"
+            <div
               class="lane-link"
               class:active={laneBadge === 'wasm32-final'}
             >
-              <strong>wasm32-final</strong>
-              <small>Port 8881 · 冻结基线</small>
-            </a>
-            <a
-              href="http://127.0.0.1:8882/"
+              <div class="lane-title-row">
+                <strong>wasm32-final</strong>
+                {#if laneBadge === 'wasm32-final'}
+                  <span class="active-tag">{t('diagnostics.current_active')}</span>
+                {/if}
+              </div>
+              <small>冻结基线 · 32/64位通用兼容</small>
+            </div>
+            <div
               class="lane-link"
               class:active={laneBadge === 'master'}
             >
-              <strong>master</strong>
-              <small>Port 8882 · 稳定主干</small>
-            </a>
-            <a
-              href="http://127.0.0.1:8883/"
+              <div class="lane-title-row">
+                <strong>master</strong>
+                {#if laneBadge === 'master'}
+                  <span class="active-tag">{t('diagnostics.current_active')}</span>
+                {/if}
+              </div>
+              <small>稳定主干 · POSIX pthreads</small>
+            </div>
+            <div
               class="lane-link"
               class:active={laneBadge === 'IllegalPerformance'}
             >
-              <strong>IllegalPerformance</strong>
-              <small>Port 8883 · 极限性能分支</small>
-            </a>
+              <div class="lane-title-row">
+                <strong>IllegalPerformance</strong>
+                {#if laneBadge === 'IllegalPerformance'}
+                  <span class="active-tag">{t('diagnostics.current_active')}</span>
+                {/if}
+              </div>
+              <small>极限性能 · mimalloc + FMA</small>
+            </div>
           </div>
         </div>
       </div>
@@ -260,6 +274,21 @@
 
   .lane-link strong {
     font-size: 0.85rem;
+  }
+
+  .lane-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .active-tag {
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--accent-primary);
+    color: #ffffff;
+    font-weight: 600;
   }
 
   .lane-link small {

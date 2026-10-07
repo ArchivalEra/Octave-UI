@@ -147,13 +147,16 @@ export const en = {
 
   // Diagnostics Modal
   'diagnostics.title': 'Engine & Lane Diagnostics',
-  'diagnostics.desc': 'Internal deployment metadata, Wasm isolation flags, and baseline switcher.',
+  'diagnostics.desc': 'Internal deployment metadata, Wasm isolation flags, and architecture specifications.',
   'diagnostics.active_lane': 'Active Lane:',
+  'diagnostics.gear': 'Kernel Gear:',
   'diagnostics.port': 'Port:',
   'diagnostics.epoch': 'Engine Epoch:',
   'diagnostics.coi_status': 'Cross-Origin Isolated:',
   'diagnostics.sab_status': 'SharedArrayBuffer:',
   'diagnostics.switch_lane': 'Switch Deployment Lane',
+  'diagnostics.lane_specs': 'Lane Architecture Specifications',
+  'diagnostics.current_active': 'Currently Active',
   'diagnostics.close': 'Close',
 
   // Variable Inspector

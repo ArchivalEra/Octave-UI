@@ -148,13 +148,16 @@ const _de = {
 
   // Diagnostics Modal
   'diagnostics.title': 'Engine- und Lane-Diagnose',
-  'diagnostics.desc': 'Interne Deployment-Metadaten, Wasm-Isolationsflags und Baseline-Umschalter.',
+  'diagnostics.desc': 'Interne Deployment-Metadaten, Wasm-Isolationsflags und Architekturspezifikationen.',
   'diagnostics.active_lane': 'Aktive Lane:',
+  'diagnostics.gear': 'Kernel-Stufe (Gear):',
   'diagnostics.port': 'Port:',
   'diagnostics.epoch': 'Engine-Epoche:',
   'diagnostics.coi_status': 'Cross-Origin Isolated:',
   'diagnostics.sab_status': 'SharedArrayBuffer-Status:',
   'diagnostics.switch_lane': 'Deployment-Lane wechseln',
+  'diagnostics.lane_specs': 'Lane-Architekturspezifikationen',
+  'diagnostics.current_active': 'Derzeit aktiv',
   'diagnostics.close': 'Schließen',
 
   // Variable Inspector
