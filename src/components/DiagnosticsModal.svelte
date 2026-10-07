@@ -1,0 +1,289 @@
+<!-- src/components/DiagnosticsModal.svelte -->
+<script lang="ts">
+  import { supervisor, t } from '../modules/appContext';
+
+  let { isOpen, onClose } = $props<{
+    isOpen: boolean;
+    onClose: () => void;
+  }>();
+
+  let laneBadge = $state<string>('Wasm64');
+  let currentPort = $state<string>('');
+  let coiStatus = $state(false);
+  let sabStatus = $state(false);
+
+  $effect(() => {
+    if (typeof window !== 'undefined') {
+      currentPort = window.location.port;
+      coiStatus = window.crossOriginIsolated === true;
+      sabStatus = typeof SharedArrayBuffer !== 'undefined';
+      if ((window as any).__octaveLaneName) {
+        laneBadge = (window as any).__octaveLaneName;
+      }
+    }
+  });
+</script>
+
+{#if isOpen}
+  <div class="modal-overlay" onclick={onClose} role="dialog" aria-modal="true">
+    <div class="modal-card" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header">
+        <h2 class="title">{t('diagnostics.title')}</h2>
+        <button class="btn-close" onclick={onClose} aria-label="Close">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="desc">{t('diagnostics.desc')}</p>
+
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="label">{t('diagnostics.active_lane')}</span>
+            <span class="val badge">{laneBadge}</span>
+          </div>
+
+          <div class="meta-item">
+            <span class="label">{t('diagnostics.port')}</span>
+            <span class="val font-mono">{currentPort || '80/443'}</span>
+          </div>
+
+          <div class="meta-item">
+            <span class="label">{t('diagnostics.epoch')}</span>
+            <span class="val font-mono">{supervisor.epoch}</span>
+          </div>
+
+          <div class="meta-item">
+            <span class="label">{t('diagnostics.coi_status')}</span>
+            <span class="val" class:pass={coiStatus} class:fail={!coiStatus}>
+              {coiStatus ? 'TRUE (COOP/COEP Active)' : 'FALSE (Degraded)'}
+            </span>
+          </div>
+
+          <div class="meta-item">
+            <span class="label">{t('diagnostics.sab_status')}</span>
+            <span class="val" class:pass={sabStatus} class:fail={!sabStatus}>
+              {sabStatus ? 'AVAILABLE' : 'UNAVAILABLE'}
+            </span>
+          </div>
+        </div>
+
+        <div class="lane-switcher-box">
+          <h3 class="box-title">{t('diagnostics.switch_lane')}</h3>
+          <div class="lanes-nav">
+            <a
+              href="http://127.0.0.1:8881/"
+              class="lane-link"
+              class:active={laneBadge === 'wasm32-final'}
+            >
+              <strong>wasm32-final</strong>
+              <small>Port 8881 · 冻结基线</small>
+            </a>
+            <a
+              href="http://127.0.0.1:8882/"
+              class="lane-link"
+              class:active={laneBadge === 'master'}
+            >
+              <strong>master</strong>
+              <small>Port 8882 · 稳定主干</small>
+            </a>
+            <a
+              href="http://127.0.0.1:8883/"
+              class="lane-link"
+              class:active={laneBadge === 'IllegalPerformance'}
+            >
+              <strong>IllegalPerformance</strong>
+              <small>Port 8883 · 极限性能分支</small>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-primary" onclick={onClose}>{t('diagnostics.close')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal-card {
+    width: 90vw;
+    max-width: 580px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text-main);
+  }
+
+  .btn-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+
+  .modal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .desc {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    background: var(--bg-surface-hover);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+
+  .meta-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+  }
+
+  .label {
+    color: var(--text-muted);
+  }
+
+  .val {
+    color: var(--text-main);
+    font-weight: 500;
+  }
+
+  .badge {
+    background: rgba(56, 139, 253, 0.15);
+    color: var(--accent-primary);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+  }
+
+  .pass {
+    color: var(--accent-success);
+    font-weight: 600;
+  }
+
+  .fail {
+    color: var(--accent-danger);
+    font-weight: 600;
+  }
+
+  .font-mono {
+    font-family: var(--font-mono, monospace);
+  }
+
+  .lane-switcher-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .box-title {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-main);
+  }
+
+  .lanes-nav {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .lane-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    background: var(--bg-surface-hover);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 8px;
+    text-decoration: none;
+    color: var(--text-main);
+    transition: all 0.15s ease;
+  }
+
+  .lane-link:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-surface);
+  }
+
+  .lane-link.active {
+    border-color: var(--accent-primary);
+    background: rgba(56, 139, 253, 0.15);
+  }
+
+  .lane-link strong {
+    font-size: 0.85rem;
+  }
+
+  .lane-link small {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-surface-hover);
+  }
+
+  .btn-primary {
+    background: var(--accent-primary);
+    color: #ffffff;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+</style>

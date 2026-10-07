@@ -10,6 +10,10 @@ import { CapabilityPolicy } from './figure/CapabilityPolicy';
 import { GraphicsSink } from './figure/GraphicsSink';
 import { i18n, t } from './i18n/I18nManager.svelte';
 
+import { WorkbenchController } from './workbench/WorkbenchController';
+import { VariableInspectorStore } from './inspector/VariableInspectorStore';
+import { SafePlotSinkPolyfill } from './semantic/SafePlotSinkPolyfill';
+
 export const historyStore = new HistoryStore();
 export const supervisor = new EngineSupervisor();
 // 兼容性别名：支持已有引用
@@ -19,7 +23,9 @@ export const terminalController = new TerminalController(historyStore, superviso
 export const workspaceStore = new WorkspaceStore(supervisor as any);
 export const filesystemStore = new FilesystemStore(supervisor as any);
 export const themeManager = new ThemeManager();
-export { i18n, t };
+export const workbenchController = new WorkbenchController();
+export const variableInspectorStore = new VariableInspectorStore();
+export { i18n, t, SafePlotSinkPolyfill };
 
 export const capabilityPolicy = new CapabilityPolicy();
 export const graphicsSink = new GraphicsSink();

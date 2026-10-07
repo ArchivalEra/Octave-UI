@@ -108,6 +108,66 @@ const _de = {
   'figure.details_p2': 'EngineSupervisor bietet Schutz vor Laufzeitanomalien. Es wird jedoch empfohlen, Daten auszugeben oder GraphicsSink-Offscreen-Slots zu nutzen, bis der Grafikkanal bereit ist.',
   'figure.btn_cancel': 'Sicher abbrechen (Empfohlen)',
   'figure.btn_force': 'Erzwingen (Hohes Risiko)',
+
+  // Header additions
+  'header.brand_tag': 'Bereit · Lokal · 100% Privat',
+  'header.btn_diagnostics': '⚙ Diagnose',
+  'header.btn_examples': '💡 Beispiele',
+  'header.btn_start': 'Rechnen Starten',
+  'header.mode_notebook': 'Notebook',
+  'header.mode_console': 'Konsole',
+
+  // Workbench
+  'workbench.add_cell': '+ Zelle hinzufügen',
+  'workbench.run_cell': 'Ausführen (Shift+Enter)',
+  'workbench.run_all': 'Alle ausführen',
+  'workbench.clear': 'Leeren',
+  'workbench.delete_cell': 'Löschen',
+  'workbench.empty_placeholder': 'Octave- / MATLAB-Code hier eingeben...',
+  'workbench.plot_title': 'Erfasste Plot-Vektoren ({count} Punkte)',
+  'workbench.matrix_title': 'Matrix {name} ({rows}x{cols})',
+  'workbench.scalar_title': 'Skalar {name}',
+  'workbench.execution_time': 'Ausgeführt in {ms}ms',
+
+  // Examples Gallery
+  'examples.drawer_title': 'Beispielgalerie für Algorithmen',
+  'examples.drawer_subtitle': 'Erkunden Sie wissenschaftliches Rechnen, lineare Algebra, DSP und Simulationen mit 1 Klick.',
+  'examples.try_button': 'Ausführen',
+  'examples.recipe_sine_wave_title': 'Sinuswelle & Harmonische',
+  'examples.recipe_sine_wave_desc': 'Harmonische Signale generieren und die zusammengesetzte Wellenform sicher darstellen.',
+  'examples.recipe_solve_linear_title': 'Lineares Gleichungssystem (A \\ b)',
+  'examples.recipe_solve_linear_desc': 'Löse A * x = b effizient mit dem Gauß-Eliminationsoperator.',
+  'examples.recipe_fft_spectrum_title': 'FFT-Frequenzspektrum',
+  'examples.recipe_fft_spectrum_desc': 'Konvertiere Zeitbereichssignale in ein einseitiges Amplitudenspektrum.',
+  'examples.recipe_monte_carlo_pi_title': 'Monte-Carlo-Pi-Simulation',
+  'examples.recipe_monte_carlo_pi_desc': 'Schätze die Kreiszahl pi mit 10.000 Zufallspunkten.',
+  'examples.recipe_matrix_eig_title': 'Eigenwertzerlegung',
+  'examples.recipe_matrix_eig_desc': 'Berechne Eigenvektoren und Diagonalmatrix für symmetrische Matrizen.',
+  'examples.recipe_poly_fit_title': 'Polynomische Kurvenanpassung (polyfit)',
+  'examples.recipe_poly_fit_desc': 'Passe Parabelkoeffizienten an empirische Datenpunkte an.',
+
+  // Diagnostics Modal
+  'diagnostics.title': 'Engine- und Lane-Diagnose',
+  'diagnostics.desc': 'Interne Deployment-Metadaten, Wasm-Isolationsflags und Baseline-Umschalter.',
+  'diagnostics.active_lane': 'Aktive Lane:',
+  'diagnostics.port': 'Port:',
+  'diagnostics.epoch': 'Engine-Epoche:',
+  'diagnostics.coi_status': 'Cross-Origin Isolated:',
+  'diagnostics.sab_status': 'SharedArrayBuffer-Status:',
+  'diagnostics.switch_lane': 'Deployment-Lane wechseln',
+  'diagnostics.close': 'Schließen',
+
+  // Variable Inspector
+  'inspector.title': 'Variableninspektor: {name}',
+  'inspector.stats_title': 'Numerische Statistiken',
+  'inspector.min': 'Min:',
+  'inspector.max': 'Max:',
+  'inspector.mean': 'Mittelwert:',
+  'inspector.grid_preview': 'Datenraster (Erste 10x10)',
+  'inspector.action_plot': 'Variable plotten',
+  'inspector.action_copy': 'Name kopieren',
+  'inspector.action_transpose': 'Transponieren (\'.\')',
+  'inspector.close': 'Schließen',
 } as const;
 
 export const de: EnsureParity<typeof _de> & LocaleDictionary = _de;

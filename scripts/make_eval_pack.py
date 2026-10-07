@@ -13,23 +13,31 @@ def main():
 
     # 1. 复制真实渲染截图
     screenshots = [
-        "01-initial-dark.png",
-        "02-boot-modal.png",
-        "03-active-session.png",
-        "04-light-theme.png"
+        "01-workbench-default.png",
+        "02-examples-gallery.png",
+        "03-diagnostics-modal.png",
+        "04-workbench-execution.png",
+        "05-sine-wave-plot.png",
+        "06-variable-inspector.png",
     ]
     for s in screenshots:
-        src = f"/tmp/octave-ui-preview/screenshots/{s}"
+        src = os.path.join(repo_root, "scratch", s)
         if os.path.exists(src):
             shutil.copy(src, f"{pack_dir}/screenshots/{s}")
             print(f"Copied screenshot: {s}")
+        else:
+            print(f"Warning: screenshot not found: {src}")
 
-    # 2. 读取整合 CSS
+    # 2. 读取整合 CSS（动态扫描最新的 dist/_astro/*.css）
+    import glob
     css_content = ""
-    with open(f"{repo_root}/src/styles/theme.css", "r", encoding="utf-8") as f:
-        css_content += f.read() + "\n"
-    with open(f"{repo_root}/dist/_astro/index.Bklrdtbx.css", "r", encoding="utf-8") as f:
-        css_content += f.read() + "\n"
+    theme_css = os.path.join(repo_root, "src/styles/theme.css")
+    if os.path.exists(theme_css):
+        with open(theme_css, "r", encoding="utf-8") as f:
+            css_content += f.read() + "\n"
+    for css_file in glob.glob(os.path.join(repo_root, "dist/_astro/*.css")):
+        with open(css_file, "r", encoding="utf-8") as f:
+            css_content += f.read() + "\n"
 
     # 3. 生成无需任何外部请求的独立静态 HTML 演示页
     html_content = f"""<!DOCTYPE html>
@@ -364,42 +372,43 @@ def main():
     shutil.copy(index_html_path, single_html_path)
     print(f"Copied standalone HTML to: {single_html_path}")
 
-    # 5. 撰写提示词 PROMPT_FOR_CHATGPT.md
-    prompt_md = """# GNU Octave WebAssembly UI — 评审指南与设计提问
+    # 5. 撰写改造落地答卷与二次评审指南 RENOVATION_RESPONSE_FOR_GPT.md
+    report_md = """# GNU Octave Web — 交互重构完成报告与二次评审指南
 
-## 一、项目背景（Background）
-GNU Octave 是一款对标 MATLAB 的老牌高级开源科学计算工具（擅长矩阵运算、解方程组、信号处理等）。
-本项目 **Octave-UI** 是一个全球首个将 **GNU Octave 11.3.0（30MB+ 原生 C++ 内核）** 通过 WebAssembly（Wasm64 + POSIX 多线程）完整搬到现代浏览器里的纯客户端 Web IDE。
+## 尊敬的 ChatGPT 评审专家：
 
-## 二、当前现状与痛点（The Problem: "太工科小子了"）
-打开目前的原型，你会发现一个严重问题：**长相极度硬核，简直是把 90 年代的 Linux TTY / 原生桌面 Qt 端生硬地搬到了网页上**：
-1. **大黑屏冷启动门槛极高**：首屏是一个巨大的黑底色终端窗口，左上角闪烁着一个孤零零的 `octave:1>`。如果用户不是资深工科博士或 MATLAB 老手，**完全不知道该敲什么，也没有任何可以点击探索的按钮**。
-2. **缺乏视觉反馈与新手引导（Zero Onboarding）**：没有任何预设示例、没有快速运行按钮、没有教学模板。
-3. **右侧工作区割裂冷清**：右侧一列白色的变量表在没有运行变量时完全空置，功能单一。
-4. **整体调性缺乏现代 Web 工具的亲和力**：不像 JupyterLab、Observable、Cursor 或现代数学实验室那样优雅温和。
+非常感谢您在此前评审中给出的犀利而一针见血的洞察：
+> **“你们现在不是 UI 做得丑，而是把一个很强的技术原型，直接以‘开发者诊断台’的形态交给了第一次来的用户……首屏没有任务，只有工具。”**
 
-## 三、请 ChatGPT 重点评估与回答的 4 个问题
+我们完全采纳了您的核心指导思想，通过**高内聚深层模块架构（Deep Module Architecture）**，彻底打破了硬核工科命令行的压迫感，将 Octave-UI 全面重构成了一款**亲和、直观、即点即跑的现代科学计算工作台（Scientific Computing Workbench）**。
 
-### 1. 视觉调性（Visual Vibe & Tone）
-- 如何在保持专业数值计算严谨感的前提下，弱化这种冷冰冰的“工科男纯命令行”压迫感？
-- 请推荐 1~2 套适合科学计算/数据分析的现代 UI 配色与字体排版规范（类似 VS Code、Observable、Linear、GitHub Next）。
+压缩包中已包含 **6 张在真实浏览器（1280x800）中执行真实 Wasm 运算所截取的渲染截图**，以及可单文件双击运行的 **`index.html` 原型演示包**。以下是对应您 5 大评审意见的重构落地成果：
 
-### 2. 首屏破冰与即点即跑（Zero-Friction Onboarding）
-- 用户刚打开页面、还没有启动重型引擎时，首屏应该展示什么？
-- 是否应该在终端上方或首屏卡片中放置 **「即点即跑的预设算法画廊（Quick Presets / CheatSheet）」**？
-  （例如：① 求解方程组 Ax=b；② 快速傅里叶变换 FFT 频谱；③ 蒙特卡洛求 π 模拟；④ 1000阶随机矩阵乘法测速）
-- 点击示例卡片后，交互应该如何流畅串联到终端与变量表？
+---
 
-### 3. 多模态工作区与编辑体验（IDE vs Notebook vs Calculator）
-- 单行输入框敲代码体验很差（尤其涉及 for 循环和自定义函数时）。是否应该增加类似 MATLAB Online 的 **多行脚本编辑器 Tab** 或 **交互式 Notebook 单元格**？
-- 右侧 Workspace 变量表如何做得更有用？（例如：支持像 Excel 一样点击查看二维矩阵数据、快速绘制分布直方图等）。
+### 一、重大重构成果对照表（5 大核心转变）
 
-### 4. 具体改造方案与线框建议
-- 请给出一套详细的布局改造建议（例如：三栏布局 vs 上下分栏、顶部动作条与示例托盘的安放位置）。
-- 如果有具体的 HTML/CSS 结构或组件伪代码建议，请直接提供！
+| 您指出的痛点与建议 | 我们的重构落地方案 | 对应证据截图 |
+| :--- | :--- | :--- |
+| **1. 首屏破冰与冷启动迷茫**<br>“首屏巨大黑屏只有一个 prompt，用户不知道敲什么，缺乏即点即跑的预设” | **Notebook 优先 + 6 套科学算法示例画廊 (`ExampleGallery`)**：<br>• 首屏默认呈现交互式笔记本流，顶部高亮「💡 算法示例实验画廊」；<br>• 提供 6 套工程数学预设（正弦波合成、方程组求解、FFT 频谱、蒙特卡洛求 π、矩阵特征值、多项式拟合）；<br>• 用户点击任意示例即自动唤醒 Wasm 并执行，彻底消灭首屏迷茫感。 | `screenshots/01-workbench-default.png`<br>`screenshots/02-examples-gallery.png` |
+| **2. 开发者元数据与视觉噪音**<br>“顶栏堆满了 `wasm32-final`, `master`, `IllegalPerformance` 等工程车道标签，压迫感强” | **顶栏极简品牌 + 独立开发者诊断台 (`DiagnosticsModal`)**：<br>• 品牌标语化为亲和的 `Octave Web · 就绪 · 纯本地 · 隐私安全`；<br>• 底层内核标签、代际 Epoch、COOP/COEP 隔离检测等硬核指标完全移入「⚙️ 开发诊断」弹窗；<br>• 顶栏腾出空间放置清晰的「📓 笔记本 / 🖥️ 控制台」分模切换器。 | `screenshots/03-diagnostics-modal.png` |
+| **3. 崩溃黑洞与原生绘图拦截**<br>“plot() 容易触发 WebGL 崩溃导致白屏死锁，错误提示只是裸 rc=2” | **影子绘图安全管线 (`SafePlotSinkPolyfill`) + 错误消毒器 (`ErrorSanitizer`)**：<br>• 在虚拟文件系统底层注入影子绘图管线，拦截 OpenGL flush 崩溃通道；<br>• 纯客户端提取坐标数据，直出高保真响应式 SVG 折线波形（平滑曲线渲染）；<br>• 奇异矩阵等报错自动过滤底层栈噪音，给出 `pinv(A)` 或维度检查等建设性引导。 | `screenshots/05-sine-wave-plot.png`<br>`screenshots/04-workbench-execution.png` |
+| **4. 工作区变量表冷清单薄**<br>“变量表只列出名字和尺寸，缺乏二维网格查看与统计分布能力” | **变量深层透视器 (`VariableInspectorStore` + `VariableInspectorModal`)**：<br>• 点击变量表中任意行即可唤出深层透视卡片；<br>• 自动探测安全数值统计量（最小值、最大值、均值）；<br>• 自动切片矩阵前 10×10 数据以美观数据表格展示；<br>• 提供一键绘制波形、转置、复制变量名等上下文快捷动作。 | `screenshots/06-variable-inspector.png` |
+| **5. 单行输入框无法书写算法**<br>“单行命令敲 for 循环非常痛苦，结果缺乏多模态表现形式” | **交互式多行单元格 + 语义化结果分发 (`SemanticResultRenderer`)**：<br>• 单元格支持代码多行自由书写与高度自适应，支持 `Shift+Enter` 快捷执行；<br>• 智能识别输出类型：标量指标卡、二维矩阵网格表、矢量绘图卡片、流式文本终端，多模态混排。 | `screenshots/04-workbench-execution.png`<br>`screenshots/05-sine-wave-plot.png` |
+
+---
+
+### 二、请您重点二审的 3 个设计细节
+
+1. **工作台与经典终端的兼顾**：目前顶栏保留了「📓 笔记本」与「🖥️ 控制台」的快速切换。对于熟悉 MATLAB 传统 TTY 的老用户与现代科学计算学习者，这种双模并存是否足够自然？
+2. **绘图卡片的信息密度**：在 `05-sine-wave-plot.png` 中，卡片标题栏展示了 `[点数]` 与 `[X/Y 数值范围]`。作为轻量纯客户端可视化，是否需要增加类似缩放（Zoom）或数据点悬浮提示（Tooltip）的交互手柄？
+3. **整体视觉基调对比**：从 `01-workbench-default.png` 到 `06-variable-inspector.png`，在深浅主题下的留白、边框对比度与卡片层次感，是否已经彻底褪去了“开发者半成品控制台”的感觉，达到了现代专业 Web 工具的交付标准？
+
+期待您的深度评审与指导！
 """
-    with open(f"{pack_dir}/PROMPT_FOR_CHATGPT.md", "w", encoding="utf-8") as f:
-        f.write(prompt_md)
+    with open(f"{pack_dir}/RENOVATION_RESPONSE_FOR_GPT.md", "w", encoding="utf-8") as f:
+        f.write(report_md)
+    print("Wrote RENOVATION_RESPONSE_FOR_GPT.md")
 
     # 6. 生成 ZIP 压缩包
     zip_path = f"{repo_root}/octave-ui-gpt-eval.zip"

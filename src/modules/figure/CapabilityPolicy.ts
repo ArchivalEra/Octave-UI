@@ -22,10 +22,19 @@ export class CapabilityPolicy {
   ];
 
   private _mockWebGpuSupported: boolean | null = null;
+  private _safePolyfillActive = false;
   private _listeners: Set<InterceptListener> = new Set();
 
   setMockWebGpuSupport(supported: boolean | null) {
     this._mockWebGpuSupported = supported;
+  }
+
+  setSafePolyfillActive(active: boolean) {
+    this._safePolyfillActive = active;
+  }
+
+  get isSafePolyfillActive(): boolean {
+    return this._safePolyfillActive;
   }
 
   isPlotCommand(code: string): { isPlot: boolean; matchedCommand?: string } {
@@ -79,6 +88,11 @@ export class CapabilityPolicy {
     const { isPlot, matchedCommand } = this.isPlotCommand(code);
     if (!isPlot) {
       return { allowed: true, isPlot: false };
+    }
+
+    const cmdLower = matchedCommand?.toLowerCase();
+    if (this._safePolyfillActive && (cmdLower === 'plot' || cmdLower === 'figure' || cmdLower === 'drawnow')) {
+      return { allowed: true, isPlot: true, matchedCommand };
     }
 
     const cap = await this.checkHostCapability();

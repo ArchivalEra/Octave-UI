@@ -6,6 +6,7 @@
     historyStore,
     supervisor,
     terminalController,
+    variableInspectorStore,
     t,
   } from '../modules/appContext';
   import { WorkspaceStore } from '../modules/workspace/WorkspaceStore';
@@ -89,6 +90,11 @@
       docLoading = false;
     }
   }
+
+  async function handleVarClick(v: WorkspaceVariable) {
+    const detail = await variableInspectorStore.inspect(v, supervisor);
+    variableInspectorStore.open(detail);
+  }
 </script>
 
 <aside class="sidebar">
@@ -143,7 +149,7 @@
               </thead>
               <tbody>
                 {#each variables as v (v.name)}
-                  <tr onclick={() => terminalController.insertText(v.name)}>
+                  <tr onclick={() => handleVarClick(v)} title="Click to inspect variable">
                     <td class="var-name">{v.name}</td>
                     <td>{v.class}</td>
                     <td>{WorkspaceStore.formatSize(v.size)}</td>

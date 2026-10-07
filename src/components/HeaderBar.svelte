@@ -1,17 +1,27 @@
 <!-- src/components/HeaderBar.svelte -->
 <script lang="ts">
-  import { supervisor, themeManager, i18n, t } from '../modules/appContext';
+  import { supervisor, themeManager, workbenchController, i18n, t } from '../modules/appContext';
   import type { SupervisorState } from '../modules/engine/types';
   import type { Locale } from '../modules/i18n/types';
+  import type { WorkbenchMode } from '../modules/workbench/types';
 
-  let { onOpenBootModal, onToggleSidebar, sidebarOpen = true } = $props<{
+  let {
+    onOpenBootModal,
+    onToggleSidebar,
+    onOpenExamples,
+    onOpenDiagnostics,
+    sidebarOpen = true,
+  } = $props<{
     onOpenBootModal: () => void;
     onToggleSidebar: () => void;
+    onOpenExamples: () => void;
+    onOpenDiagnostics: () => void;
     sidebarOpen?: boolean;
   }>();
 
   let state = $state<SupervisorState>(supervisor.state);
   let theme = $state<'dark' | 'light' | 'auto'>(themeManager.theme);
+  let currentMode = $state<WorkbenchMode>(workbenchController.mode);
 
   $effect(() => {
     const unsubState = supervisor.onStateChange((s) => {
@@ -20,22 +30,14 @@
     const unsubTheme = themeManager.subscribe((t) => {
       theme = t;
     });
+    const unsubWb = workbenchController.subscribe(() => {
+      currentMode = workbenchController.mode;
+    });
     return () => {
       unsubState();
       unsubTheme();
+      unsubWb();
     };
-  });
-
-  let laneBadge = $state<string>(t('header.badge_wasm64'));
-  let currentPort = $state<string>('');
-
-  $effect(() => {
-    if (typeof window !== 'undefined') {
-      currentPort = window.location.port;
-      if ((window as any).__octaveLaneName) {
-        laneBadge = (window as any).__octaveLaneName;
-      }
-    }
   });
 
   function handleInterrupt() {
@@ -62,28 +64,45 @@
 </script>
 
 <header class="header-bar">
+  <!-- 品牌区 -->
   <div class="brand">
-    <svg class="logo" viewBox="0 0 100 100" width="24" height="24">
+    <svg class="logo" viewBox="0 0 100 100" width="28" height="28">
       <rect width="100" height="100" rx="20" fill="#005f87" />
       <circle cx="35" cy="50" r="16" fill="#f57900" />
       <circle cx="65" cy="50" r="16" fill="#73d216" />
       <circle cx="50" cy="50" r="10" fill="#ffffff" />
     </svg>
-    <span class="title">
-      {t('header.title')}
-      <span class="badge-lane">{laneBadge}</span>
-    </span>
-
-    {#if currentPort === '8881' || currentPort === '8882' || currentPort === '8883' || currentPort === '8880'}
-      <nav class="lane-nav" aria-label="Lane selector">
-        <a href="http://127.0.0.1:8881/" class="lane-tag" class:active={laneBadge === 'wasm32-final'} title="Wasm32 冻结基线 (8881)">wasm32-final</a>
-        <a href="http://127.0.0.1:8882/" class="lane-tag" class:active={laneBadge === 'master'} title="Master 稳定基线 (8882)">master</a>
-        <a href="http://127.0.0.1:8883/" class="lane-tag" class:active={laneBadge === 'IllegalPerformance'} title="IllegalPerformance 极限性能 (8883)">IllegalPerformance</a>
-      </nav>
-    {/if}
+    <div class="brand-text">
+      <span class="title">Octave Web</span>
+      <span class="tagline">{t('header.brand_tag')}</span>
+    </div>
   </div>
 
+  <!-- 工作台视图模式切换器 (Notebook / Console) -->
+  <nav class="mode-switcher" aria-label="Workbench mode">
+    <button
+      class="mode-btn"
+      class:active={currentMode === 'notebook'}
+      onclick={() => workbenchController.setMode('notebook')}
+    >
+      📓 {t('header.mode_notebook')}
+    </button>
+    <button
+      class="mode-btn"
+      class:active={currentMode === 'console'}
+      onclick={() => workbenchController.setMode('console')}
+    >
+      💻 {t('header.mode_console')}
+    </button>
+  </nav>
+
+  <!-- 动作与控制区 -->
   <div class="actions">
+    <!-- 示例画廊触发按钮 -->
+    <button class="btn btn-outline" onclick={onOpenExamples}>
+      {t('header.btn_examples')}
+    </button>
+
     <!-- 状态指示徽标 -->
     <div class="status-badge status-{state}">
       <span class="status-dot"></span>
@@ -110,10 +129,10 @@
       </span>
     </div>
 
-    <!-- 按需启动按钮 -->
+    <!-- 启动计算按钮 -->
     {#if state === 'unloaded'}
       <button class="btn btn-primary" onclick={onOpenBootModal} title={t('action.boot_tooltip')}>
-        {t('action.boot')}
+        {t('header.btn_start')}
       </button>
     {/if}
 
@@ -137,6 +156,11 @@
         {t('action.recover')}
       </button>
     {/if}
+
+    <!-- 诊断弹窗触发 -->
+    <button class="btn btn-ghost" onclick={onOpenDiagnostics} title="Diagnostics">
+      {t('header.btn_diagnostics')}
+    </button>
 
     <!-- 多语言切换 -->
     <div class="lang-selector">
@@ -167,9 +191,9 @@
 
 <style>
   .header-bar {
-    height: 48px;
-    background: var(--bg-surface);
-    border-bottom: 1px solid var(--border-subtle);
+    height: 52px;
+    background: var(--bg-surface, #1e1e2e);
+    border-bottom: 1px solid var(--border-subtle, #313244);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -183,185 +207,157 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    font-weight: 600;
     flex-shrink: 0;
+  }
+
+  .brand-text {
+    display: flex;
+    flex-direction: column;
   }
 
   .title {
     font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary, #cdd6f4);
+    line-height: 1.2;
+  }
+
+  .tagline {
+    font-size: 11px;
+    color: var(--text-secondary, #a6adc8);
+  }
+
+  .mode-switcher {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-color, #313244);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
   }
 
-  .badge-lane {
-    font-size: 11px;
-    background: var(--border-muted);
-    color: var(--accent-primary);
-    padding: 1px 6px;
+  .mode-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary, #a6adc8);
+    padding: 4px 12px;
     border-radius: 4px;
-    border: 1px solid var(--border-subtle);
-  }
-
-  .lane-nav {
-    display: inline-flex;
-    gap: 4px;
-    align-items: center;
-    background: var(--bg-surface);
-    padding: 2px 4px;
-    border-radius: 4px;
-    border: 1px solid var(--border-subtle);
-  }
-
-  .lane-tag {
-    font-size: 11px;
-    color: var(--text-muted);
-    text-decoration: none;
-    padding: 1px 6px;
-    border-radius: 3px;
+    font-size: 0.825rem;
+    cursor: pointer;
     transition: all 0.15s ease;
   }
 
-  .lane-tag:hover {
-    color: var(--text-primary);
-    background: var(--border-muted);
+  .mode-btn:hover {
+    color: var(--text-primary, #cdd6f4);
   }
 
-  .lane-tag.active {
-    color: #ffffff;
-    background: var(--accent-primary);
-    font-weight: 500;
+  .mode-btn.active {
+    background: var(--bg-surface, #1e1e2e);
+    color: var(--primary-color, #89b4fa);
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
   .actions {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-shrink: 1;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .actions::-webkit-scrollbar {
-    display: none;
-  }
-
-  .actions button,
-  .actions select {
-    white-space: nowrap;
     flex-shrink: 0;
-  }
-
-  .lang-selector {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-  }
-
-  .lang-select {
-    cursor: pointer;
-    font-size: 12px;
-    padding: 3px 8px;
-    height: 28px;
-    background: var(--bg-surface);
-    color: var(--text-main);
-    border: 1px solid var(--border-subtle);
-    border-radius: 6px;
-    font-family: inherit;
-    transition: all 0.15s ease;
-  }
-
-  .lang-select:hover {
-    border-color: var(--text-muted);
-    background: var(--bg-surface-hover);
   }
 
   .status-badge {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 8px;
-    border-radius: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
     font-size: 12px;
-    background: var(--bg-canvas);
-    border: 1px solid var(--border-subtle);
-    white-space: nowrap;
-    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color, #313244);
   }
 
   .status-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--text-dim);
   }
 
-  .status-unloaded .status-dot {
-    background: var(--text-dim);
-  }
-
-  .status-booting .status-dot {
-    background: var(--accent-warning);
-    animation: pulse 1s infinite alternate;
-  }
-
-  .status-idle .status-dot {
-    background: var(--accent-success);
-  }
-
-  .status-busy .status-dot {
-    background: var(--accent-warning);
-    animation: pulse 0.5s infinite alternate;
-  }
-
-  .status-error .status-dot {
-    background: var(--accent-danger);
-  }
-
-  .status-aborting .status-dot {
-    background: var(--accent-danger);
-    animation: pulse 0.3s infinite alternate;
-  }
-
-  .status-crashed .status-dot {
-    background: var(--accent-danger);
-  }
-
-  .status-recovering .status-dot {
-    background: var(--accent-warning);
-    animation: pulse 0.5s infinite alternate;
-  }
-
-  .status-failed .status-dot {
-    background: var(--accent-danger);
-  }
+  .status-unloaded .status-dot { background: #6c7086; }
+  .status-booting .status-dot { background: #f9e2af; animation: pulse 1s infinite; }
+  .status-idle .status-dot { background: #a6e3a1; }
+  .status-busy .status-dot { background: #89b4fa; animation: pulse 1s infinite; }
+  .status-aborting .status-dot { background: #fab387; animation: pulse 0.5s infinite; }
+  .status-crashed .status-dot { background: #f38ba8; }
+  .status-recovering .status-dot { background: #cba6f7; animation: pulse 0.8s infinite; }
+  .status-failed .status-dot { background: #f38ba8; }
 
   @keyframes pulse {
-    from { opacity: 0.4; }
-    to { opacity: 1; }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .btn {
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.15s;
+  }
+
+  .btn:hover {
+    opacity: 0.85;
   }
 
   .btn-primary {
-    background: var(--accent-primary);
+    background: #007acc;
     color: #fff;
-    border-color: var(--accent-primary);
-  }
-  .btn-primary:hover {
-    background: var(--accent-primary-hover);
+    font-weight: 600;
   }
 
   .btn-danger {
-    background: var(--accent-danger);
-    color: #fff;
-    border-color: var(--accent-danger);
+    background: #f38ba8;
+    color: #11111b;
   }
 
   .btn-warning {
-    background: var(--accent-warning);
-    color: #fff;
-    border-color: var(--accent-warning);
+    background: #fab387;
+    color: #11111b;
   }
-  .btn-warning:hover {
-    opacity: 0.9;
+
+  .btn-outline {
+    background: rgba(137, 180, 250, 0.1);
+    border: 1px solid rgba(137, 180, 250, 0.3);
+    color: var(--primary-color, #89b4fa);
+    font-weight: 600;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border-color, #313244);
+    color: var(--text-secondary, #a6adc8);
+  }
+
+  .btn-icon {
+    background: transparent;
+    color: var(--text-secondary, #a6adc8);
+    padding: 0 6px;
+    border: 1px solid var(--border-color, #313244);
+  }
+
+  .lang-select {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-color, #313244);
+    color: var(--text-primary, #cdd6f4);
+    border-radius: 4px;
+    height: 30px;
+    font-size: 12px;
+    padding: 0 4px;
+    outline: none;
   }
 </style>

@@ -108,6 +108,66 @@ const _zhHans = {
   'figure.details_p2': 'EngineSupervisor 将为执行中异常提供自愈熔断保护，但建议在图形通道就绪前优先在脚本中输出数据或使用 GraphicsSink 安全离屏槽。',
   'figure.btn_cancel': '安全取消（推荐）',
   'figure.btn_force': '强制执行（高风险）',
+
+  // Header additions
+  'header.brand_tag': '就绪 · 纯本地 · 隐私安全',
+  'header.btn_diagnostics': '⚙ 开发诊断',
+  'header.btn_examples': '💡 示例画廊',
+  'header.btn_start': '开始计算',
+  'header.mode_notebook': '笔记本',
+  'header.mode_console': '控制台',
+
+  // Workbench
+  'workbench.add_cell': '+ 新增单元格',
+  'workbench.run_cell': '运行 (Shift+Enter)',
+  'workbench.run_all': '全部运行',
+  'workbench.clear': '清空',
+  'workbench.delete_cell': '删除',
+  'workbench.empty_placeholder': '在此输入 Octave / MATLAB 代码...',
+  'workbench.plot_title': '已提取绘图矢量 ({count} 点)',
+  'workbench.matrix_title': '矩阵 {name} ({rows}x{cols})',
+  'workbench.scalar_title': '标量 {name}',
+  'workbench.execution_time': '执行耗时 {ms}ms',
+
+  // Examples Gallery
+  'examples.drawer_title': '算法示例实验画廊',
+  'examples.drawer_subtitle': '一键加载典型科学计算、线性代数、数字信号处理与模拟实验。',
+  'examples.try_button': '加载并运行',
+  'examples.recipe_sine_wave_title': '正弦波与谐波合成',
+  'examples.recipe_sine_wave_desc': '生成多频次谐波信号并安全呈现合成波形图。',
+  'examples.recipe_solve_linear_title': '求解线性方程组 (A \\ b)',
+  'examples.recipe_solve_linear_desc': '使用高斯消元左除运算符高效求解线性代数方程组。',
+  'examples.recipe_fft_spectrum_title': '快速傅里叶变换 (FFT)',
+  'examples.recipe_fft_spectrum_desc': '将时域双音信号转换为单侧频域幅值谱。',
+  'examples.recipe_monte_carlo_pi_title': '蒙特卡洛随机求 π',
+  'examples.recipe_monte_carlo_pi_desc': '基于 10,000 个随机投点统计四分之一圆面积估算圆周率。',
+  'examples.recipe_matrix_eig_title': '特征值与特征向量分解',
+  'examples.recipe_matrix_eig_desc': '计算对称方阵的特征向量矩阵与特征值对角阵。',
+  'examples.recipe_poly_fit_title': '多项式曲线拟合 (polyfit)',
+  'examples.recipe_poly_fit_desc': '针对实验散点数据拟合二次抛物线多项式系数。',
+
+  // Diagnostics Modal
+  'diagnostics.title': '内核与部署车道诊断',
+  'diagnostics.desc': '内部车道元数据、Wasm 运行隔离标志与基线切换器。',
+  'diagnostics.active_lane': '当前活动车道:',
+  'diagnostics.port': '端口:',
+  'diagnostics.epoch': '引擎代际 (Epoch):',
+  'diagnostics.coi_status': '跨源隔离 (COOP/COEP):',
+  'diagnostics.sab_status': 'SharedArrayBuffer 状态:',
+  'diagnostics.switch_lane': '切换部署车道',
+  'diagnostics.close': '关闭',
+
+  // Variable Inspector
+  'inspector.title': '变量透视: {name}',
+  'inspector.stats_title': '数值统计量',
+  'inspector.min': '最小值:',
+  'inspector.max': '最大值:',
+  'inspector.mean': '均值:',
+  'inspector.grid_preview': '矩阵网格预览 (前 10x10)',
+  'inspector.action_plot': '绘制波形图',
+  'inspector.action_copy': '复制名称',
+  'inspector.action_transpose': '转置 (\'.\')',
+  'inspector.close': '关闭',
 } as const;
 
 export const zhHans: EnsureParity<typeof _zhHans> & LocaleDictionary = _zhHans;

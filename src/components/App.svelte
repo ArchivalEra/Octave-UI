@@ -1,16 +1,32 @@
 <!-- src/components/App.svelte -->
 <script lang="ts">
   import HeaderBar from './HeaderBar.svelte';
+  import NotebookView from './NotebookView.svelte';
   import TerminalIsland from './TerminalIsland.svelte';
   import SidebarIsland from './SidebarIsland.svelte';
   import BootModal from './BootModal.svelte';
   import FigureWarningModal from './FigureWarningModal.svelte';
+  import ExampleGallery from './ExampleGallery.svelte';
+  import DiagnosticsModal from './DiagnosticsModal.svelte';
+  import VariableInspectorModal from './VariableInspectorModal.svelte';
+  import { workbenchController } from '../modules/appContext';
+  import type { WorkbenchMode } from '../modules/workbench/types';
 
   let sidebarOpen = $state(true);
   let bootModalOpen = $state(false);
   let warningModalOpen = $state(false);
+  let examplesOpen = $state(false);
+  let diagnosticsOpen = $state(false);
   let interceptedCmd = $state('');
   let interceptReason = $state('');
+  let currentMode = $state<WorkbenchMode>(workbenchController.mode);
+
+  $effect(() => {
+    const unsub = workbenchController.subscribe(() => {
+      currentMode = workbenchController.mode;
+    });
+    return unsub;
+  });
 
   function handleInterceptPlot(cmd: string, reason: string) {
     interceptedCmd = cmd;
@@ -23,11 +39,17 @@
   <HeaderBar
     onOpenBootModal={() => (bootModalOpen = true)}
     onToggleSidebar={() => (sidebarOpen = !sidebarOpen)}
+    onOpenExamples={() => (examplesOpen = true)}
+    onOpenDiagnostics={() => (diagnosticsOpen = true)}
     {sidebarOpen}
   />
 
   <main class="workspace-area">
-    <TerminalIsland onInterceptPlot={handleInterceptPlot} />
+    {#if currentMode === 'notebook'}
+      <NotebookView onOpenExamples={() => (examplesOpen = true)} />
+    {:else}
+      <TerminalIsland onInterceptPlot={handleInterceptPlot} />
+    {/if}
 
     {#if sidebarOpen}
       <SidebarIsland />
@@ -45,6 +67,18 @@
     reason={interceptReason}
     onClose={() => (warningModalOpen = false)}
   />
+
+  <ExampleGallery
+    isOpen={examplesOpen}
+    onClose={() => (examplesOpen = false)}
+  />
+
+  <DiagnosticsModal
+    isOpen={diagnosticsOpen}
+    onClose={() => (diagnosticsOpen = false)}
+  />
+
+  <VariableInspectorModal />
 </div>
 
 <style>
