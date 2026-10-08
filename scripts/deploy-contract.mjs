@@ -82,14 +82,59 @@ function walk(dir, ext) {
   return out;
 }
 
+/**
+ * 引擎在运行时用**字符串/模板字面量**拼资源 URL（不是 HTML 属性），
+ * 例如 WasmEmbedAdapter 的 `e.base||\`/lanes/${lane}/\``。这类字面量 Astro 的
+ * base 管不到，是「子路径部署」最典型的破口：漏了前缀就请求站点根的
+ * /lanes/… → 命中 SPA 兜底页（text/html）→ 脚本不执行 → "缺 OCTAVE 工厂"。
+ * 契约在构建后统一补前缀（只认字面量起始处，不碰其它字符串）。
+ */
+const JS_ASSET_PREFIXES = ["/lanes/", "/w64/", "/bridge/", "/assets/", "/_astro/"];
+
+function rewriteJsLiterals(code) {
+  let n = 0;
+  for (const p of JS_ASSET_PREFIXES) {
+    for (const q of ["`", "'", '"']) {
+      const from = q + p;
+      const to = q + BASE + p.slice(1);
+      const c = code.split(from).length - 1;
+      if (c) {
+        code = code.split(from).join(to);
+        n += c;
+      }
+    }
+  }
+  return { code, n };
+}
+
+/** 注入 base 信号：UI 的新代码用 <meta site-base> 或 window.__siteBase 算 base。 */
+function injectBaseSignal(html) {
+  let out = html;
+  if (!/<meta\s+name=["']site-base["']/i.test(out)) {
+    const tag = `<meta name="site-base" content="${BASE}">`;
+    const idx = out.indexOf("<head>");
+    const at = idx === -1 ? out.indexOf("</head>") : idx + "<head>".length;
+    if (at === -1) return { out, injected: false };
+    out = `${out.slice(0, at)}\n    ${tag}${out.slice(at)}`;
+  }
+  if (!out.includes("__siteBase")) {
+    const idx = out.indexOf("</head>");
+    if (idx !== -1) out = `${out.slice(0, idx)}<script>window.__siteBase="${BASE}";</script>\n${out.slice(idx)}`;
+  }
+  return { out, injected: true };
+}
+
 function cmdAdapt() {
   const names = fs
     .readdirSync(DIST, { withFileTypes: true })
     .filter((e) => !["repo", "index.html", "404.html"].includes(e.name))
     .map((e) => e.name);
   const re = /(\b(?:href|src|poster)\s*=\s*)(["'])\/(?!repo\/Octave\/)([^"']+)\2/g;
+
+  // HTML：属性前缀 + base 信号 + 分片 shim
   let rewrote = 0;
   let injected = 0;
+  let baseSignals = 0;
   for (const file of walk(DIST, ".html")) {
     let html = fs.readFileSync(file, "utf8");
     const before = html;
@@ -98,6 +143,9 @@ function cmdAdapt() {
       rewrote += 1;
       return `${pre}${q}${BASE}${rest}${q}`;
     });
+    const bs = injectBaseSignal(html);
+    if (bs.injected && bs.out !== html) baseSignals += 1;
+    html = bs.out;
     if (!html.includes("__octaveChunkShim")) {
       const idx = html.indexOf("</head>");
       if (idx === -1) {
@@ -109,7 +157,20 @@ function cmdAdapt() {
     }
     if (html !== before) fs.writeFileSync(file, html);
   }
-  console.log(`[contract:adapt] 重写根绝对引用 ${rewrote} 处；注入 shim ${injected} 个页面`);
+
+  // JS bundle：字符串/模板字面量里的根绝对资源前缀（引擎车道加载路径就在这里）
+  let jsFixed = 0;
+  for (const file of walk(DIST, ".js")) {
+    const code = fs.readFileSync(file, "utf8");
+    const { code: fixed, n } = rewriteJsLiterals(code);
+    if (n) {
+      fs.writeFileSync(file, fixed);
+      jsFixed += n;
+    }
+  }
+  console.log(
+    `[contract:adapt] HTML 属性 ${rewrote} 处；JS 字面量 ${jsFixed} 处；base 信号 ${baseSignals} 页；shim ${injected} 页`,
+  );
 }
 
 // ───────────────────────── verify（构建后） ─────────────────────────
@@ -135,7 +196,14 @@ function cmdVerify() {
   const stale = walk(DIST, ".html").filter((f) =>
     /(?:href|src)=["']\/(?:w64|bridge|lanes|assets|_astro)\//.test(fs.readFileSync(f, "utf8")),
   );
-  if (stale.length) problems.push(`仍有根绝对引用：${stale.slice(0, 3).join(", ")}`);
+  if (stale.length) problems.push(`HTML 仍有根绝对引用：${stale.slice(0, 3).join(", ")}`);
+  if (!/<meta\s+name=["']site-base["']/i.test(idx)) problems.push("缺 <meta name=\"site-base\">");
+  // 部署 bundle 里任何 JS 字面量都不得以根绝对资源前缀开头（车道加载路径曾在此踩坑）
+  const jsStale = walk(DIST, ".js").filter((f) => {
+    const c = fs.readFileSync(f, "utf8");
+    return JS_ASSET_PREFIXES.some((p) => ["`", "'", '"'].some((q) => c.includes(q + p)));
+  });
+  if (jsStale.length) problems.push(`JS 仍有根绝对资源字面量：${jsStale.slice(0, 3).join(", ")}`);
   if (problems.length) {
     console.error(`[contract:verify] ${problems.join("；")}`);
     process.exit(1);
