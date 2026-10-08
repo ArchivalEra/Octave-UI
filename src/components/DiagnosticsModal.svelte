@@ -77,7 +77,7 @@
           <div class="meta-item">
             <span class="label">{t('diagnostics.coi_status')}</span>
             <span class="val" class:pass={coiStatus} class:fail={!coiStatus}>
-              {coiStatus ? 'TRUE (COOP/COEP Active)' : 'FALSE (仅支持 wasm32-final 单线程档)'}
+              {coiStatus ? t('diagnostics.coi_active') : t('diagnostics.coi_inactive')}
             </span>
           </div>
 
@@ -91,7 +91,7 @@
 
         {#if !coiStatus}
           <div class="coi-notice">
-            <span>ℹ️ 当前未启用跨源隔离 (COOP/COEP)。<strong>wasm32-final</strong> 基础单线程兼容档不受影响、完全可用；多线程档位 (<strong>master</strong> / <strong>IllegalPerformance</strong>) 需宿主配置跨源隔离响应头。</span>
+            <span>{t('diagnostics.coi_notice')}</span>
           </div>
         {/if}
 
@@ -108,7 +108,7 @@
                   <span class="active-tag">{t('diagnostics.current_active')}</span>
                 {/if}
               </div>
-              <small>冻结基线 · 32/64位通用兼容</small>
+              <small>{t('diagnostics.spec_wasm32')}</small>
             </div>
             <div
               class="lane-link"
@@ -120,7 +120,7 @@
                   <span class="active-tag">{t('diagnostics.current_active')}</span>
                 {/if}
               </div>
-              <small>稳定主干 · POSIX pthreads</small>
+              <small>{t('diagnostics.spec_master')}</small>
             </div>
             <div
               class="lane-link"
@@ -132,7 +132,7 @@
                   <span class="active-tag">{t('diagnostics.current_active')}</span>
                 {/if}
               </div>
-              <small>极限性能 · mimalloc + FMA</small>
+              <small>{t('diagnostics.spec_illegal')}</small>
             </div>
           </div>
         </div>

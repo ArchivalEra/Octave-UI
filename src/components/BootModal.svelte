@@ -30,26 +30,26 @@
       case 'wasm32-final':
         return {
           name: 'wasm32-final',
-          mode: 'Wasm32 通用兼容档 (32-bit Memory)',
+          mode: t('boot.mode_wasm32'),
           size: '~39.3 MB',
         };
       case 'master':
         return {
           name: 'master',
-          mode: 'Master 主线稳定档 (WebAssembly / 线程)',
+          mode: t('boot.mode_master'),
           size: '~40.7 MB',
         };
       case 'IllegalPerformance':
         return {
           name: 'IllegalPerformance',
-          mode: 'IllegalPerformance 极限性能档 (mimalloc 优化编译)',
+          mode: t('boot.mode_illegal'),
           size: '~40.7 MB',
         };
       default:
         return {
           name: activeLane,
-          mode: `${activeLane} 档`,
-          size: '按需加载',
+          mode: `${activeLane} ${t('boot.mode_suffix')}`,
+          size: t('boot.asset_size_val'),
         };
     }
   });

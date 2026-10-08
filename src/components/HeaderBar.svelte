@@ -188,7 +188,7 @@
         class="segment-btn"
         class:active={currentMode === 'notebook'}
         onclick={() => projectWorkspace.setMode('notebook')}
-        title="交互式笔记本模式"
+        title={t('header.mode_notebook_tooltip')}
       >
         <span class="segment-icon">📓</span>
         <span class="segment-label">{t('header.mode_notebook')}</span>
@@ -198,7 +198,7 @@
         class="segment-btn"
         class:active={currentMode === 'terminal'}
         onclick={() => projectWorkspace.setMode('terminal')}
-        title="全功能终端控制台模式"
+        title={t('header.mode_console_tooltip')}
       >
         <span class="segment-icon">💻</span>
         <span class="segment-label">{t('header.mode_console')}</span>
@@ -209,7 +209,7 @@
   <!-- 右侧：状态指示 + 启动/停止主按钮 + Colab 风格 ⋮ 菜单 -->
   <div class="top-bar-right">
     <!-- 状态指示徽标 -->
-    <div class="status-chip status-{state}" title="引擎运行期状态">
+    <div class="status-chip status-{state}" title={t('header.status_tooltip')}>
       <span class="status-dot"></span>
       <span class="status-text">
         {#if state === 'unloaded'}
@@ -430,7 +430,7 @@
                   <span class="choice-title">
                     master
                     {#if !isCoiAvailable}
-                      <span class="coi-pill" title="需要宿主配置 COOP/COEP 跨源隔离响应头">(需 COI)</span>
+                      <span class="coi-pill" title={t('header.coi_tooltip')}>{t('header.coi_tag')}</span>
                     {/if}
                   </span>
                   <span class="choice-desc">{t('header.lane_master_desc')}</span>
@@ -451,7 +451,7 @@
                   <span class="choice-title">
                     IllegalPerformance
                     {#if !isCoiAvailable}
-                      <span class="coi-pill" title="需要宿主配置 COOP/COEP 跨源隔离响应头">(需 COI)</span>
+                      <span class="coi-pill" title={t('header.coi_tooltip')}>{t('header.coi_tag')}</span>
                     {/if}
                   </span>
                   <span class="choice-desc">{t('header.lane_illegal_desc')}</span>
