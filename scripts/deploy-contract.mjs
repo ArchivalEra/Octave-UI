@@ -45,32 +45,8 @@ function cmdBase() {
 
 // ───────────────────────── adapt（构建后） ─────────────────────────
 /** 5MB 分片取数 shim：引擎整包 GET → Range 分片（3 片并行、按序拼接），对引擎透明。 */
-const SHIM = `(function(){if(window.__octaveChunkShim)return;window.__octaveChunkShim=1;
-try{var C=5*1024*1024,F=3,of=window.fetch.bind(window);
-function big(u){try{return/\\.(wasm|data)(?:[?#]|$)/i.test(String(u))}catch(e){return!1}}
-function mh(a,b){var h={};try{if(a instanceof Headers)a.forEach(function(v,k){h[k]=v});else if(a)for(var k in a)h[k]=a[k]}catch(e){}
-for(var k2 in b)h[k2]=b[k2];return h}
-window.fetch=function(i,init){var u=typeof i=="string"?i:(i&&i.url),me=(init&&init.method)||"GET",
-hr=init&&init.headers&&/range/i.test(String(init.headers));
-if(!u||me!=="GET"||hr||!big(u))return of(i,init);
-var bh=(init&&init.headers)||{},st=new ReadableStream({start:function(ct){
-var pos=0,total=null,done=!1;
-function sl(o){var e=o+C-1;return of(u,{headers:mh(bh,{Range:"bytes="+o+"-"+e})}).then(function(r){
-if(r.status!==206)return{fb:1,r:r};var cr=r.headers.get("content-range");
-if(cr){var m=/\\/(\\d+)\\s*$/.exec(cr);if(m)total=parseInt(m[1],10)}
-return r.arrayBuffer().then(function(b){return{o:o,b:b}})})}
-function pump(){if(done){ct.close();return}var ps=[];
-for(var i=0;i<F;i++){var o=pos+i*C;if(total!==null&&o>=total)break;ps.push(sl(o))}
-if(!ps.length){done=!0;ct.close();return}
-Promise.all(ps).then(function(rr){for(var j=0;j<rr.length;j++){var p=rr[j];
-if(p.fb){done=!0;return of(u,{headers:bh}).then(function(r){return r.arrayBuffer()})
-.then(function(b){ct.enqueue(new Uint8Array(b));ct.close()})["catch"](function(e){ct.error(e)})}
-ct.enqueue(new Uint8Array(p.b));pos=Math.max(pos,p.o+p.b.byteLength);
-if(p.b.byteLength<C||(total!==null&&pos>=total))done=!0}
-if(!done)pump();else ct.close()})["catch"](function(e){ct.error(e)})}
-pump()}});
-return Promise.resolve(new Response(st,{status:200,headers:{"Content-Type":"application/wasm"}}))}
-}catch(e){}})();`;
+// 分片取数 + 解压 shim：独立文件，便于单独语法检查与审阅（契约只负责注入）。
+const SHIM = fs.readFileSync(new URL("./chunk-shim.js", import.meta.url), "utf8").trim();
 
 function walk(dir, ext) {
   const out = [];
