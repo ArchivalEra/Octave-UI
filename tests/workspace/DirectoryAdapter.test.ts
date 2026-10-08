@@ -1,5 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { VirtualMemoryDirectoryAdapter } from '../../src/modules/workspace/DirectoryAdapter';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  VirtualMemoryDirectoryAdapter,
+  FSAccessDirectoryAdapter,
+} from '../../src/modules/workspace/DirectoryAdapter';
 
 describe('VirtualMemoryDirectoryAdapter', () => {
   let adapter: VirtualMemoryDirectoryAdapter;
@@ -61,5 +64,99 @@ describe('VirtualMemoryDirectoryAdapter', () => {
     adapter.disconnect();
     expect(adapter.isMounted).toBe(false);
     expect(adapter.directoryName).toBeNull();
+  });
+});
+
+describe('FSAccessDirectoryAdapter', () => {
+  it('reports isSupported false in headless environment without showDirectoryPicker', () => {
+    const adapter = new FSAccessDirectoryAdapter();
+    expect(adapter.isSupported()).toBe(false);
+    expect(adapter.isMounted).toBe(false);
+    expect(adapter.directoryName).toBeNull();
+  });
+
+  it('interacts with mock showDirectoryPicker without Illegal Invocation', async () => {
+    const fakeHandle = {
+      name: 'SimulatedProject',
+      queryPermission: vi.fn().mockResolvedValue('granted'),
+      requestPermission: vi.fn().mockResolvedValue('granted'),
+      entries: async function* () {
+        yield [
+          'test.m',
+          {
+            name: 'test.m',
+            kind: 'file',
+            getFile: async () => ({
+              text: async () => 'x = 42;',
+              size: 7,
+              lastModified: 1000,
+            }),
+          },
+        ];
+      },
+      getFileHandle: vi.fn().mockImplementation(async (path: string) => ({
+        getFile: async () => ({
+          text: async () => 'x = 42;',
+          size: 7,
+          lastModified: 1000,
+        }),
+        createWritable: async () => ({
+          write: vi.fn().mockResolvedValue(undefined),
+          close: vi.fn().mockResolvedValue(undefined),
+        }),
+      })),
+      removeEntry: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const originalWindow = (globalThis as any).window;
+    try {
+      (globalThis as any).window = {
+        showDirectoryPicker: vi.fn().mockResolvedValue(fakeHandle),
+      };
+
+      const adapter = new FSAccessDirectoryAdapter();
+      expect(adapter.isSupported()).toBe(true);
+
+      const mounted = await adapter.mount();
+      expect(mounted).toBe(true);
+      expect(adapter.isMounted).toBe(true);
+      expect(adapter.directoryName).toBe('SimulatedProject');
+
+      const files = await adapter.list();
+      expect(files.length).toBe(1);
+      expect(files[0].name).toBe('test.m');
+
+      const text = await adapter.readText('test.m');
+      expect(text).toBe('x = 42;');
+
+      await adapter.writeText('test.m', 'x = 100;');
+      await adapter.remove('test.m');
+      expect(fakeHandle.removeEntry).toHaveBeenCalledWith('test.m');
+
+      adapter.disconnect();
+      expect(adapter.isMounted).toBe(false);
+      expect(adapter.directoryName).toBeNull();
+    } finally {
+      (globalThis as any).window = originalWindow;
+    }
+  });
+
+  it('handles user cancellation (AbortError) cleanly', async () => {
+    const originalWindow = (globalThis as any).window;
+    try {
+      const abortErr = new Error('The user aborted a request.');
+      abortErr.name = 'AbortError';
+
+      (globalThis as any).window = {
+        showDirectoryPicker: vi.fn().mockRejectedValue(abortErr),
+      };
+
+      const adapter = new FSAccessDirectoryAdapter();
+      const mounted = await adapter.mount();
+      expect(mounted).toBe(false);
+      expect(adapter.isMounted).toBe(false);
+    } finally {
+      (globalThis as any).window = originalWindow;
+    }
   });
 });

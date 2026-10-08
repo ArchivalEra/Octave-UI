@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { projectWorkspace, supervisor, t } from '../modules/appContext';
+  import { projectWorkspace, supervisor, i18n, t } from '../modules/appContext';
+  import type { Locale } from '../modules/i18n/types';
   import type { ProjectCell } from '../modules/workspace/ProjectWorkspace';
   import type {
     PlotSemanticResult,
@@ -7,11 +8,13 @@
     ScalarSemanticResult,
     ErrorSemanticResult,
   } from '../modules/semantic/SemanticResultRenderer';
+  import { ErrorSanitizer } from '../modules/semantic/ErrorSanitizer';
 
   let { onOpenExamples } = $props<{
     onOpenExamples?: () => void;
   }>();
 
+  let currentLocale = $state<Locale>(i18n.currentLocale);
   let cells = $state<ProjectCell[]>(projectWorkspace.cells);
   let isRunning = $state(projectWorkspace.isRunning);
   let activeFile = $state<string | null>(projectWorkspace.activeFile);
@@ -19,21 +22,56 @@
   let directoryName = $state<string | null>(projectWorkspace.directoryName);
 
   $effect(() => {
-    const unsub = projectWorkspace.subscribe(() => {
+    const unsubPw = projectWorkspace.subscribe(() => {
       cells = projectWorkspace.cells;
       isRunning = projectWorkspace.isRunning;
       activeFile = projectWorkspace.activeFile;
       isMounted = projectWorkspace.isDirectoryMounted;
       directoryName = projectWorkspace.directoryName;
     });
-    return unsub;
+    const unsubI18n = i18n.subscribe((loc) => {
+      currentLocale = loc;
+    });
+    return () => {
+      unsubPw();
+      unsubI18n();
+    };
   });
+
+  function autoResize(node: HTMLTextAreaElement) {
+    function resize() {
+      node.style.height = 'auto';
+      node.style.height = `${node.scrollHeight}px`;
+    }
+    // 初次挂载或更新时自适应撑开
+    requestAnimationFrame(resize);
+    const observer = new ResizeObserver(resize);
+    observer.observe(node);
+    node.addEventListener('input', resize);
+    return {
+      update() {
+        resize();
+      },
+      destroy() {
+        observer.disconnect();
+        node.removeEventListener('input', resize);
+      },
+    };
+  }
 
   async function handleMountLocalDir() {
     try {
       await projectWorkspace.mountLocalDirectory();
     } catch (err: any) {
-      alert(`无法打开本地目录: ${err?.message || err}`);
+      alert(t('workbench.mount_error', { error: err?.message || err }));
+    }
+  }
+
+  async function handleReselectDir() {
+    try {
+      await projectWorkspace.reselectDirectory();
+    } catch (err: any) {
+      alert(t('workbench.mount_error', { error: err?.message || err }));
     }
   }
 
@@ -126,39 +164,42 @@
     <div class="toolbar-left">
       <!-- 本地工程目录挂载 / 状态 -->
       {#if !isMounted}
-        <button class="btn-action" onclick={handleMountLocalDir} title="打开并挂载本地文件夹">
-          📁 打开本地目录
+        <button class="btn-action" onclick={handleMountLocalDir} title={t('workbench.mount_local_dir_tooltip')}>
+          📁 {t('workbench.mount_local_dir')}
         </button>
       {:else}
-        <div class="dir-badge" title={`已挂载本地目录: ${directoryName || ''}`}>
+        <div class="dir-badge" title={t('workbench.mounted_dir_prefix', { dir: directoryName || '' })}>
           <span class="dir-icon">📁</span>
-          <span class="dir-name">{directoryName || '本地目录'}</span>
-          <button class="btn-disconnect" onclick={handleDisconnectDir} title="断开本地目录">✕</button>
+          <span class="dir-name">{directoryName || t('workbench.local_dir_fallback')}</span>
+          <button class="btn-switch-dir" onclick={handleReselectDir} title={t('workbench.reselect_dir_tooltip')}>
+            🔄 {t('workbench.reselect_dir')}
+          </button>
+          <button class="btn-disconnect" onclick={handleDisconnectDir} title={t('workbench.disconnect_dir')}>✕</button>
         </div>
       {/if}
 
-      <div class="file-badge" title="当前加载的标准 Octave .m 脚本">
+      <div class="file-badge" title={t('workbench.file_tooltip')}>
         <span class="file-icon">📜</span>
-        <span class="file-name">{activeFile || 'untitled.m'}</span>
+        <span class="file-name">{activeFile || t('workbench.file_untitled')}</span>
         {#if isMounted}
-          <span class="file-mount-tag">本地</span>
+          <span class="file-mount-tag">{t('workbench.file_mount_tag')}</span>
         {/if}
       </div>
-      <button class="btn-action primary" onclick={handleSave} title="保存脚本到本地文件">
-        💾 保存
+      <button class="btn-action primary" onclick={handleSave} title={t('workbench.save_tooltip')}>
+        💾 {t('workbench.save')}
       </button>
-      <button class="btn-action" onclick={() => handleAddCell()} title="添加新单元格 (%%)">
+      <button class="btn-action" onclick={() => handleAddCell()} title={t('workbench.add_cell')}>
         + {t('workbench.add_cell')}
       </button>
       <button
         class="btn-action"
         onclick={handleRunAll}
         disabled={isRunning}
-        title="运行全部单元格"
+        title={t('workbench.run_all')}
       >
         ▶ {t('workbench.run_all')}
       </button>
-      <button class="btn-action" onclick={handleClear} title="重置工作台">
+      <button class="btn-action" onclick={handleClear} title={t('workbench.clear')}>
         🗑 {t('workbench.clear')}
       </button>
     </div>
@@ -189,7 +230,7 @@
               type="text"
               class="section-title-input"
               value={cell.title}
-              placeholder="Section Title..."
+              placeholder={t('workbench.section_title_placeholder')}
               oninput={(e) => projectWorkspace.updateCellTitle(cell.id, (e.target as HTMLInputElement).value)}
             />
           </div>
@@ -197,10 +238,10 @@
           <!-- 小节注释 (% Comments) -->
           {#if cell.description || cell.status === 'idle'}
             <textarea
+              use:autoResize
               class="section-desc-input"
               value={cell.description}
-              placeholder="% 可选小节文档说明注释..."
-              rows={cell.description ? Math.max(1, cell.description.split('\n').length) : 1}
+              placeholder={t('workbench.section_desc_placeholder')}
               oninput={(e) => projectWorkspace.updateCellDescription(cell.id, (e.target as HTMLTextAreaElement).value)}
             ></textarea>
           {/if}
@@ -208,10 +249,10 @@
           <!-- 代码输入区 -->
           <div class="cell-editor-box">
             <textarea
+              use:autoResize
               class="code-input"
               value={cell.code}
               placeholder={t('workbench.empty_placeholder')}
-              rows={Math.max(3, cell.code.split('\n').length)}
               oninput={(e) =>
                 projectWorkspace.updateCellCode(
                   cell.id,
@@ -254,7 +295,7 @@
           {#if cell.status === 'running'}
             <div class="cell-output running-state">
               <span class="spinner"></span>
-              <span class="text">Computing in local WebAssembly kernel...</span>
+              <span class="text">{t('workbench.computing_kernel')}</span>
             </div>
           {:else if cell.result}
             <div class="cell-output">
@@ -338,27 +379,30 @@
               <!-- 4. 净化错误卡片 -->
               {:else if cell.result.kind === 'sanitized_error'}
                 {@const err = cell.result as ErrorSemanticResult}
+                {@const formatted = ErrorSanitizer.format(err.error, currentLocale)}
                 <div class="result-card error-card">
                   <div class="error-header">
-                    <span class="error-badge">⚠️ {err.error.kind.toUpperCase()}</span>
-                    <span class="error-summary">{err.error.summary}</span>
+                    <span class="error-badge">⚠️ {formatted.badge}</span>
+                    <span class="error-summary">{formatted.summary}</span>
                   </div>
-                  {#if err.error.suggestion}
+                  {#if formatted.suggestion}
                     <div class="error-suggestion">
-                      💡 <strong>建议:</strong> {err.error.suggestion}
+                      💡 <strong>{t('workbench.suggestion')}</strong> {formatted.suggestion}
                     </div>
                   {/if}
                   <details class="raw-error-details">
-                    <summary>查看底层原始报错</summary>
+                    <summary>{t('workbench.raw_error_details')}</summary>
                     <pre><code>{err.error.raw}</code></pre>
                   </details>
                 </div>
 
               <!-- 5. 纯文本流 -->
               {:else if cell.result.kind === 'stream'}
-                <div class="result-card stream-card">
-                  <pre><code>{cell.result.text}</code></pre>
-                </div>
+                {#if (cell.streamingOutput || cell.result.text).trim()}
+                  <div class="result-card stream-card">
+                    <pre><code>{cell.streamingOutput || cell.result.text}</code></pre>
+                  </div>
+                {/if}
               {/if}
 
               <!-- 执行耗时指示 -->
@@ -388,9 +432,17 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 20px;
+    padding: 8px 16px;
     border-bottom: 1px solid var(--border-subtle);
     background: var(--bg-surface);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+    scrollbar-width: none;
+  }
+
+  .notebook-toolbar::-webkit-scrollbar {
+    display: none;
   }
 
   .toolbar-left,
@@ -398,6 +450,7 @@
     display: flex;
     gap: 8px;
     align-items: center;
+    flex-shrink: 0;
   }
 
   .btn-action {
@@ -505,9 +558,12 @@
     font-family: var(--font-mono, monospace);
     font-size: 0.875rem;
     color: var(--text-main);
-    resize: vertical;
     outline: none;
     line-height: 1.4;
+    resize: none;
+    field-sizing: content;
+    min-height: 3.5rem;
+    overflow-y: hidden;
   }
 
   .code-input:focus {
@@ -746,6 +802,25 @@
     white-space: nowrap;
   }
 
+  .btn-switch-dir {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(137, 180, 250, 0.3);
+    color: var(--accent-primary, #89b4fa);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    transition: all 0.15s ease;
+  }
+
+  .btn-switch-dir:hover {
+    background: rgba(137, 180, 250, 0.25);
+    color: var(--text-main);
+  }
+
   .btn-disconnect {
     background: transparent;
     border: none;
@@ -823,11 +898,53 @@
     padding: 6px 8px;
     line-height: 1.4;
     outline: none;
-    resize: vertical;
+    resize: none;
+    field-sizing: content;
+    min-height: 2rem;
+    overflow-y: hidden;
   }
 
   .section-desc-input:focus {
     border-color: var(--accent-primary);
     color: var(--text-main);
+  }
+
+  @media (max-width: 768px) {
+    .cells-list {
+      padding: 12px 10px 60px;
+      gap: 12px;
+    }
+
+    .cell-wrapper {
+      padding: 10px;
+      gap: 8px;
+    }
+
+    .cell-gutter {
+      width: 24px;
+      padding-top: 4px;
+    }
+
+    .cell-editor-box {
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .editor-actions {
+      flex-direction: row;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-run {
+      width: 36px;
+      height: 32px;
+    }
+
+    .btn-subaction {
+      width: 32px;
+      height: 32px;
+    }
   }
 </style>

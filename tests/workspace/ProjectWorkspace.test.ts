@@ -23,6 +23,23 @@ describe('ProjectWorkspace Deep Module', () => {
     expect(workspace.cells[0].code).toContain('x = A \\ b');
   });
 
+  it('synchronizes default script locale when pristine, preserves custom code if modified', () => {
+    // Pristine state syncs to German
+    workspace.syncLocale('de');
+    expect(workspace.cells[0].title).toBe('Willkommen bei Octave Web');
+
+    // Pristine state syncs to English
+    workspace.syncLocale('en');
+    expect(workspace.cells[0].title).toBe('Welcome to Octave Web');
+
+    // User modifies code
+    workspace.updateCellCode(workspace.cells[0].id, 'disp("hello world");');
+    // Once modified, syncLocale synchronizes title/desc to zh-Hans while preserving user code
+    workspace.syncLocale('zh-Hans');
+    expect(workspace.cells[0].code).toBe('disp("hello world");');
+    expect(workspace.cells[0].title).toBe('欢迎使用 Octave Web');
+  });
+
   it('switches mode cleanly', () => {
     const listener = vi.fn();
     workspace.subscribe(listener);
@@ -110,6 +127,22 @@ describe('ProjectWorkspace Deep Module', () => {
     expect(workspace.variables.some((v) => v.name === 'alpha')).toBe(true);
   });
 
+  it('correctly captures multi-line output and parses semantic matrix results', async () => {
+    const cell = workspace.cells[0];
+    workspace.updateCellCode(cell.id, 'inv_w = magic(4);');
+
+    const res = await workspace.executeCell(cell.id);
+    expect(res.ok).toBe(true);
+    expect(cell.status).toBe('success');
+    expect(cell.result).toBeDefined();
+    expect(cell.result?.kind).toBe('matrix');
+    if (cell.result?.kind === 'matrix') {
+      expect(cell.result.rows).toBe(4);
+      expect(cell.result.cols).toBe(4);
+      expect(cell.result.values[0]).toEqual([16, 2, 3, 13]);
+    }
+  });
+
   it('executes REPL command and synchronizes variables', async () => {
     const res = await workspace.executeCommand('beta = 100;');
     expect(res.ok).toBe(true);
@@ -135,5 +168,46 @@ describe('ProjectWorkspace Deep Module', () => {
     const deleted = workspace.deleteSnapshot(snap.id);
     expect(deleted).toBe(true);
     expect(workspace.snapshots.length).toBe(0);
+  });
+
+  it('supports re-selecting directory and cleans activeFile on disconnect', async () => {
+    await workspace.mountLocalDirectory();
+    expect(workspace.isDirectoryMounted).toBe(true);
+
+    // Call reselectDirectory
+    const switched = await workspace.reselectDirectory();
+    expect(switched).toBe(true);
+    expect(workspace.isDirectoryMounted).toBe(true);
+
+    // Disconnect cleans up activeFile and files list
+    workspace.disconnectDirectory();
+    expect(workspace.isDirectoryMounted).toBe(false);
+    expect(workspace.activeFile).toBeNull();
+    expect(workspace.files).toEqual([]);
+  });
+
+  it('smartly synchronizes welcome cell title and description across languages when user edited code', () => {
+    // Modify code from A \ b to A / b
+    const cell = workspace.cells[0];
+    workspace.updateCellCode(cell.id, 'A = [1, 2; 3, 4];\nb = [5; 6];\nx = A / b');
+
+    // Switch to English
+    workspace.syncLocale('en');
+    expect(workspace.cells[0].title).toBe('Welcome to Octave Web');
+    expect(workspace.cells[0].description).toContain('Client-side');
+    // User modified code is preserved!
+    expect(workspace.cells[0].code).toContain('x = A / b');
+
+    // Switch to German
+    workspace.syncLocale('de');
+    expect(workspace.cells[0].title).toBe('Willkommen bei Octave Web');
+    expect(workspace.cells[0].description).toContain('Clientseitige');
+    expect(workspace.cells[0].code).toContain('x = A / b');
+
+    // Switch back to Chinese
+    workspace.syncLocale('zh-Hans');
+    expect(workspace.cells[0].title).toBe('欢迎使用 Octave Web');
+    expect(workspace.cells[0].description).toContain('纯客户端');
+    expect(workspace.cells[0].code).toContain('x = A / b');
   });
 });

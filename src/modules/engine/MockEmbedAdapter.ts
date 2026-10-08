@@ -110,7 +110,7 @@ export class MockEmbedAdapter implements OctaveEmbedPort {
       this._emitOutput(`${content}\n`);
     } else if (trimmed.includes('magic(4)')) {
       this._vars.set('inv_w', { name: 'inv_w', class: 'double', size: '4x4', bytes: 128 });
-      this._emitOutput('   16    2    3   13\n    5   11   10    8\n    9    7    6   12\n    4   14   15    1\n');
+      this._emitOutput('inv_w =\n\n   16    2    3   13\n    5   11   10    8\n    9    7    6   12\n    4   14   15    1\n');
     } else if (trimmed.startsWith('help')) {
       const target = trimmed.replace(/^help\s*['"]?/, '').replace(/['"]?;?$/, '');
       this._emitOutput(`-- Function File: ${target}\n   Simulated help text for ${target}.\n`);
@@ -192,6 +192,8 @@ export class MockEmbedAdapter implements OctaveEmbedPort {
   async history(): Promise<EvalResult> {
     return this.eval('history;');
   }
+
+  flushOutput(): void {}
 
   public terminated = false;
 

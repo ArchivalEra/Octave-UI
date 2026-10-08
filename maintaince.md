@@ -17,6 +17,7 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 的 100% 纯客户端网页�
 - **架构契约与语义边界**：[`CONTEXT.md`](CONTEXT.md) —— 14/14 Embed API 接口规范、四项语义边界、纯静态交付原则、禁止向外写入目录锁。
 - **给 agent 的硬规矩**：[`AGENTS.md`](AGENTS.md) —— 七条纪律、硬坑（反向断言、只认实测、数字单源）。
 - **怎么用（入口与指令）**：[`README.md`](README.md) —— 启动开发、静态打包、运行测试与 E2E 验证。
+- **网站管理员交接手册**：[`HANDOFF.md`](HANDOFF.md) —— 纯静态运维要求（COOP/COEP、Gzip、Range 分块）、指令手册与故障应急预案。
 - **测量与闸门**：[`zreflect/`](zreflect/)（台账、事实、各闸门、开工预检 doctor、闸门平台 gate）。
 - **git 钩子**：[`reflect-hooks/`](reflect-hooks/)（pre-commit / pre-push 与 `Einfacht.env` 载体插件）。
 - **悬案与演进**：[`questions/`](questions/)（每条记录一个带结案实验的未决议题）。
@@ -31,8 +32,8 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 的 100% 纯客户端网页�
 ### 2. WebGPU 客户端矩阵计算加速探索
 - 探索利用 WebGPU WGSL Compute Shaders 配合 WebAssembly 共享显存进行大规模线性代数与矩阵运算加速。
 
-### 3. 虚拟文件系统持久化与本地目录接入
-- 探索接入浏览器 File System Access API（`showOpenFilePicker` / `showDirectoryPicker`），允许用户直接将本地工程目录挂载到 Octave 虚拟 MEMFS，实现本地 `.m` 脚本即时读取与回写。
+### 3. 虚拟文件系统持久化与本地目录接入（已落地）
+- 已全面接入浏览器原生 File System Access API（`showDirectoryPicker`）与全平台（移动端/Firefox/Safari）文件降级，实现用户本地磁盘工程目录的即时挂载、`.m` 脚本双向读写与自由重新选择。
 
 ### 4. 极端大输出流的 WebGPU 终端文本渲染
 - 保持当前 Svelte 5 批量合并渲染为主；持续跟踪 `@xterm/addon-webgpu` 社区进展，预留 WebGPU 终端加速插件插槽。

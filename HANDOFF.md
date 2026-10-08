@@ -1,230 +1,172 @@
-# Octave-UI 网站部署与运维交接手册 (Handoff Guide)
+# HANDOFF.md · 网站管理员运维交接手册
 
-本手册专为负责网站运维与部署的管理员编写，包含 Octave-UI 前端项目的构建规范、静态托管要求、Web 服务器/CDN 规则配置以及 GitHub Actions 自动化部署建议。
-
----
-
-## 1. 架构定位与交付特性
-
-- **100% 纯客户端计算**：没有后端 API、数据库或服务端计算代理。所有 Octave 科学计算均在用户浏览器内的 WebAssembly 引擎中运行。
-- **纯静态交付产物**：Astro 构建产物为纯静态文件（HTML / JS / CSS / WASM / DATA），锁死输出于仓库内的 `./dist/` 目录。
-- **预压缩交付支持**：构建后附带全量 `gzip -k -9 --force` 产物（生成对应的 `.gz` 伴随文件），支持 CDN 或 Web 服务器的 `gzip_static` 零开销高并发交付。
-- **双模与三引擎车道支持**：
-  - 界面提供 **交互式笔记本 (Notebook)** 与 **全功能纯终端 (Terminal)** 两种模式。
-  - 支持免重载切换三款引擎：`wasm32-final` (通用兼容 32 位)、`master` (稳健 64 位)、`IllegalPerformance` (性能先锋 64 位)。相关引擎驱动与固件均已打包在静态包内的 `lanes/` 与 `bridge/` 路径。
+> **交接日期**：2026-10-08  
+> **系统版本**：Octave-UI v0.1.0 (GNU Octave 11.3.0 Wasm 纯客户端前端)  
+> **质量基线**：16/16 测试套件通过，119/119 自动化用例 100% 通过，全站零后端依赖  
 
 ---
 
-## 2. 构建环境与命令规范
+## 一、 系统架构与部署定性
 
-### 2.1 环境要求
-- **Node.js**: `>= 18.0.0` (推荐 Node 20 LTS 或 Node 22 LTS)
-- **pnpm**: `>= 8.0.0` (推荐 pnpm 9)
-- **gzip**: 标准 Linux/Unix `gzip` 命令（用于执行预压缩脚本）
+1. **100% 纯客户端科学计算**：
+   - 所有 Octave 语法解析、线性代数矩阵运算、绘图数据生成均由用户浏览器端 WebAssembly (memory64 + pthreads 多线程) 本地执行；
+   - **服务器端 0 计算进程、0 数据库、0 后端 API**，无论访问量多大，服务器只有静态文件流量消耗，无算力账单。
+2. **纯静态与预压缩交付**：
+   - 构建产物锁死在本仓 `./dist/`；
+   - 生产环境除生成标准静态资源（HTML/JS/CSS）外，全量附带 `gzip -9` 预生成的 `.gz` 压缩文件。
+3. **上游引擎依赖**：
+   - 引擎仓库 `ArchivalEra/Octave-Full-Wasm` 保持绝对只读，交互严格受 14/14 Embed API 契约保护。
 
-### 2.2 构建与打包步骤
+---
 
-在项目根目录下依次执行：
+## 二、 Web 服务器 / CDN 生产配置规范（⚠️ 核心运维硬要求）
 
-```bash
-# 1. 安装依赖
-pnpm install --frozen-lockfile
+由于 WebAssembly 多线程（pthreads）必须使用浏览器的 `SharedArrayBuffer`，**Web 服务器或 CDN 必须正确配置以下两项安全响应头**，否则浏览器会拒绝启动计算引擎：
 
-# 2. 运行单元测试（可选，建议在 CI 中执行）
-pnpm test
-
-# 3. 构建静态产物（输出到 dist/ 目录）
-pnpm build
-
-# 4. 对 dist/ 下所有静态文件生成 .gz 预压缩包
-bash scripts/compress-static.sh dist
+### 1. 跨域隔离标头 (COOP & COEP)
+在 Nginx / Caddy / Cloudflare / EdgeOne 中必须为所有页面请求配置：
+```nginx
+# Nginx 配置示例
+add_header Cross-Origin-Opener-Policy "same-origin" always;
+add_header Cross-Origin-Embedder-Policy "require-corp" always;
 ```
 
-执行完毕后，`./dist/` 目录即为可直接对外交付的最终静态站点根目录。
-
----
-
-## 3. 服务器与 CDN 配置核心规范 (至关重要)
-
-> [!CAUTION]
-> **强隔离响应头（COOP / COEP）是本站点正常运行的前提**。
-> WebAssembly 引擎依赖多线程并发与 `SharedArrayBuffer`，若缺少跨域隔离响应头，浏览器会出于安全策略禁用 `SharedArrayBuffer`，导致引擎在启动时崩溃。
-
-### 3.1 必需的 HTTP 响应头 (Cross-Origin Isolation)
-所有 HTML 页面以及静态资源请求的响应头中，**必须**包含以下两个头部：
-
-```http
-Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
+### 2. 静态预压缩 (Gzip Static)
+产物目录 `dist/` 中预置了所有资产的 `.gz` 高压缩包（包括 `octave.wasm.gz`、`octave.data.gz`），开启静态预压缩可节省 70%+ 带宽并提升首屏加载速度：
+```nginx
+# Nginx 配置示例
+gzip_static on;
+gzip_http_version 1.0;
+gzip_proxied any;
 ```
 
-### 3.2 静态预压缩与 MIME 类型配置
-- 推荐启用 `gzip_static on;`，优先发送现成的 `.gz` 文件，显著降低服务器 CPU 负载并极大提升大型 WASM 固件（~30MB 压缩至 ~8MB）的加载速度。
-- 确保正确配置 `.wasm` 文件的 MIME 类型为 `application/wasm`。
+### 3. HTTP Range 请求支持 (分块断点续传)
+前端引擎采用 5MB 分块切片加载大型二进制（`octave.wasm` / `octave.data`），CDN 与 Web 服务器必须支持 HTTP 206 Partial Content（现代 Nginx 默认支持）。
 
----
-
-## 4. 常见 Web 服务器 / CDN 详细配置示例
-
-### 4.1 Nginx 配置示例
-
+### 4. 推荐 Nginx 完整配置参考
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com;
-    return 301 https://$host$request_uri;
-}
-
-server {
     listen 443 ssl http2;
-    server_name your-domain.com;
-
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-
+    server_name octave.example.com;
     root /var/www/octave-ui/dist;
     index index.html;
 
-    # 1. 核心强隔离响应头（SharedArrayBuffer 必需）
+    # 1. 必须的跨域隔离头
     add_header Cross-Origin-Opener-Policy "same-origin" always;
     add_header Cross-Origin-Embedder-Policy "require-corp" always;
 
-    # 2. 启用 gzip 预压缩交付
+    # 2. 启用预压缩静态加速
     gzip_static on;
 
-    # 3. 静态页面路由兜底
+    # 3. 单页静态路由兜底
     location / {
         try_files $uri $uri/ /index.html;
     }
 
-    # 4. WASM 与二进制数据文件静态缓存策略
-    location ~* \.(wasm|data)$ {
-        types {
-            application/wasm wasm;
-            application/octet-stream data;
-        }
+    # 4. 静态资产长期缓存
+    location ~* \.(wasm|data|js|css|png|svg|ico)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
         add_header Cross-Origin-Opener-Policy "same-origin" always;
         add_header Cross-Origin-Embedder-Policy "require-corp" always;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-    }
-
-    # 5. JS/CSS 静态资源长期缓存
-    location ~* \.(js|css|svg|png|jpg|ico)$ {
-        add_header Cross-Origin-Opener-Policy "same-origin" always;
-        add_header Cross-Origin-Embedder-Policy "require-corp" always;
-        add_header Cache-Control "public, max-age=604800";
     }
 }
 ```
 
-### 4.2 腾讯云 EdgeOne / 阿里云 DCDN / Cloudflare 配置指南
+---
 
-若将静态产物上传至对象存储 (COS/OSS/S3) 并经由 CDN 分发：
-1. **边缘规则 / 自定义响应头**：
-   在 CDN 控制台的「响应头配置」中添加：
-   - 响应头名称：`Cross-Origin-Opener-Policy`，值：`same-origin`
-   - 响应头名称：`Cross-Origin-Embedder-Policy`，值：`require-corp`
-2. **预压缩支持**：
-   开启 CDN 控制台中的「Brotli / Gzip 智能压缩」或「静态预压缩跟随 (Content-Encoding: gzip)」。
-3. **MIME 类型映射**：
-   对象存储中确保 `.wasm` 对象的 `Content-Type` 为 `application/wasm`。
+## 二·五、 部署契约与自动化管线（2026-10-08 起）
 
-### 4.3 二级子路径部署说明（如 `xxx.com/repo/Octave/`）
-若计划将站点挂载在域名的子路径下：
-1. 修改 `astro.config.mjs`，增加 `base: '/repo/Octave/'`：
-   ```javascript
-   export default defineConfig({
-     base: '/repo/Octave/',
-     // ... 其他现有配置保持不变
-   });
-   ```
-2. 重新执行 `pnpm build && bash scripts/compress-static.sh dist` 即可。
+**结论：本仓的改动不再需要人工交接给网站管理员。** 交付要求（子路径挂载、大二进制分片、引擎树布局）
+由流水线在构建期自动施加与断言；UI 侧只管写 UI，写对了不被改、写漏了被兜底、写坏了流水线直接红。
+
+### 契约执行器 `scripts/deploy-contract.mjs`（一个执行器，三个幂等子命令）
+
+| 子命令 | 时机 | 做什么 |
+| :--- | :--- | :--- |
+| `base` | 构建前 | 把 `astro.config.mjs` 的 `base` 钉成 `/repo/Octave/`（缺失即注入、写错即修正） |
+| `adapt` | 构建后 | ① HTML 里遗漏的根绝对引用补前缀；② **JS 字符串/模板字面量里的根绝对资源前缀补前缀**（引擎车道加载路径就在这里，漏了会打到 SPA 兜底页 → 报「缺 OCTAVE 工厂」）；③ 注入 `<meta name="site-base">` + `window.__siteBase`；④ 注入 5MB 分片取数 shim |
+| `verify` | 构建后 | 断言产物齐备（根 `w64/octave.wasm`、`bridge/octave-core.js`、三条车道树…）与形态正确（无残留根绝对引用、base 信号在、分片 shim 在）。**任一条不满足即失败，绝不推半个站** |
+
+### 为什么大二进制要分片
+
+`octave.wasm` ≈ 31MB、`octave.data` ≈ 10MB。本站的边缘（EdgeOne）对客户端传大块很慢，
+**约 5MB/片是实测甜点**；边缘中间件已支持 `Range → 206`。分片因此是**交付要求**，但
+**不在本仓源码里实现**（避免两份实现漂移）——由 `deploy-contract.mjs adapt` 在构建期注入，
+源码里只留一句说明。想本地验证分片：`pnpm preview` 后用浏览器看 `octave.wasm` 的多条 206。
+
+### 两条硬约束（改源码时别踩）
+
+1. **不要写死根绝对资源路径**：`/lanes/…`、`/bridge/…`、`/w64/…`、`/assets/…`、`/_astro/…`
+   必须以 `import.meta.env.BASE_URL`（页面）或部署契约注入的 base 信号
+   （`meta[name=site-base]` / `window.__siteBase`）为前缀。契约会兜底，但源头写对最省事。
+2. **`.wasm` / `.data` 不要自己 fetch 整包**：交给契约注入的分片 shim（它透明接管
+   `window.fetch`）。若你确实要自己取，记得用 `Range`。
+
+### 流水线
+
+`.github/workflows/pages.yml`：push main → `base` → 同步引擎三车道（公开仓
+`Octave-Full-Wasm` 的 `wasm32-final`/`master`/`IllegalPerformance` 分支 `site/` 树）→ `pnpm install`
+→ **`pnpm test`（闸门）** → `pnpm build` → `adapt` → `verify` → 发 GitHub Pages。
+产物根会写 `deploy-stamp.json`（车道清单、base、构建源 SHA、引擎三分支 SHA）供线上对账。
+
+> 站点侧（`isui.ren` 边缘中间件）负责：反代 Pages、补 COOP/COEP、`Range → 206`、统一 10 分钟缓存。
+> 这些不在本仓；本仓只需保证产物形态正确，而形态由 `verify` 保证。
 
 ---
 
-## 5. GitHub Actions 自动化 CI/CD 配置模板
+## 三、 日常运维与常用指令
 
-若希望利用 GitHub 仓库自动构建并发布至 GitHub Pages 或静态服务器，管理员可将以下工作流保存至 `.github/workflows/deploy.yml`：
-
-```yaml
-name: Deploy Octave-UI
-
-on:
-  push:
-    branches: [ master, main ]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
-
-      - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run Tests
-        run: pnpm test
-
-      - name: Build Static Site
-        run: pnpm build
-
-      - name: Compress Static Assets (Gzip -9)
-        run: bash scripts/compress-static.sh dist
-
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: 'dist'
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-```
-
-> [!NOTE]
-> 如果直接部署到 GitHub Pages，请在 `public/` 目录下放置一个带有 COOP/COEP Service Worker（如 `coi-serviceworker.js`）或通过 Cloudflare / EdgeOne 开启反向代理注入响应头，因为原生 GitHub Pages 默认不允许自定义 HTTP 响应头。
+| 任务 | 执行命令 | 说明 |
+| :--- | :--- | :--- |
+| **安装依赖** | `pnpm install` | 纯前端开发依赖（Astro 5 + Svelte 5 + Vitest） |
+| **编译生产包** | `pnpm build` | 编译纯静态产物至 `./dist/` |
+| **生成 Gzip 包** | `pnpm compress` | 批量生成 `dist/**/*.gz`（gzip -9） |
+| **一键编译+压缩** | `pnpm build && pnpm compress` | 生产发布标准两步走 |
+| **本地带头预览** | `pnpm preview` | 启动本地服务（默认 8868 端口，内置 COOP/COEP） |
+| **单元测试** | `pnpm test` | 运行 Vitest 全量 16 个测试套件 |
+| **同步上游车道** | `pnpm sync:lanes` | 拉取并生成三车道独立静态包 |
 
 ---
 
-## 6. 常见问题排查 (Troubleshooting)
+## 四、 核心功能台账（交接验收确认）
 
-1. **页面报 `SharedArrayBuffer is not defined` 或引擎卡在启动阶段**：
-   - **排查手段**：打开浏览器开发者工具 Console，查看 `window.crossOriginIsolated` 是否为 `true`。
-   - **解决办法**：若为 `false`，说明服务器响应缺少 `Cross-Origin-Opener-Policy: same-origin` 或 `Cross-Origin-Embedder-Policy: require-corp` 头。请核对第 3、4 节配置。
-2. **WASM 下载耗时过长或报 404**：
-   - 检查 Web 服务器或 CDN 是否拦截了大于 20MB 的静态请求，确认 `dist/lanes/` 与 `dist/bridge/` 下的相关文件已被完整拷贝。
-3. **本地开发验证**：
-   - 仓库内附带了内置正确 COOP/COEP 响应头的预览服务器脚本：
-     ```bash
-     pnpm preview
-     ```
-     浏览器访问 `http://127.0.0.1:8868/` 即可直接验证完整功能与各项响应头。
+- [x] **双视图模态**：
+  - **笔记本模式 (Notebook)**：Colab / Jupyter 式分节交互执行（`%%` 语法原生双向解析），支持即时编辑、运行单节、批量运行与数据表格/折线图展示；
+  - **工作台模式 (Workbench)**：经典 xterm 终端 + 变量检视器（双击查看矩阵）+ 历史记录面板。
+- [x] **三车道引擎支持**：
+  - 支持 `wasm32-final`（归档稳定）、`master`（wasm64 正式）、`IllegalPerformance`（极速先锋）；
+  - 运算未启动前可在顶栏 ⋮ 菜单中任意选择切换；计算启动后自动锁定防止状态撕裂。
+- [x] **本地工程目录挂载与自由更换**：
+  - 桌面端：基于原生 File System Access API（`window.showDirectoryPicker`）直接读写本地磁盘 `.m` 脚本与数据，支持随时重新选择/更换目录；
+  - 移动端（iOS / Android）及非 Chromium：自动降级为文件多选挂载模式，完全避免平台假死。
+- [x] **全功能多语言 (i18n)**：
+  - 完整支持 **中文 (zh-Hans)**、**英文 (en)**、**德文 (de)** 运行时无缝切换；
+  - 笔记本默认迎新脚本与示例代码随界面语言自动对齐。
+- [x] **主题与字号微调 (Theme & Font Size)**：
+  - Material 3 风格动态强调色（Hue 滑块 + 预设色彩）；
+  - 12px ~ 20px 全站字号自由缩放，全站 `rem` 响应式自适应，首屏防闪烁本地持久化。
+
+---
+
+## 五、 故障排查与应急预案 (Troubleshooting)
+
+### 1. 用户反馈：打开控制台报 `SharedArrayBuffer is not defined` 或引擎卡在加载中？
+- **排查原因**：Web 服务器或 CDN 缺失了 COOP / COEP 标头，或者用户使用了不支持 `SharedArrayBuffer` 的非安全上下文（非 HTTPS / 非 localhost 域名）。
+- **处理方案**：
+  1. 确保生产站点使用 **HTTPS** 协议；
+  2. 检查 Nginx / CDN 响应头，确认存在 `Cross-Origin-Opener-Policy: same-origin` 和 `Cross-Origin-Embedder-Policy: require-corp`。
+
+### 2. 用户反馈：计算陷入死循环或计算卡住？
+- **排查原因**：用户执行了长耗时 Octave 脚本（如 `while true; end`）。
+- **处理方案**：
+  - 告知用户点击顶栏或工作区的「🛑 停止计算」按钮；
+  - 若已严重无响应，点击「自愈恢复」按钮，前端会优雅重启 WebAssembly Worker 线程，**无需管理员干预任何后端服务器**。
+
+### 3. 如何更新上游 WebAssembly 引擎？
+- **处理方案**：
+  1. 运行 `bash scripts/sync-lanes.sh`；
+  2. 运行 `pnpm test` 确认 16 项测试通过；
+  3. 运行 `pnpm build && pnpm compress` 生成新静态包；
+  4. 将新 `./dist/` 推送至静态托管服务器即可。

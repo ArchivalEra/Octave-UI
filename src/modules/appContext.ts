@@ -32,3 +32,7 @@ export { i18n, t, SafePlotSinkPolyfill };
 export const capabilityPolicy = new CapabilityPolicy();
 export const graphicsSink = new GraphicsSink();
 
+i18n.subscribe((locale) => {
+  projectWorkspace.syncLocale(locale);
+});
+

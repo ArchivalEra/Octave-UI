@@ -70,11 +70,34 @@ describe('SemanticResultRenderer & ErrorSanitizer', () => {
     expect(sanitized.suggestion).toContain('my_var');
   });
 
-  it('sanitizes dimension mismatch error', () => {
+  it('sanitizes dimension mismatch error for operator *', () => {
     const raw = 'error: operator *: nonconformant arguments (op1 is 2x3, op2 is 2x3)';
     const sanitized = ErrorSanitizer.sanitize(raw);
     expect(sanitized.kind).toBe('dimension_mismatch');
     expect(sanitized.suggestion).toContain('.*');
+  });
+
+  it('accurately diagnoses operator / (mrdivide) with guidance for \\ and ./ in all locales', () => {
+    const raw = 'eval 失败 rc=2 (Octave 错误文本走 on.output 通道) error: operator /: nonconformant arguments (op1 is 2x2, op2 is 2x1)';
+    const sanitized = ErrorSanitizer.sanitize(raw);
+    expect(sanitized.kind).toBe('dimension_mismatch');
+    expect(sanitized.operator).toBe('/');
+    expect(sanitized.suggestion).toContain('\\');
+    expect(sanitized.suggestion).toContain('./');
+    // Ensure bridge debug noise is stripped from raw
+    expect(sanitized.raw).not.toContain('(Octave 错误文本走 on.output 通道)');
+    expect(sanitized.raw).toContain('error: operator /: nonconformant arguments');
+
+    // Test English formatting
+    const enFmt = ErrorSanitizer.format(sanitized, 'en');
+    expect(enFmt.summary).toContain('operator /');
+    expect(enFmt.suggestion).toContain('left division A \\ b');
+    expect(enFmt.suggestion).toContain('./');
+
+    // Test German formatting
+    const deFmt = ErrorSanitizer.format(sanitized, 'de');
+    expect(deFmt.summary).toContain('Operator /');
+    expect(deFmt.suggestion).toContain('Linksdivision A \\ b');
   });
 
   it('installs safe plot polyfill into virtual filesystem', () => {

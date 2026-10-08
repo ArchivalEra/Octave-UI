@@ -1,29 +1,67 @@
 /* src/styles/theme.css */
 /* 白根（Shirone）设计规范 CSS 变量与全局样式 */
 
-:root, [data-theme="dark"] {
-  --bg-canvas: #0e1117;
-  --bg-surface: #161b22;
-  --bg-surface-hover: #21262d;
-  --bg-terminal: #0d1117;
-  --bg-overlay: rgba(0, 0, 0, 0.7);
+:root {
+  --hue: 248; /* Academic Blue default, user-adjustable 0-360 */
+  --primary-h: var(--hue);
 
-  --text-main: #e6edf3;
-  --text-muted: #8b949e;
-  --text-dim: #6e7681;
+  /* Light Theme M3 System Colors */
+  --md-sys-color-primary: hsl(var(--primary-h), 75%, 42%);
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: hsl(var(--primary-h), 90%, 92%);
+  --md-sys-color-on-primary-container: hsl(var(--primary-h), 95%, 15%);
+  --md-sys-color-secondary: hsl(var(--primary-h), 25%, 38%);
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: hsl(var(--primary-h), 35%, 88%);
+  --md-sys-color-on-secondary-container: hsl(var(--primary-h), 45%, 12%);
+  --md-sys-color-tertiary: hsl(calc(var(--primary-h) + 60), 30%, 42%);
+  --md-sys-color-on-tertiary: #ffffff;
+  --md-sys-color-tertiary-container: hsl(calc(var(--primary-h) + 60), 50%, 90%);
+  --md-sys-color-on-tertiary-container: hsl(calc(var(--primary-h) + 60), 60%, 15%);
 
-  --border-subtle: #30363d;
-  --border-muted: #21262d;
+  --md-sys-color-surface: hsl(var(--primary-h), 20%, 98%);
+  --md-sys-color-surface-dim: hsl(var(--primary-h), 12%, 87%);
+  --md-sys-color-surface-bright: hsl(var(--primary-h), 20%, 98%);
+  --md-sys-color-surface-container-lowest: #ffffff;
+  --md-sys-color-surface-container-low: hsl(var(--primary-h), 18%, 96%);
+  --md-sys-color-surface-container: hsl(var(--primary-h), 15%, 94%);
+  --md-sys-color-surface-container-high: hsl(var(--primary-h), 12%, 91%);
+  --md-sys-color-surface-container-highest: hsl(var(--primary-h), 10%, 88%);
+  --md-sys-color-on-surface: hsl(var(--primary-h), 10%, 12%);
+  --md-sys-color-on-surface-variant: hsl(var(--primary-h), 8%, 30%);
+  --md-sys-color-outline: hsl(var(--primary-h), 6%, 48%);
+  --md-sys-color-outline-variant: hsl(var(--primary-h), 12%, 78%);
+  --md-sys-color-inverse-surface: hsl(var(--primary-h), 10%, 20%);
+  --md-sys-color-inverse-on-surface: hsl(var(--primary-h), 15%, 95%);
+  --md-sys-color-inverse-primary: hsl(var(--primary-h), 85%, 75%);
 
-  --accent-primary: #388bfd;
-  --accent-primary-hover: #58a6ff;
-  --accent-success: #3fb950;
-  --accent-warning: #d29922;
-  --accent-danger: #f85149;
-  --accent-idle: #3fb950;
-  --accent-busy: #d29922;
+  --shadow-1: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-2: 0 3px 6px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
+  --shadow-3: 0 10px 24px rgba(0,0,0,0.14), 0 4px 8px rgba(0,0,0,0.08);
 
-  /* Terminal ANSI Colors (Dark) */
+  /* Semantic UI mapped tokens (Light Mode) */
+  --bg-canvas: var(--md-sys-color-surface);
+  --bg-surface: var(--md-sys-color-surface-container-lowest);
+  --bg-surface-hover: var(--md-sys-color-surface-container);
+  --bg-terminal: #111418;
+  --bg-overlay: rgba(0, 0, 0, 0.45);
+
+  --text-main: var(--md-sys-color-on-surface);
+  --text-muted: var(--md-sys-color-on-surface-variant);
+  --text-dim: var(--md-sys-color-outline);
+
+  --border-subtle: var(--md-sys-color-outline-variant);
+  --border-muted: var(--md-sys-color-surface-container-high);
+
+  --accent-primary: var(--md-sys-color-primary);
+  --accent-primary-hover: hsl(var(--primary-h), 80%, 36%);
+  --accent-success: #1a7f37;
+  --accent-warning: #9a6700;
+  --accent-danger: #ba1a1a;
+  --accent-idle: #1a7f37;
+  --accent-busy: #9a6700;
+
+  /* Terminal ANSI Colors */
   --term-black: #484f58;
   --term-red: #ff7b72;
   --term-green: #7ee787;
@@ -42,45 +80,111 @@
   --term-bright-white: #ffffff;
 }
 
-[data-theme="light"] {
-  --bg-canvas: #f6f8fa;
-  --bg-surface: #ffffff;
-  --bg-surface-hover: #f3f4f6;
-  --bg-terminal: #24292e;
-  --bg-overlay: rgba(0, 0, 0, 0.5);
+[data-theme="dark"] {
+  /* Dark Theme M3 System Colors */
+  --md-sys-color-primary: hsl(var(--primary-h), 85%, 75%);
+  --md-sys-color-on-primary: hsl(var(--primary-h), 95%, 15%);
+  --md-sys-color-primary-container: hsl(var(--primary-h), 80%, 28%);
+  --md-sys-color-on-primary-container: hsl(var(--primary-h), 90%, 90%);
+  --md-sys-color-secondary: hsl(var(--primary-h), 30%, 75%);
+  --md-sys-color-on-secondary: hsl(var(--primary-h), 35%, 18%);
+  --md-sys-color-secondary-container: hsl(var(--primary-h), 30%, 30%);
+  --md-sys-color-on-secondary-container: hsl(var(--primary-h), 40%, 88%);
+  --md-sys-color-tertiary: hsl(calc(var(--primary-h) + 60), 45%, 78%);
+  --md-sys-color-on-tertiary: hsl(calc(var(--primary-h) + 60), 50%, 18%);
+  --md-sys-color-tertiary-container: hsl(calc(var(--primary-h) + 60), 40%, 32%);
+  --md-sys-color-on-tertiary-container: hsl(calc(var(--primary-h) + 60), 55%, 90%);
 
-  --text-main: #24292f;
-  --text-muted: #57606a;
-  --text-dim: #8c959f;
+  --md-sys-color-surface: hsl(var(--primary-h), 15%, 8%);
+  --md-sys-color-surface-dim: hsl(var(--primary-h), 15%, 8%);
+  --md-sys-color-surface-bright: hsl(var(--primary-h), 10%, 22%);
+  --md-sys-color-surface-container-lowest: hsl(var(--primary-h), 20%, 5%);
+  --md-sys-color-surface-container-low: hsl(var(--primary-h), 14%, 11%);
+  --md-sys-color-surface-container: hsl(var(--primary-h), 12%, 13%);
+  --md-sys-color-surface-container-high: hsl(var(--primary-h), 10%, 16%);
+  --md-sys-color-surface-container-highest: hsl(var(--primary-h), 8%, 20%);
+  --md-sys-color-on-surface: hsl(var(--primary-h), 12%, 89%);
+  --md-sys-color-on-surface-variant: hsl(var(--primary-h), 10%, 78%);
+  --md-sys-color-outline: hsl(var(--primary-h), 8%, 56%);
+  --md-sys-color-outline-variant: hsl(var(--primary-h), 10%, 28%);
+  --md-sys-color-inverse-surface: hsl(var(--primary-h), 12%, 89%);
+  --md-sys-color-inverse-on-surface: hsl(var(--primary-h), 10%, 15%);
+  --md-sys-color-inverse-primary: hsl(var(--primary-h), 75%, 42%);
 
-  --border-subtle: #d0d7de;
-  --border-muted: #e1e4e8;
+  --shadow-1: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-2: 0 3px 6px rgba(0,0,0,0.4);
+  --shadow-3: 0 10px 24px rgba(0,0,0,0.5);
 
-  --accent-primary: #0969da;
-  --accent-primary-hover: #218bff;
-  --accent-success: #1a7f37;
-  --accent-warning: #9a6700;
-  --accent-danger: #cf222e;
-  --accent-idle: #1a7f37;
-  --accent-busy: #bf8700;
+  /* Semantic UI mapped tokens (Dark Mode) */
+  --bg-canvas: var(--md-sys-color-surface);
+  --bg-surface: var(--md-sys-color-surface-container-low);
+  --bg-surface-hover: var(--md-sys-color-surface-container-high);
+  --bg-terminal: #090c10;
+  --bg-overlay: rgba(0, 0, 0, 0.75);
 
-  /* Terminal ANSI Colors (Light - terminal remains dark for contrast) */
-  --term-black: #484f58;
-  --term-red: #ff7b72;
-  --term-green: #7ee787;
-  --term-yellow: #f2cc60;
-  --term-blue: #79c0ff;
-  --term-magenta: #d2a8ff;
-  --term-cyan: #56d4dd;
-  --term-white: #f0f6fc;
-  --term-bright-black: #6e7681;
-  --term-bright-red: #ffa198;
-  --term-bright-green: #56d364;
-  --term-bright-yellow: #e3b341;
-  --term-bright-blue: #58a6ff;
-  --term-bright-magenta: #bc8cff;
-  --term-bright-cyan: #39c5cf;
-  --term-bright-white: #ffffff;
+  --text-main: var(--md-sys-color-on-surface);
+  --text-muted: var(--md-sys-color-on-surface-variant);
+  --text-dim: var(--md-sys-color-outline);
+
+  --border-subtle: var(--md-sys-color-outline-variant);
+  --border-muted: var(--md-sys-color-surface-container);
+
+  --accent-primary: var(--md-sys-color-primary);
+  --accent-primary-hover: hsl(var(--primary-h), 90%, 82%);
+  --accent-success: #3fb950;
+  --accent-warning: #d29922;
+  --accent-danger: #f85149;
+  --accent-idle: #3fb950;
+  --accent-busy: #d29922;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --md-sys-color-primary: hsl(var(--primary-h), 85%, 75%);
+    --md-sys-color-on-primary: hsl(var(--primary-h), 95%, 15%);
+    --md-sys-color-primary-container: hsl(var(--primary-h), 80%, 28%);
+    --md-sys-color-on-primary-container: hsl(var(--primary-h), 90%, 90%);
+    --md-sys-color-secondary: hsl(var(--primary-h), 30%, 75%);
+    --md-sys-color-on-secondary: hsl(var(--primary-h), 35%, 18%);
+    --md-sys-color-secondary-container: hsl(var(--primary-h), 30%, 30%);
+    --md-sys-color-on-secondary-container: hsl(var(--primary-h), 40%, 88%);
+    --md-sys-color-tertiary: hsl(calc(var(--primary-h) + 60), 45%, 78%);
+    --md-sys-color-on-tertiary: hsl(calc(var(--primary-h) + 60), 50%, 18%);
+    --md-sys-color-tertiary-container: hsl(calc(var(--primary-h) + 60), 40%, 32%);
+    --md-sys-color-on-tertiary-container: hsl(calc(var(--primary-h) + 60), 55%, 90%);
+
+    --md-sys-color-surface: hsl(var(--primary-h), 15%, 8%);
+    --md-sys-color-surface-dim: hsl(var(--primary-h), 15%, 8%);
+    --md-sys-color-surface-bright: hsl(var(--primary-h), 10%, 22%);
+    --md-sys-color-surface-container-lowest: hsl(var(--primary-h), 20%, 5%);
+    --md-sys-color-surface-container-low: hsl(var(--primary-h), 14%, 11%);
+    --md-sys-color-surface-container: hsl(var(--primary-h), 12%, 13%);
+    --md-sys-color-surface-container-high: hsl(var(--primary-h), 10%, 16%);
+    --md-sys-color-surface-container-highest: hsl(var(--primary-h), 8%, 20%);
+    --md-sys-color-on-surface: hsl(var(--primary-h), 12%, 89%);
+    --md-sys-color-on-surface-variant: hsl(var(--primary-h), 10%, 78%);
+    --md-sys-color-outline: hsl(var(--primary-h), 8%, 56%);
+    --md-sys-color-outline-variant: hsl(var(--primary-h), 10%, 28%);
+    --md-sys-color-inverse-surface: hsl(var(--primary-h), 12%, 89%);
+    --md-sys-color-inverse-on-surface: hsl(var(--primary-h), 10%, 15%);
+    --md-sys-color-inverse-primary: hsl(var(--primary-h), 75%, 42%);
+
+    --bg-canvas: var(--md-sys-color-surface);
+    --bg-surface: var(--md-sys-color-surface-container-low);
+    --bg-surface-hover: var(--md-sys-color-surface-container-high);
+    --bg-terminal: #090c10;
+    --bg-overlay: rgba(0, 0, 0, 0.75);
+
+    --text-main: var(--md-sys-color-on-surface);
+    --text-muted: var(--md-sys-color-on-surface-variant);
+    --text-dim: var(--md-sys-color-outline);
+
+    --border-subtle: var(--md-sys-color-outline-variant);
+    --border-muted: var(--md-sys-color-surface-container);
+
+    --accent-primary: var(--md-sys-color-primary);
+    --accent-primary-hover: hsl(var(--primary-h), 90%, 82%);
+  }
 }
 
 * {
@@ -96,7 +200,7 @@ html, body {
   background-color: var(--bg-canvas);
   color: var(--text-main);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
-  font-size: 14px;
+  font-size: var(--base-font-size, 14px);
   line-height: 1.5;
 }
 

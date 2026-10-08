@@ -35,7 +35,9 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     }
 
     const lane = opts.lane || 'wasm32-final';
-    const base = opts.base || `/lanes/${lane}/`;
+    const globalBase = (typeof document !== 'undefined' && (document.querySelector('meta[name="site-base"]')?.getAttribute('content') || (window as any).__siteBase)) || '/';
+    const normalizedBase = globalBase.endsWith('/') ? globalBase : `${globalBase}/`;
+    const base = opts.base || `${normalizedBase}lanes/${lane}/`;
 
     // 确保按需加载对应车道的 Emscripten 胶水脚本
     if (typeof document !== 'undefined') {
@@ -131,6 +133,14 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
 
   input(text: string): number {
     return this._embed.input(text);
+  }
+
+  flushOutput(): void {
+    if (typeof this._embed?.flushOutput === 'function') {
+      try {
+        this._embed.flushOutput();
+      } catch {}
+    }
   }
 
   on = {

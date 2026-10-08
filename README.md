@@ -48,6 +48,7 @@ pnpm build:lanes
 - 架构契约与语义边界见 [CONTEXT.md](CONTEXT.md)
 - Agent 纪律与硬规矩见 [AGENTS.md](AGENTS.md)
 - 开发方向与地图见 [maintaince.md](maintaince.md)
+- 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)
 - 事实台账见 [FACTS.json](FACTS.json)
 - 闸门自证请运行 `sh gates-selftest.sh`
 

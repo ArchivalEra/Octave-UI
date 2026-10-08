@@ -6,14 +6,17 @@
     supervisor,
     terminalController,
     variableInspectorStore,
+    i18n,
     t,
   } from '../modules/appContext';
+  import type { Locale } from '../modules/i18n/types';
   import { ProjectWorkspace, type WorkspaceSnapshot } from '../modules/workspace/ProjectWorkspace';
   import type { FileEntry } from '../modules/workspace/DirectoryAdapter';
   import type { WorkspaceVariable, FsEntry } from '../modules/engine/types';
 
   type Tab = 'workspace' | 'files' | 'history' | 'docs';
   let activeTab = $state<Tab>('workspace');
+  let currentLocale = $state<Locale>(i18n.currentLocale);
 
   // Workspace State
   let variables = $state<WorkspaceVariable[]>(projectWorkspace.variables);
@@ -63,10 +66,14 @@
     const unsubHist = historyStore.subscribe((items) => {
       historyList = items;
     });
+    const unsubI18n = i18n.subscribe((loc) => {
+      currentLocale = loc;
+    });
     return () => {
       unsubPw();
       unsubFs();
       unsubHist();
+      unsubI18n();
     };
   });
 
@@ -79,7 +86,15 @@
     try {
       await projectWorkspace.mountLocalDirectory();
     } catch (err: any) {
-      alert(`无法打开本地目录: ${err?.message || err}`);
+      alert(t('workbench.mount_error', { error: err?.message || err }));
+    }
+  }
+
+  async function handleReselectDir() {
+    try {
+      await projectWorkspace.reselectDirectory();
+    } catch (err: any) {
+      alert(t('workbench.mount_error', { error: err?.message || err }));
     }
   }
 
@@ -219,15 +234,18 @@
         <div class="dir-overview-card">
           {#if !isLocalMounted}
             <div class="dir-overview-row">
-              <span class="dir-overview-text">📁 本地目录: 未连接</span>
-              <button class="btn btn-xs btn-primary" onclick={handleMountLocalDir}>连接目录</button>
+              <span class="dir-overview-text">📁 {t('sidebar.local_dir_disconnected')}</span>
+              <button class="btn btn-xs btn-primary" onclick={handleMountLocalDir}>{t('sidebar.connect_dir')}</button>
             </div>
           {:else}
             <div class="dir-overview-row">
-              <span class="dir-overview-text" title={localDirName}>📁 {localDirName} ({localFiles.length} 文件)</span>
+              <span class="dir-overview-text" title={localDirName}>📁 {localDirName} ({localFiles.length} {t('sidebar.tab_files')})</span>
               <div class="dir-overview-actions">
-                <button class="btn btn-xs btn-outline" onclick={() => (activeTab = 'files')}>查看文件</button>
-                <button class="btn btn-xs btn-ghost" onclick={handleDisconnectDir}>断开</button>
+                <button class="btn btn-xs btn-outline" onclick={handleReselectDir} title={t('sidebar.reselect_dir_tooltip')}>
+                  🔄 {t('sidebar.reselect_dir')}
+                </button>
+                <button class="btn btn-xs btn-outline" onclick={() => (activeTab = 'files')}>{t('sidebar.view_files')}</button>
+                <button class="btn btn-xs btn-ghost" onclick={handleDisconnectDir}>{t('sidebar.disconnect')}</button>
               </div>
             </div>
           {/if}
@@ -236,55 +254,55 @@
         <!-- 选工作区 / 管理工具栏 -->
         <div class="workspace-selector-bar">
           <div class="selector-row">
-            <span class="selector-label">工作区:</span>
+            <span class="selector-label">{t('sidebar.workspace_label')}</span>
             <select
               class="ws-select"
               value={activeWorkspaceId}
               onchange={handleSelectWorkspace}
-              title="切换工作区会话"
+              title={t('sidebar.workspace_label')}
             >
-              <option value="default">活跃工作区 (当前)</option>
+              <option value="default">{t('sidebar.active_workspace')}</option>
               {#each snapshots as s (s.id)}
-                <option value={s.id}>💾 {s.name} ({s.variables.length} 变量)</option>
+                <option value={s.id}>💾 {s.name} ({s.variables.length})</option>
               {/each}
-              <option value="__new__">+ 存为新快照...</option>
+              <option value="__new__">{t('sidebar.save_new_snapshot')}</option>
             </select>
           </div>
           <div class="selector-actions">
             <button
               class="btn btn-xs"
-              onclick={() => { snapshotNameInput = `快照 ${new Date().toLocaleTimeString()}`; showSaveModal = true; }}
-              title="保存当前变量快照"
+              onclick={() => { snapshotNameInput = `Snapshot ${new Date().toLocaleTimeString()}`; showSaveModal = true; }}
+              title={t('sidebar.save_snapshot_tooltip')}
             >
-              💾 存快照
+              💾 {t('sidebar.save_snapshot')}
             </button>
-            <button class="btn btn-xs btn-outline" onclick={refreshWorkspace} title="从引擎刷新变量">
-              🔄 刷新
+            <button class="btn btn-xs btn-outline" onclick={refreshWorkspace} title={t('sidebar.refresh_tooltip')}>
+              🔄 {t('workspace.refresh')}
             </button>
-            <button class="btn btn-xs btn-danger-outline" onclick={handleClearWorkspace} title="清空工作区变量 (clear)">
-              🧹 清空
+            <button class="btn btn-xs btn-danger-outline" onclick={handleClearWorkspace} title={t('sidebar.clear_workspace_tooltip')}>
+              🧹 {t('sidebar.clear_workspace')}
             </button>
           </div>
         </div>
 
         {#if showSaveModal}
           <div class="snapshot-inline-form">
-            <div class="form-title">保存工作区快照</div>
+            <div class="form-title">{t('sidebar.save_snapshot_title')}</div>
             <input
               type="text"
               class="input-sm"
-              placeholder="快照名称 (例如: 线性代数实验)"
+              placeholder={t('sidebar.snapshot_name_placeholder')}
               bind:value={snapshotNameInput}
             />
             <input
               type="text"
               class="input-sm"
-              placeholder="可选说明"
+              placeholder={t('sidebar.snapshot_desc_placeholder')}
               bind:value={snapshotDescInput}
             />
             <div class="form-btns">
-              <button class="btn btn-xs btn-primary" onclick={handleSaveSnapshot}>确认保存</button>
-              <button class="btn btn-xs btn-ghost" onclick={() => (showSaveModal = false)}>取消</button>
+              <button class="btn btn-xs btn-primary" onclick={handleSaveSnapshot}>{t('sidebar.btn_confirm')}</button>
+              <button class="btn btn-xs btn-ghost" onclick={() => (showSaveModal = false)}>{t('sidebar.btn_cancel')}</button>
             </div>
           </div>
         {/if}
@@ -347,11 +365,18 @@
             <div class="mounted-bar">
               <div class="mounted-info">
                 <span class="mounted-name" title={localDirName}>📁 {localDirName}</span>
-                <span class="badge-authorized">已连接</span>
+                <span class="badge-authorized">{t('sidebar.status_connected')}</span>
               </div>
               <div class="mounted-btns">
-                <button class="btn btn-xs btn-outline" onclick={handleNewScript} title="新建 .m 脚本">+ 脚本</button>
-                <button class="btn btn-xs btn-ghost" onclick={handleDisconnectDir} title="断开本地目录">断开</button>
+                <button class="btn btn-xs btn-outline" onclick={handleReselectDir} title={t('sidebar.reselect_dir_tooltip')}>
+                  🔄 {t('sidebar.reselect_dir')}
+                </button>
+                <button class="btn btn-xs btn-outline" onclick={handleNewScript} title={t('sidebar.new_script_tooltip')}>
+                  + {t('sidebar.btn_script')}
+                </button>
+                <button class="btn btn-xs btn-ghost" onclick={handleDisconnectDir} title={t('sidebar.disconnect_tooltip')}>
+                  {t('sidebar.disconnect')}
+                </button>
               </div>
             </div>
           {/if}
@@ -480,7 +505,7 @@
 
 <style>
   .sidebar {
-    width: 320px;
+    width: 100%;
     height: 100%;
     background: var(--bg-surface);
     border-left: 1px solid var(--border-subtle);

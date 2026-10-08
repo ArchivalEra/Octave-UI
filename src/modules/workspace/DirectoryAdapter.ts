@@ -127,13 +127,33 @@ export class FSAccessDirectoryAdapter implements DirectoryAdapter {
   async mount(): Promise<boolean> {
     if (this.isSupported()) {
       try {
-        const picker = (window as any).showDirectoryPicker;
-        const handle: FileSystemDirectoryHandle = await picker({
-          mode: 'readwrite',
-        });
+        let handle: FileSystemDirectoryHandle;
+        try {
+          handle = await (window as any).showDirectoryPicker({
+            mode: 'readwrite',
+          });
+        } catch (optErr: any) {
+          if (optErr?.name === 'AbortError') {
+            return false;
+          }
+          // 部分环境对参数敏感，尝试无参调用
+          handle = await (window as any).showDirectoryPicker();
+        }
+
+        // 尝试申请或确认写入权限
+        if (typeof (handle as any).requestPermission === 'function') {
+          try {
+            const perm = await (handle as any).queryPermission({ mode: 'readwrite' });
+            if (perm !== 'granted') {
+              await (handle as any).requestPermission({ mode: 'readwrite' });
+            }
+          } catch {}
+        }
 
         this._handle = handle;
         this._isFallbackMounted = false;
+        this._fallbackDirName = null;
+        this._fallbackFiles.clear();
         await setStoredHandle(handle);
         return true;
       } catch (err: any) {
@@ -141,12 +161,12 @@ export class FSAccessDirectoryAdapter implements DirectoryAdapter {
           // 用户主动取消选择
           return false;
         }
-        // 若原生 picker 抛出 SecurityError / NotAllowedError，尝试降级
+        console.warn('[DirectoryAdapter] showDirectoryPicker failed, trying input fallback:', err);
         return await this._fallbackInputMount();
       }
     }
 
-    // 非 Chromium / 不支持 showDirectoryPicker 环境：调用通用 webkitdirectory 降级
+    // 非 Chromium / 不支持 showDirectoryPicker 环境：调用通用文件选择器降级
     return await this._fallbackInputMount();
   }
 
@@ -159,12 +179,25 @@ export class FSAccessDirectoryAdapter implements DirectoryAdapter {
 
       const input = document.createElement('input');
       input.type = 'file';
-      input.setAttribute('webkitdirectory', '');
-      input.setAttribute('directory', '');
+      const isMobile = typeof navigator !== 'undefined' && (
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+      );
+
+      if (!isMobile) {
+        input.setAttribute('webkitdirectory', '');
+        input.setAttribute('directory', '');
+      }
       input.setAttribute('multiple', '');
+      input.setAttribute('accept', '.m,.txt,.mat,.dat,.csv,*/*');
       input.style.position = 'fixed';
-      input.style.top = '-9999px';
-      input.style.opacity = '0';
+      input.style.left = '0';
+      input.style.top = '0';
+      input.style.width = '1px';
+      input.style.height = '1px';
+      input.style.opacity = '0.001';
+      input.style.pointerEvents = 'none';
+      input.style.zIndex = '-9999';
       document.body.appendChild(input);
 
       input.onchange = async () => {
@@ -178,7 +211,7 @@ export class FSAccessDirectoryAdapter implements DirectoryAdapter {
         const first = fileList[0];
         const rawPath = first.webkitRelativePath || first.name;
         const parts = rawPath.split('/');
-        const dirName = parts.length > 1 ? parts[0] : 'local_directory';
+        const dirName = parts.length > 1 ? parts[0] : (isMobile ? '移动端工作区' : '本地工程');
         this._fallbackDirName = dirName;
         this._fallbackFiles.clear();
 
@@ -201,6 +234,7 @@ export class FSAccessDirectoryAdapter implements DirectoryAdapter {
           } catch {}
         }
 
+        this._handle = null;
         this._isFallbackMounted = true;
         try { document.body.removeChild(input); } catch {}
         resolve(true);
@@ -330,6 +364,10 @@ export class VirtualMemoryDirectoryAdapter implements DirectoryAdapter {
 
   get directoryName(): string | null {
     return this._mounted ? this._dirName : null;
+  }
+
+  setDirectoryName(name: string): void {
+    this._dirName = name;
   }
 
   isSupported(): boolean {

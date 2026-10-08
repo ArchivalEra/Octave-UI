@@ -39,6 +39,16 @@ class GzipStaticHTTPHandler(http.server.SimpleHTTPRequestHandler):
             return MIME[ext]
         return super().guess_type(path)
 
+    def translate_path(self, path):
+        # 兼容 Astro base: '/repo/Octave/'
+        prefix = "/repo/Octave"
+        clean_path = path
+        if clean_path.startswith(prefix):
+            clean_path = clean_path[len(prefix):]
+            if not clean_path.startswith("/"):
+                clean_path = "/" + clean_path
+        return super().translate_path(clean_path)
+
     def send_head(self):
         # 检查客户端是否接受 gzip，且是否存在同名 .gz 文件
         req_path = self.translate_path(self.path)

@@ -244,6 +244,9 @@ export class EngineSupervisor {
   }
 
   public _flushBufferedOutput() {
+    if (this._adapter && typeof (this._adapter as any).flushOutput === 'function') {
+      try { (this._adapter as any).flushOutput(); } catch {}
+    }
     if (this._stdoutFlushTimer) {
       clearTimeout(this._stdoutFlushTimer);
       this._stdoutFlushTimer = null;
@@ -524,6 +527,7 @@ export class EngineSupervisor {
       try {
         res = await this._adapter!.eval(code);
       } finally {
+        this._flushBufferedOutput();
         try {
           await this._silentRefreshWorkspace();
         } catch {}

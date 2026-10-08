@@ -33,13 +33,34 @@ export interface WorkspaceSnapshot {
 
 export type ProjectWorkspaceListener = () => void;
 
-const DEFAULT_SCRIPT = `%% 欢迎使用 Octave Web
+export function getDefaultScript(locale?: string): string {
+  const norm = (locale || '').toLowerCase();
+  if (norm.startsWith('en')) {
+    return `%% Welcome to Octave Web
+% Client-side scientific computing workbench, native GNU Octave 11.3.0 support
+% Organize script with %% sections, 100% compatible with native Octave/MATLAB
+A = [1, 2; 3, 4];
+b = [5; 6];
+x = A \\ b
+`;
+  }
+  if (norm.startsWith('de')) {
+    return `%% Willkommen bei Octave Web
+% Clientseitige wissenschaftliche Arbeitsumgebung mit GNU Octave 11.3.0
+% Skripte mit %% Abschnitten gliedern, 100% kompatibel mit nativem Octave/MATLAB
+A = [1, 2; 3, 4];
+b = [5; 6];
+x = A \\ b
+`;
+  }
+  return `%% 欢迎使用 Octave Web
 % 纯客户端科学计算工作台，原生支持 GNU Octave 11.3.0
 % 脚本以官方 %% 规范分节存储，与本地 Octave/MATLAB 100% 兼容
 A = [1, 2; 3, 4];
 b = [5; 6];
 x = A \\ b
 `;
+}
 
 const STORAGE_KEY_SNAPSHOTS = 'octave_workspace_snapshots';
 
@@ -62,7 +83,7 @@ export class ProjectWorkspace {
   constructor(supervisor: EngineSupervisor, dirAdapter?: DirectoryAdapter) {
     this._supervisor = supervisor;
     this._dirAdapter = dirAdapter ?? (
-      typeof window !== 'undefined' && 'showDirectoryPicker' in window
+      typeof window !== 'undefined'
         ? new FSAccessDirectoryAdapter()
         : new VirtualMemoryDirectoryAdapter()
     );
@@ -207,11 +228,13 @@ export class ProjectWorkspace {
     const success = await this._dirAdapter.mount();
     if (success) {
       await this.refreshFiles();
-      // 如果目录内已有 .m 脚本，自动加载第一个；否则创建并保存当前 untitled.m
+      // 如果目录内已有 .m 脚本，自动加载第一个；否则重置为当前 untitled.m 并保存
       const mFiles = this._files.filter((f) => f.kind === 'file' && f.name.endsWith('.m'));
       if (mFiles.length > 0) {
         await this.openFile(mFiles[0].name);
       } else {
+        this._initDefaultScript();
+        this._activeFile = 'untitled.m';
         await this.saveActiveFile();
       }
       await this.syncFilesToEngine();
@@ -220,9 +243,14 @@ export class ProjectWorkspace {
     return success;
   }
 
+  async reselectDirectory(): Promise<boolean> {
+    return await this.mountLocalDirectory();
+  }
+
   disconnectDirectory(): void {
     this._dirAdapter.disconnect();
     this._files = [];
+    this._activeFile = null;
     this._notify();
   }
 
@@ -468,6 +496,13 @@ export class ProjectWorkspace {
 
     const unsubOut = this._supervisor.onOutput((chunk) => {
       cell.streamingOutput = (cell.streamingOutput || '') + chunk;
+      // 保持结果与流式输出响应式同步，防止分块输出延迟导致结果卡在残缺状态
+      if (cell.status === 'running' || cell.status === 'success') {
+        cell.result = SemanticResultRenderer.parse(cell.streamingOutput, {
+          ok: cell.status !== 'error',
+          rc: 0,
+        });
+      }
       this._notify();
     });
     const unsubErr = this._supervisor.onError((err) => {
@@ -477,6 +512,9 @@ export class ProjectWorkspace {
 
     try {
       const evalRes = await this._supervisor.eval(cell.code);
+      // 等待 DOM MutationObserver 与引擎 stdout 缓冲完全沉降
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      this._supervisor._flushBufferedOutput();
       const durationMs = Date.now() - startTime;
 
       let plotData = null;
@@ -583,8 +621,63 @@ export class ProjectWorkspace {
     }
   }
 
-  private _initDefaultScript(): void {
-    const parsed = OctaveCellParser.parse(DEFAULT_SCRIPT);
+  syncLocale(locale: string): void {
+    const knownTitles = [
+      '欢迎使用 Octave Web',
+      'Welcome to Octave Web',
+      'Willkommen bei Octave Web',
+    ];
+    const targetTitle =
+      locale === 'zh-Hans'
+        ? '欢迎使用 Octave Web'
+        : locale === 'de'
+        ? 'Willkommen bei Octave Web'
+        : 'Welcome to Octave Web';
+
+    const targetDesc =
+      locale === 'zh-Hans'
+        ? '纯客户端科学计算工作台，原生支持 GNU Octave 11.3.0\n脚本以官方 %% 规范分节存储，与本地 Octave/MATLAB 100% 兼容'
+        : locale === 'de'
+        ? 'Clientseitige wissenschaftliche Plattform mit GNU Octave 11.3.0\nSkripte in offiziellen %%-Abschnitten gespeichert, 100% kompatibel mit lokalem Octave/MATLAB'
+        : 'Client-side scientific computing workbench powered by GNU Octave 11.3.0\nScripts stored with official %% sections, 100% compatible with local Octave/MATLAB';
+
+    if (this._isPristineScript()) {
+      this._initDefaultScript(locale);
+    } else {
+      // 检查当前单元格中是否有未自定义的默认小节标题或描述，有则更新为目标语言
+      let changed = false;
+      for (const cell of this._cells) {
+        if (knownTitles.includes(cell.title.trim())) {
+          cell.title = targetTitle;
+          changed = true;
+        }
+        if (
+          cell.description.includes('GNU Octave 11.3.0') ||
+          cell.description.includes('Octave/MATLAB')
+        ) {
+          cell.description = targetDesc;
+          changed = true;
+        }
+      }
+      if (changed) {
+        this._notify();
+      }
+    }
+  }
+
+  private _isPristineScript(): boolean {
+    if (this._cells.length !== 1) return false;
+    const c = this._cells[0];
+    const defaultCodes = [
+      'A = [1, 2; 3, 4];\nb = [5; 6];\nx = A \\ b',
+      'A = [1, 2; 3, 4];\nb = [5; 6];\nx = A \\ b\n',
+    ];
+    return defaultCodes.includes(c.code.trim());
+  }
+
+  private _initDefaultScript(locale?: string): void {
+    const loc = locale || (typeof document !== 'undefined' ? document.documentElement.lang : 'zh-Hans');
+    const parsed = OctaveCellParser.parse(getDefaultScript(loc));
     this._cells = parsed.map((p) => ({
       id: p.id,
       title: p.title,
