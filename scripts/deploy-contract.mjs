@@ -23,9 +23,6 @@ const BASE = "/repo/Octave/";
 const DIST = "dist";
 const LANES = ["wasm32-final", "master", "IllegalPerformance"];
 
-/** 部署版本：用于固定名资源的 cache-bust（?v=）。CI 传 git sha，本地取时间戳。 */
-const VERSION = (process.env.GITHUB_SHA || "").slice(0, 12) || String(Date.now());
-
 // ───────────────────────── base（构建前） ─────────────────────────
 function cmdBase() {
   const file = "astro.config.mjs";
@@ -146,13 +143,6 @@ function cmdAdapt() {
       rewrote += 1;
       return `${pre}${q}${BASE}${rest}${q}`;
     });
-    // 固定名资源（bridge/ lanes/ w64/ assets/，非内容哈希）追加 ?v=<版本>：
-    // 每次部署 URL 唯一 ⇒ 浏览器与边缘缓存必然 miss，**推送即生效**，无需 zone purge。
-    // _astro/ 自带内容哈希，不追加（避免无意义的长 URL）。
-    html = html.replace(
-      /((?:src|href)\s*=\s*)(["'])(\/repo\/Octave\/(?:bridge|lanes|w64|assets)\/[^"'?]+)(\?[^"']*)?\2/g,
-      (full, pre, q, path) => `${pre}${q}${path}?v=${VERSION}${q}`,
-    );
     const bs = injectBaseSignal(html);
     if (bs.injected && bs.out !== html) baseSignals += 1;
     html = bs.out;
@@ -208,11 +198,6 @@ function cmdVerify() {
   );
   if (stale.length) problems.push(`HTML 仍有根绝对引用：${stale.slice(0, 3).join(", ")}`);
   if (!/<meta\s+name=["']site-base["']/i.test(idx)) problems.push("缺 <meta name=\"site-base\">");
-  // 每次部署，固定名资源必须带版本参数（否则边缘旧缓存会让推送不可见）
-  const unversioned = (idx.match(/(?:src|href)\s*=\s*["']\/repo\/Octave\/(?:bridge|lanes|w64|assets)\/[^"'?]+["']/g) || []);
-  if (unversioned.length) {
-    problems.push(`固定名资源缺 ?v=：${unversioned.slice(0, 2).join(", ")}`);
-  }
   // 部署 bundle 里任何 JS 字面量都不得以根绝对资源前缀开头（车道加载路径曾在此踩坑）
   const jsStale = walk(DIST, ".js").filter((f) => {
     const c = fs.readFileSync(f, "utf8");
