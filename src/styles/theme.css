@@ -43,12 +43,13 @@
   --bg-canvas: var(--md-sys-color-surface);
   --bg-surface: var(--md-sys-color-surface-container-lowest);
   --bg-surface-hover: var(--md-sys-color-surface-container);
-  --bg-terminal: #111418;
+  --bg-terminal: var(--md-sys-color-surface-container-lowest);
   --bg-overlay: rgba(0, 0, 0, 0.45);
 
   --text-main: var(--md-sys-color-on-surface);
   --text-muted: var(--md-sys-color-on-surface-variant);
   --text-dim: var(--md-sys-color-outline);
+  --text-terminal: var(--md-sys-color-on-surface);
 
   --border-subtle: var(--md-sys-color-outline-variant);
   --border-muted: var(--md-sys-color-surface-container-high);
@@ -61,23 +62,23 @@
   --accent-idle: #1a7f37;
   --accent-busy: #9a6700;
 
-  /* Terminal ANSI Colors */
-  --term-black: #484f58;
-  --term-red: #ff7b72;
-  --term-green: #7ee787;
-  --term-yellow: #f2cc60;
-  --term-blue: #79c0ff;
-  --term-magenta: #d2a8ff;
-  --term-cyan: #56d4dd;
-  --term-white: #f0f6fc;
-  --term-bright-black: #6e7681;
-  --term-bright-red: #ffa198;
-  --term-bright-green: #56d364;
-  --term-bright-yellow: #e3b341;
-  --term-bright-blue: #58a6ff;
-  --term-bright-magenta: #bc8cff;
-  --term-bright-cyan: #39c5cf;
-  --term-bright-white: #ffffff;
+  /* Terminal ANSI Colors (Light Mode - high-contrast on light background) */
+  --term-black: #24292f;
+  --term-red: #cf222e;
+  --term-green: #116329;
+  --term-yellow: #8a5700;
+  --term-blue: #0969da;
+  --term-magenta: #8250df;
+  --term-cyan: #1b7c83;
+  --term-white: #57606a;
+  --term-bright-black: #6e7781;
+  --term-bright-red: #a40e26;
+  --term-bright-green: #1a7f37;
+  --term-bright-yellow: #633c01;
+  --term-bright-blue: #0550ae;
+  --term-bright-magenta: #6639ba;
+  --term-bright-cyan: #0e5f66;
+  --term-bright-white: #24292f;
 }
 
 [data-theme="dark"] {
@@ -125,6 +126,7 @@
   --text-main: var(--md-sys-color-on-surface);
   --text-muted: var(--md-sys-color-on-surface-variant);
   --text-dim: var(--md-sys-color-outline);
+  --text-terminal: var(--md-sys-color-on-surface);
 
   --border-subtle: var(--md-sys-color-outline-variant);
   --border-muted: var(--md-sys-color-surface-container);
@@ -136,6 +138,24 @@
   --accent-danger: #f85149;
   --accent-idle: #3fb950;
   --accent-busy: #d29922;
+
+  /* Terminal ANSI Colors (Dark Mode) */
+  --term-black: #484f58;
+  --term-red: #ff7b72;
+  --term-green: #7ee787;
+  --term-yellow: #f2cc60;
+  --term-blue: #79c0ff;
+  --term-magenta: #d2a8ff;
+  --term-cyan: #56d4dd;
+  --term-white: #f0f6fc;
+  --term-bright-black: #6e7681;
+  --term-bright-red: #ffa198;
+  --term-bright-green: #56d364;
+  --term-bright-yellow: #e3b341;
+  --term-bright-blue: #58a6ff;
+  --term-bright-magenta: #bc8cff;
+  --term-bright-cyan: #39c5cf;
+  --term-bright-white: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -178,12 +198,31 @@
     --text-main: var(--md-sys-color-on-surface);
     --text-muted: var(--md-sys-color-on-surface-variant);
     --text-dim: var(--md-sys-color-outline);
+    --text-terminal: var(--md-sys-color-on-surface);
 
     --border-subtle: var(--md-sys-color-outline-variant);
     --border-muted: var(--md-sys-color-surface-container);
 
     --accent-primary: var(--md-sys-color-primary);
     --accent-primary-hover: hsl(var(--primary-h), 90%, 82%);
+
+    /* Terminal ANSI Colors (Dark Mode) */
+    --term-black: #484f58;
+    --term-red: #ff7b72;
+    --term-green: #7ee787;
+    --term-yellow: #f2cc60;
+    --term-blue: #79c0ff;
+    --term-magenta: #d2a8ff;
+    --term-cyan: #56d4dd;
+    --term-white: #f0f6fc;
+    --term-bright-black: #6e7681;
+    --term-bright-red: #ffa198;
+    --term-bright-green: #56d364;
+    --term-bright-yellow: #e3b341;
+    --term-bright-blue: #58a6ff;
+    --term-bright-magenta: #bc8cff;
+    --term-bright-cyan: #39c5cf;
+    --term-bright-white: #ffffff;
   }
 }
 

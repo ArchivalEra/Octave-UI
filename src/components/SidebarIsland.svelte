@@ -872,8 +872,9 @@
     font-size: 10px;
     padding: 1px 4px;
     border-radius: 3px;
-    background: rgba(166, 227, 161, 0.2);
-    color: #a6e3a1;
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+    font-weight: 500;
   }
 
   .mounted-btns {

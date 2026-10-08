@@ -233,15 +233,38 @@
     flex: 1;
     height: 100%;
     background: var(--bg-terminal);
-    color: var(--text-main);
+    color: var(--text-terminal, var(--text-main));
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-    font-size: 13px;
+    font-size: var(--base-font-size, 13px);
     line-height: 1.45;
-    padding: 12px;
+    padding: 12px 16px;
     overflow-y: auto;
     cursor: text;
     display: flex;
     flex-direction: column;
+  }
+
+  .terminal-wrapper ::selection {
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+  }
+
+  .terminal-wrapper::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .terminal-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .terminal-wrapper::-webkit-scrollbar-thumb {
+    background: var(--border-subtle);
+    border-radius: 4px;
+  }
+
+  .terminal-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--text-dim);
   }
 
   .terminal-output {
@@ -251,7 +274,7 @@
   }
 
   .terminal-line {
-    min-height: 19px;
+    min-height: 1.45em;
     user-select: text;
   }
 
@@ -267,19 +290,19 @@
   }
 
   .banner-aborting {
-    background: rgba(220, 53, 69, 0.15);
+    background: rgba(220, 53, 69, 0.12);
     border: 1px solid var(--accent-danger);
     color: var(--accent-danger);
   }
 
   .banner-crashed {
-    background: rgba(210, 153, 34, 0.15);
+    background: rgba(210, 153, 34, 0.12);
     border: 1px solid var(--accent-warning);
     color: var(--accent-warning);
   }
 
   .banner-failed {
-    background: rgba(220, 53, 69, 0.2);
+    background: rgba(220, 53, 69, 0.15);
     border: 1px solid var(--accent-danger);
     color: var(--accent-danger);
   }
@@ -311,7 +334,11 @@
   .btn-secondary {
     background: var(--bg-surface);
     color: var(--text-main);
-    border-color: var(--border-subtle);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .btn-secondary:hover {
+    background: var(--bg-surface-hover);
   }
 
   .terminal-prompt-line {
@@ -333,7 +360,8 @@
     background: transparent;
     border: none;
     outline: none;
-    color: var(--text-main);
+    color: var(--text-terminal, var(--text-main));
+    caret-color: var(--accent-primary);
     font-family: inherit;
     font-size: inherit;
     padding: 0;

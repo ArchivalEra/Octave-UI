@@ -918,8 +918,9 @@
     font-size: 0.7rem;
     padding: 1px 6px;
     border-radius: 4px;
-    background: rgba(166, 227, 161, 0.15);
-    color: #a6e3a1;
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+    font-weight: 500;
   }
 
   .menu-folder-actions {
@@ -944,13 +945,13 @@
   }
 
   .menu-sub-btn.primary {
-    border-color: rgba(137, 180, 250, 0.3);
-    color: var(--md-sys-color-primary, #89b4fa);
+    border-color: var(--md-sys-color-primary);
+    color: var(--md-sys-color-primary);
   }
 
   .menu-sub-btn.danger {
-    color: #f38ba8;
-    border-color: rgba(243, 139, 168, 0.3);
+    color: var(--accent-danger, #ef4444);
+    border-color: rgba(239, 68, 68, 0.3);
   }
 
   .lang-grid {

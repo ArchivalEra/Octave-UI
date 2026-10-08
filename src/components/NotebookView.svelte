@@ -826,9 +826,9 @@
   }
 
   .btn-switch-dir {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(137, 180, 250, 0.3);
-    color: var(--accent-primary, #89b4fa);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--accent-primary);
     cursor: pointer;
     font-size: 11px;
     padding: 1px 6px;
@@ -840,14 +840,14 @@
   }
 
   .btn-switch-dir:hover {
-    background: rgba(137, 180, 250, 0.25);
-    color: var(--text-main);
+    background: var(--bg-surface-hover);
+    color: var(--accent-primary-hover, var(--accent-primary));
   }
 
   .btn-disconnect {
     background: transparent;
     border: none;
-    color: var(--text-muted, #a6adc8);
+    color: var(--text-muted);
     cursor: pointer;
     font-size: 11px;
     padding: 0 2px;
@@ -855,7 +855,7 @@
   }
 
   .btn-disconnect:hover {
-    color: var(--accent-danger, #f38ba8);
+    color: var(--accent-danger);
   }
 
   .file-badge {
@@ -877,10 +877,11 @@
 
   .file-mount-tag {
     font-size: 10px;
-    background: rgba(166, 227, 161, 0.2);
-    color: #a6e3a1;
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
     padding: 1px 4px;
     border-radius: 3px;
+    font-weight: 500;
   }
 
   .cell-section-header {
