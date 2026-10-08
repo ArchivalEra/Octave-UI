@@ -1,0 +1,109 @@
+# 构建 Octave-UI 静态站点并发布到 GitHub Pages（archivalera.github.io/Octave-UI/）。
+#
+# 为什么是 Pages 而不是 EdgeOne：octave.wasm 约 31MB，EdgeOne 拒绝 >25MB 文件。
+# 因此大字节由 Pages 承载，isui.ren/repo/Octave/ 由 heart 中间件反代到 Pages，
+# 并在反代层补 COOP/COEP（WASM 多线程的 SharedArrayBuffer 前提）。
+#
+# 引擎来源：公开仓 ArchivalEra/Octave-Full-Wasm 的三条车道分支（site/ 树），
+# 对应本仓 scripts/sync-lanes.sh 在开发机从 /mnt/hdd 摄取的那三档。
+name: Build and Deploy Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "scripts/**"
+      - "astro.config.mjs"
+      - "svelte.config.js"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Octave-UI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Checkout engine (Octave-Full-Wasm, all lanes)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ArchivalEra/Octave-Full-Wasm
+          ref: master
+          path: .engine
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@d9184bf108216479bc5a137cc391f4d7b14c870b # v6.1.0
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # 把三条车道分支的 site/ 树落到 public/lanes/<lane>/，并把公共桥接胶水
+      # 落到 public/bridge/ —— 等价于开发机上的 scripts/sync-lanes.sh（它读
+      # /mnt/hdd 的本地引擎；CI 从公开引擎仓取同一份 site/ 树）。
+      - name: Sync engine lanes and bridge glue
+        run: |
+          set -euo pipefail
+          git -C .engine fetch -q origin wasm32-final master IllegalPerformance
+          for lane in wasm32-final master IllegalPerformance; do
+            mkdir -p "public/lanes/$lane"
+            git -C .engine archive "origin/$lane" site | tar -x -C /tmp/_lane --strip-components=1 2>/dev/null || {
+              rm -rf /tmp/_lane; mkdir -p /tmp/_lane
+              git -C .engine archive "origin/$lane" site | tar -x -C /tmp/_lane --strip-components=1
+            }
+            cp -rf /tmp/_lane/. "public/lanes/$lane/"
+            rm -rf /tmp/_lane
+          done
+          # 桥接胶水（assets-loader/lane(s)/octave-*.js 等）取自一档 site 根
+          mkdir -p public/bridge
+          git -C .engine archive origin/IllegalPerformance site | tar -x -C /tmp/_b --strip-components=1 2>/dev/null || {
+            rm -rf /tmp/_b; mkdir -p /tmp/_b
+            git -C .engine archive origin/IllegalPerformance site | tar -x -C /tmp/_b --strip-components=1
+          }
+          for f in assets-loader.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js octave-core.js octave-page.js octave-embed.js lane.js lanes.js octave-worker.js; do
+            [ -f "/tmp/_b/$f" ] && cp -f "/tmp/_b/$f" public/bridge/ || true
+          done
+          rm -rf /tmp/_b
+          echo "lanes:"; ls public/lanes; echo "bridge:"; ls public/bridge | head
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build static site
+        run: pnpm build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
