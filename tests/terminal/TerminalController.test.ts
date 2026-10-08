@@ -1,21 +1,21 @@
-// tests/terminal/TerminalController.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TerminalController } from '../../src/modules/terminal/TerminalController';
 import { HistoryStore } from '../../src/modules/history/HistoryStore';
-import { EngineSession } from '../../src/modules/engine/EngineSession';
+import { EngineSupervisor } from '../../src/modules/engine/EngineSupervisor';
 import { MockEmbedAdapter } from '../../src/modules/engine/MockEmbedAdapter';
 
 describe('TerminalController Deep Module', () => {
   let history: HistoryStore;
   let adapter: MockEmbedAdapter;
-  let session: EngineSession;
+  let supervisor: EngineSupervisor;
   let controller: TerminalController;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     history = new HistoryStore([]);
     adapter = new MockEmbedAdapter();
-    session = new EngineSession(adapter);
-    controller = new TerminalController(history, session);
+    supervisor = new EngineSupervisor({ adapter, skipPreflight: true });
+    await supervisor.boot();
+    controller = new TerminalController(history, supervisor);
   });
 
   it('guarantees zero double-echo on submit', async () => {

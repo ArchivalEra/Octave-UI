@@ -24,29 +24,29 @@
     {
       "name": "octave-wasm32-final-w64.wasm",
       "version": "wasm32-final",
-      "url": "wasm32-final/w64/octave.wasm",
-      "file": "wasm32-final/w64/octave.wasm",
+      "url": "public/lanes/wasm32-final/w64/octave.wasm",
+      "file": "public/lanes/wasm32-final/w64/octave.wasm",
       "sha256": "ddec34a04a4e6c5108c6c886bf77fcb5a5a85bfe221f850772698be286912ef7"
     },
     {
       "name": "octave-wasm32-final-base.wasm",
       "version": "wasm32-final",
-      "url": "wasm32-final/octave.wasm",
-      "file": "wasm32-final/octave.wasm",
+      "url": "public/lanes/wasm32-final/octave.wasm",
+      "file": "public/lanes/wasm32-final/octave.wasm",
       "sha256": "1ed3e528561e44750200e9a862bb410c381d639e19f8079a94270b38c9fa6b00"
     },
     {
       "name": "octave-master-w64.wasm",
       "version": "master",
-      "url": "master/w64/octave.wasm",
-      "file": "master/w64/octave.wasm",
+      "url": "public/lanes/master/w64/octave.wasm",
+      "file": "public/lanes/master/w64/octave.wasm",
       "sha256": "01fb52fc3b5dde30a81c550619bfacc752c27bb1cdef29d3b827424749f48e73"
     },
     {
       "name": "octave-illegalperf-w64.wasm",
       "version": "IllegalPerformance",
-      "url": "IllegalPerformance/w64/octave.wasm",
-      "file": "IllegalPerformance/w64/octave.wasm",
+      "url": "public/lanes/IllegalPerformance/w64/octave.wasm",
+      "file": "public/lanes/IllegalPerformance/w64/octave.wasm",
       "sha256": "f6fec91fc7a0f4b8b678c0d98c2453992dca4e91fcf82cb154e444770ba4a4c0"
     }
   ]

@@ -1,6 +1,6 @@
 <!-- src/components/VariableInspectorModal.svelte -->
 <script lang="ts">
-  import { variableInspectorStore, workbenchController, supervisor, t } from '../modules/appContext';
+  import { variableInspectorStore, projectWorkspace, supervisor, t } from '../modules/appContext';
   import type { VariableDetail } from '../modules/inspector/types';
 
   let isOpen = $state(variableInspectorStore.isOpen);
@@ -21,11 +21,11 @@
   function handlePlot() {
     if (!v) return;
     const plotCode = `plot(${v.name});`;
-    if (workbenchController.mode === 'notebook') {
-      const cell = workbenchController.addCell(plotCode);
-      workbenchController.executeCell(cell.id, supervisor);
+    if (projectWorkspace.mode === 'notebook') {
+      const cell = projectWorkspace.addCell(plotCode, `Plot ${v.name}`);
+      projectWorkspace.executeCell(cell.id);
     } else {
-      supervisor.eval(plotCode);
+      projectWorkspace.executeCommand(plotCode);
     }
     handleClose();
   }

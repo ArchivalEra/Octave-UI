@@ -6,6 +6,9 @@ import type { EngineSupervisor } from '../engine/EngineSupervisor';
 import { SafePlotSinkPolyfill } from '../semantic/SafePlotSinkPolyfill';
 import { SemanticResultRenderer } from '../semantic/SemanticResultRenderer';
 
+const STORAGE_KEY_CELLS = 'octave_workbench_cells';
+const STORAGE_KEY_MODE = 'octave_workbench_mode';
+
 export class WorkbenchController {
   private _mode: WorkbenchMode = 'notebook';
   private _cells: NotebookCell[] = [];
@@ -16,7 +19,10 @@ export class WorkbenchController {
   private _cellSeq = 0;
 
   constructor() {
-    this.resetToDefault();
+    const loaded = this.loadFromStorage();
+    if (!loaded || this._cells.length === 0) {
+      this.resetToDefault();
+    }
   }
 
   get mode(): WorkbenchMode {
@@ -38,6 +44,7 @@ export class WorkbenchController {
   setMode(mode: WorkbenchMode) {
     if (this._mode !== mode) {
       this._mode = mode;
+      this._persistState();
       this._notify();
     }
   }
@@ -64,6 +71,38 @@ export class WorkbenchController {
     return `cell_${++this._cellSeq}_${Date.now().toString(36)}`;
   }
 
+  saveToStorage() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(STORAGE_KEY_CELLS, JSON.stringify(this._cells));
+      localStorage.setItem(STORAGE_KEY_MODE, this._mode);
+    } catch {}
+  }
+
+  loadFromStorage(): boolean {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_CELLS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this._cells = parsed;
+          this._activeCellId = this._cells[0].id;
+          const savedMode = localStorage.getItem(STORAGE_KEY_MODE);
+          if (savedMode === 'notebook' || savedMode === 'script' || savedMode === 'console') {
+            this._mode = savedMode;
+          }
+          return true;
+        }
+      }
+    } catch {}
+    return false;
+  }
+
+  private _persistState() {
+    this.saveToStorage();
+  }
+
   resetToDefault() {
     this._cells = [
       {
@@ -80,8 +119,10 @@ x = A \\ b
       },
     ];
     this._activeCellId = this._cells[0].id;
+    this._persistState();
     this._notify();
   }
+
 
   addCell(code = '', afterId?: string): NotebookCell {
     const newCell: NotebookCell = {
@@ -104,6 +145,7 @@ x = A \\ b
     }
 
     this._activeCellId = newCell.id;
+    this._persistState();
     this._notify();
     return newCell;
   }
@@ -117,6 +159,7 @@ x = A \\ b
       cell.executionCount = null;
       cell.streamingOutput = '';
       cell.result = undefined;
+      this._persistState();
       this._notify();
       return true;
     }
@@ -130,6 +173,7 @@ x = A \\ b
       this._activeCellId = this._cells[nextIdx]?.id || null;
     }
 
+    this._persistState();
     this._notify();
     return true;
   }
@@ -138,6 +182,7 @@ x = A \\ b
     const cell = this._cells.find((c) => c.id === id);
     if (cell && cell.code !== code) {
       cell.code = code;
+      this._persistState();
       this._notify();
     }
   }
@@ -229,6 +274,7 @@ x = A \\ b
       unsubOutput();
       unsubError();
       this._isRunning = false;
+      this._persistState();
       this._notify();
     }
   }

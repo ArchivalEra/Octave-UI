@@ -5,6 +5,7 @@ import type { RecipeId, ExperimentRecipe } from './types';
 import { ExampleRegistry } from './ExampleRegistry';
 import type { EngineSupervisor } from '../engine/EngineSupervisor';
 import type { WorkbenchController } from '../workbench/WorkbenchController';
+import type { ProjectWorkspace } from '../workspace/ProjectWorkspace';
 import { SafePlotSinkPolyfill } from '../semantic/SafePlotSinkPolyfill';
 
 export class ExperimentStore {
@@ -19,7 +20,7 @@ export class ExperimentStore {
   static async launch(
     id: RecipeId,
     supervisor: EngineSupervisor,
-    workbench: WorkbenchController
+    workbench: ProjectWorkspace | WorkbenchController
   ): Promise<boolean> {
     const recipe = ExampleRegistry.getById(id);
     if (!recipe) return false;
@@ -50,7 +51,7 @@ export class ExperimentStore {
     }
 
     // 4. 执行该单元格
-    await workbench.executeCell(targetCell.id, supervisor);
+    await (workbench as any).executeCell(targetCell.id, supervisor);
     return true;
   }
 }

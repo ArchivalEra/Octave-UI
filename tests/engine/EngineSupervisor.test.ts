@@ -348,4 +348,27 @@ describe('EngineSupervisor Deep Module', () => {
     const res = await sup.eval('1 + 1');
     expect(res.ok).toBe(true);
   });
+
+  it('allows lane selection when unloaded and forbids lane switching after boot', async () => {
+    const sup = new EngineSupervisor({ skipPreflight: true });
+    expect(sup.state).toBe('unloaded');
+    expect(sup.currentLane).toBe('wasm32-final');
+
+    // 选档仅改变 currentLane，不触发 boot，状态保持 unloaded
+    sup.setLane('master');
+    expect(sup.currentLane).toBe('master');
+    expect(sup.state).toBe('unloaded');
+
+    await sup.switchLane('IllegalPerformance');
+    expect(sup.currentLane).toBe('IllegalPerformance');
+    expect(sup.state).toBe('unloaded');
+
+    // 启动引擎
+    await sup.boot();
+    expect(sup.state).toBe('idle');
+
+    // 启动后切换引擎必须抛出明确错误
+    expect(() => sup.setLane('wasm32-final')).toThrow(/Cannot switch engine lane after computation has started/);
+    await expect(sup.switchLane('wasm32-final')).rejects.toThrow(/Cannot switch engine lane after computation has started/);
+  });
 });

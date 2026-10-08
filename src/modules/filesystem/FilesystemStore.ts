@@ -1,17 +1,16 @@
 // src/modules/filesystem/FilesystemStore.ts
 // 虚拟文件系统操作与路径状态管理：MEMFS 树状视图、文件读写、下载与刷新
-import type { FsEntry } from '../engine/types';
-import type { EngineSession } from '../engine/EngineSession';
+import type { FsEntry, EngineSessionLike } from '../engine/types';
 
 export type FsListener = (entries: FsEntry[], currentDir: string) => void;
 
 export class FilesystemStore {
-  private _session: EngineSession | null = null;
+  private _session: EngineSessionLike | null = null;
   private _currentDir = '/home/web_user';
   private _entries: FsEntry[] = [];
   private _listeners: Set<FsListener> = new Set();
 
-  constructor(session?: EngineSession, initialDir = '/home/web_user') {
+  constructor(session?: EngineSessionLike, initialDir = '/home/web_user') {
     this._currentDir = initialDir;
     if (session) {
       this.attachSession(session);
@@ -26,7 +25,7 @@ export class FilesystemStore {
     return [...this._entries];
   }
 
-  attachSession(session: EngineSession) {
+  attachSession(session: EngineSessionLike) {
     this._session = session;
   }
 

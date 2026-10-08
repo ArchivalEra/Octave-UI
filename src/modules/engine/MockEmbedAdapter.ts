@@ -116,9 +116,20 @@ export class MockEmbedAdapter implements OctaveEmbedPort {
       this._emitOutput(`-- Function File: ${target}\n   Simulated help text for ${target}.\n`);
     } else if (trimmed === 'history;' || trimmed === 'history') {
       this._emitOutput('  1  a = 1;\n  2  b = 2;\n');
+    } else if (trimmed.startsWith('clear')) {
+      this._vars.clear();
+      this._setState('idle');
+      return { ok: true, rc: 0 };
     } else {
-      this._emitOutput(`ans =\n   42\n`);
-      this._vars.set('ans', { name: 'ans', class: 'double', size: '1x1', bytes: 8 });
+      const assignMatch = /^([a-zA-Z_][a-zA-Z0-9_]*)\s*=/m.exec(trimmed);
+      if (assignMatch) {
+        const varName = assignMatch[1];
+        this._vars.set(varName, { name: varName, class: 'double', size: '1x1', bytes: 8 });
+        this._emitOutput(`${varName} =\n   42\n`);
+      } else {
+        this._emitOutput(`ans =\n   42\n`);
+        this._vars.set('ans', { name: 'ans', class: 'double', size: '1x1', bytes: 8 });
+      }
     }
 
     this._setState('idle');

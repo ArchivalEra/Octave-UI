@@ -9,8 +9,8 @@
   import ExampleGallery from './ExampleGallery.svelte';
   import DiagnosticsModal from './DiagnosticsModal.svelte';
   import VariableInspectorModal from './VariableInspectorModal.svelte';
-  import { workbenchController } from '../modules/appContext';
-  import type { WorkbenchMode } from '../modules/workbench/types';
+  import { projectWorkspace } from '../modules/appContext';
+  import type { WorkbenchMode } from '../modules/workspace/ProjectWorkspace';
 
   let sidebarOpen = $state(true);
   let bootModalOpen = $state(false);
@@ -19,11 +19,11 @@
   let diagnosticsOpen = $state(false);
   let interceptedCmd = $state('');
   let interceptReason = $state('');
-  let currentMode = $state<WorkbenchMode>(workbenchController.mode);
+  let currentMode = $state<WorkbenchMode>(projectWorkspace.mode);
 
   $effect(() => {
-    const unsub = workbenchController.subscribe(() => {
-      currentMode = workbenchController.mode;
+    const unsub = projectWorkspace.subscribe(() => {
+      currentMode = projectWorkspace.mode;
     });
     return unsub;
   });

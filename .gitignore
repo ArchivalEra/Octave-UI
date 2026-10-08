@@ -16,20 +16,10 @@
 !/STATE.md
 !/FACTS.json
 !/retractions.json
-!/gates-selftest.sh
 !/maintaince.md
 !/pins.json
 !/upstream-lock.json
-
-# 2.1 Einfacht 事实系统与 Hooks
-!/zreflect/
-!/zreflect/**
-!/reflect-hooks/
-!/reflect-hooks/**
-!/questions/
-!/questions/**
-!/.zcode/
-!/.zcode/**
+!/HANDOFF.md
 
 # 3. 前端/项目常见配置文件
 !/package.json
@@ -81,6 +71,8 @@ master/
 **/master/
 IllegalPerformance/
 **/IllegalPerformance/
+Octave/
+**/Octave/
 build/
 **/build/
 out/

@@ -13,10 +13,12 @@ import type {
   ErrorCallback,
   StateCallback,
   FsEntry,
+  EngineLane,
 } from './types';
 import { EngineCrashedError } from './types';
 import { WasmEmbedAdapter } from './WasmEmbedAdapter';
 import { MockEmbedAdapter } from './MockEmbedAdapter';
+
 
 export interface PendingTask {
   id: string;
@@ -101,9 +103,30 @@ export class EngineSupervisor {
     return this._inFlightId;
   }
 
+  private _currentLane: EngineLane = 'wasm32-final';
+
+  get currentLane(): EngineLane {
+    return this._currentLane;
+  }
+
+  setLane(lane: EngineLane): void {
+    if (this._state !== 'unloaded') {
+      throw new Error(`Cannot switch engine lane after computation has started (current state: ${this._state})`);
+    }
+    this._currentLane = lane;
+  }
+
+  async switchLane(lane: EngineLane): Promise<void> {
+    if (this._state !== 'unloaded') {
+      throw new Error(`Cannot switch engine lane after computation has started (current state: ${this._state})`);
+    }
+    this._currentLane = lane;
+  }
+
   get adapter(): OctaveEmbedPort | null {
     return this._adapter;
   }
+
 
   static checkPreflight(): { ok: boolean; reason?: string } {
     if (typeof window !== 'undefined') {
@@ -188,6 +211,9 @@ export class EngineSupervisor {
       }
     }
 
+    const effectiveLane = opts.lane || this._currentLane;
+    this._currentLane = effectiveLane;
+
     this._setState('booting');
 
     try {
@@ -195,7 +221,7 @@ export class EngineSupervisor {
       if (this._adapterFactory) {
         adapter = await this._adapterFactory();
       } else if (typeof window !== 'undefined' && window.OctaveEmbed) {
-        adapter = await WasmEmbedAdapter.boot(opts);
+        adapter = await WasmEmbedAdapter.boot({ ...opts, lane: effectiveLane });
       } else {
         adapter = new MockEmbedAdapter(opts.id || 'default');
       }
@@ -332,6 +358,19 @@ export class EngineSupervisor {
       this._adapter?.terminate?.();
     } catch {}
     this.onEngineDeath(this._epoch, cause);
+  }
+
+  stop(): void {
+    this._clearAbort();
+    if (this._adapter && typeof this._adapter.terminate === 'function') {
+      try {
+        this._adapter.terminate();
+      } catch {}
+    }
+    this._adapter = null;
+    this._pending.clear();
+    this._inFlightId = null;
+    this._setState('unloaded');
   }
 
   async recover(): Promise<void> {

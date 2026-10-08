@@ -3,7 +3,7 @@
   import { ExampleRegistry } from '../modules/experiment/ExampleRegistry';
   import { ExperimentStore } from '../modules/experiment/ExperimentStore';
   import type { RecipeCategory, RecipeId, ExperimentRecipe } from '../modules/experiment/types';
-  import { supervisor, workbenchController, t } from '../modules/appContext';
+  import { supervisor, projectWorkspace, t } from '../modules/appContext';
 
   let { isOpen, onClose } = $props<{
     isOpen: boolean;
@@ -24,7 +24,7 @@
   async function handleLaunch(recipe: ExperimentRecipe) {
     launchingId = recipe.id;
     try {
-      await ExperimentStore.launch(recipe.id, supervisor, workbenchController);
+      await ExperimentStore.launch(recipe.id, supervisor, projectWorkspace);
       onClose();
     } catch (err) {
       console.error('Failed to launch recipe:', err);

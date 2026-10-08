@@ -1,17 +1,18 @@
 // tests/filesystem/FilesystemStore.test.ts
 import { describe, it, expect, beforeEach } from 'vitest';
 import { FilesystemStore } from '../../src/modules/filesystem/FilesystemStore';
-import { EngineSession } from '../../src/modules/engine/EngineSession';
+import { EngineSupervisor } from '../../src/modules/engine/EngineSupervisor';
 import { MockEmbedAdapter } from '../../src/modules/engine/MockEmbedAdapter';
 
 describe('FilesystemStore Deep Module', () => {
-  let session: EngineSession;
+  let supervisor: EngineSupervisor;
   let store: FilesystemStore;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     const adapter = new MockEmbedAdapter();
-    session = new EngineSession(adapter);
-    store = new FilesystemStore(session, '/home/web_user');
+    supervisor = new EngineSupervisor({ adapter, skipPreflight: true });
+    await supervisor.boot();
+    store = new FilesystemStore(supervisor, '/home/web_user');
   });
 
   it('lists directory files in MEMFS', () => {

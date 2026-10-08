@@ -45,4 +45,15 @@ describe('ExperimentStore & ExampleRegistry', () => {
     expect(cell.code).toContain('求解线性方程组');
     expect(cell.status).toBe('success');
   });
+
+  it('launches recipe into ProjectWorkspace directly', async () => {
+    const { ProjectWorkspace } = await import('../../src/modules/workspace/ProjectWorkspace');
+    const { VirtualMemoryDirectoryAdapter } = await import('../../src/modules/workspace/DirectoryAdapter');
+    const pw = new ProjectWorkspace(supervisor, new VirtualMemoryDirectoryAdapter());
+    const launched = await ExperimentStore.launch('monte-carlo-pi', supervisor, pw);
+    expect(launched).toBe(true);
+    expect(pw.mode).toBe('notebook');
+    expect(pw.cells[0].code).toContain('蒙特卡洛');
+    expect(pw.cells[0].status).toBe('success');
+  });
 });

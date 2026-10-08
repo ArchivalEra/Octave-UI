@@ -1,27 +1,48 @@
-<!-- src/components/DiagnosticsModal.svelte -->
 <script lang="ts">
-  import { supervisor, t } from '../modules/appContext';
+  import { supervisor, projectWorkspace, t } from '../modules/appContext';
 
   let { isOpen, onClose } = $props<{
     isOpen: boolean;
     onClose: () => void;
   }>();
 
-  let laneBadge = $state<string>('Wasm64');
-  let internalGear = $state<string>('w64');
+  let activeLane = $state(projectWorkspace.activeLane);
   let coiStatus = $state(false);
   let sabStatus = $state(false);
 
   $effect(() => {
+    const unsub = projectWorkspace.subscribe(() => {
+      activeLane = projectWorkspace.activeLane;
+    });
     if (typeof window !== 'undefined') {
       coiStatus = window.crossOriginIsolated === true;
       sabStatus = typeof SharedArrayBuffer !== 'undefined';
-      if ((window as any).__octaveLaneName) {
-        laneBadge = (window as any).__octaveLaneName;
-      }
-      if ((window as any).octaveLaneState?.lane) {
-        internalGear = (window as any).octaveLaneState.lane;
-      }
+    }
+    return unsub;
+  });
+
+  const laneDisplay = $derived.by(() => {
+    switch (activeLane) {
+      case 'wasm32-final':
+        return {
+          name: 'wasm32-final',
+          gear: 'base (32-bit)',
+        };
+      case 'master':
+        return {
+          name: 'master',
+          gear: 'w64 (64-bit + threads)',
+        };
+      case 'IllegalPerformance':
+        return {
+          name: 'IllegalPerformance',
+          gear: 'w64 (mimalloc + SIMD)',
+        };
+      default:
+        return {
+          name: activeLane,
+          gear: activeLane,
+        };
     }
   });
 </script>
@@ -40,12 +61,12 @@
         <div class="meta-grid">
           <div class="meta-item">
             <span class="label">{t('diagnostics.active_lane')}</span>
-            <span class="val badge">{laneBadge}</span>
+            <span class="val badge">{laneDisplay.name}</span>
           </div>
 
           <div class="meta-item">
             <span class="label">{t('diagnostics.gear')}</span>
-            <span class="val font-mono">{internalGear}</span>
+            <span class="val font-mono">{laneDisplay.gear}</span>
           </div>
 
           <div class="meta-item">

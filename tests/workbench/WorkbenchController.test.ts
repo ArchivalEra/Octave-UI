@@ -67,4 +67,14 @@ describe('WorkbenchController', () => {
       expect(cell.result.error.kind).toBe('dimension_mismatch');
     }
   });
+
+  it('persists cells to storage and restores them across instances', () => {
+    controller.addCell('custom_val = 12345;');
+    controller.saveToStorage();
+
+    const controller2 = new WorkbenchController();
+    expect(controller2.cells.length).toBe(2);
+    expect(controller2.cells.some(c => c.code === 'custom_val = 12345;')).toBe(true);
+  });
 });
+

@@ -1,7 +1,6 @@
-<!-- src/components/NotebookView.svelte -->
 <script lang="ts">
-  import { workbenchController, supervisor, t } from '../modules/appContext';
-  import type { NotebookCell } from '../modules/workbench/types';
+  import { projectWorkspace, supervisor, t } from '../modules/appContext';
+  import type { ProjectCell } from '../modules/workspace/ProjectWorkspace';
   import type {
     PlotSemanticResult,
     MatrixSemanticResult,
@@ -13,38 +12,60 @@
     onOpenExamples?: () => void;
   }>();
 
-  let cells = $state<NotebookCell[]>(workbenchController.cells);
-  let isRunning = $state(workbenchController.isRunning);
+  let cells = $state<ProjectCell[]>(projectWorkspace.cells);
+  let isRunning = $state(projectWorkspace.isRunning);
+  let activeFile = $state<string | null>(projectWorkspace.activeFile);
+  let isMounted = $state<boolean>(projectWorkspace.isDirectoryMounted);
+  let directoryName = $state<string | null>(projectWorkspace.directoryName);
 
   $effect(() => {
-    const unsub = workbenchController.subscribe(() => {
-      cells = workbenchController.cells;
-      isRunning = workbenchController.isRunning;
+    const unsub = projectWorkspace.subscribe(() => {
+      cells = projectWorkspace.cells;
+      isRunning = projectWorkspace.isRunning;
+      activeFile = projectWorkspace.activeFile;
+      isMounted = projectWorkspace.isDirectoryMounted;
+      directoryName = projectWorkspace.directoryName;
     });
     return unsub;
   });
 
+  async function handleMountLocalDir() {
+    try {
+      await projectWorkspace.mountLocalDirectory();
+    } catch (err: any) {
+      alert(`无法打开本地目录: ${err?.message || err}`);
+    }
+  }
+
+  function handleDisconnectDir() {
+    projectWorkspace.disconnectDirectory();
+  }
+
   function handleRun(id: string) {
-    workbenchController.executeCell(id, supervisor);
+    projectWorkspace.executeCell(id);
   }
 
   function handleRunAll() {
-    workbenchController.executeAll(supervisor);
+    projectWorkspace.executeAll();
   }
 
   function handleAddCell(afterId?: string) {
-    workbenchController.addCell('', afterId);
+    projectWorkspace.addCell('', '', afterId);
   }
 
   function handleDeleteCell(id: string) {
-    workbenchController.deleteCell(id);
+    projectWorkspace.deleteCell(id);
   }
 
   function handleClear() {
-    workbenchController.clearCells();
+    projectWorkspace.clearCells();
   }
 
-  function handleKeyDown(e: KeyboardEvent, cell: NotebookCell) {
+  function handleSave() {
+    projectWorkspace.saveActiveFile();
+  }
+
+  function handleKeyDown(e: KeyboardEvent, cell: ProjectCell) {
     if (e.key === 'Enter' && e.shiftKey) {
       e.preventDefault();
       handleRun(cell.id);
@@ -56,7 +77,7 @@
       const val = target.value;
       target.value = val.substring(0, start) + '  ' + val.substring(end);
       target.selectionStart = target.selectionEnd = start + 2;
-      workbenchController.updateCellCode(cell.id, target.value);
+      projectWorkspace.updateCellCode(cell.id, target.value);
     }
   }
 
@@ -103,29 +124,44 @@
   <!-- 工作台控制顶栏 -->
   <div class="notebook-toolbar">
     <div class="toolbar-left">
-      <button class="btn-action primary" onclick={() => handleAddCell()} title="Add new cell">
-        {t('workbench.add_cell')}
+      <!-- 本地工程目录挂载 / 状态 -->
+      {#if !isMounted}
+        <button class="btn-action" onclick={handleMountLocalDir} title="打开并挂载本地文件夹">
+          📁 打开本地目录
+        </button>
+      {:else}
+        <div class="dir-badge" title={`已挂载本地目录: ${directoryName || ''}`}>
+          <span class="dir-icon">📁</span>
+          <span class="dir-name">{directoryName || '本地目录'}</span>
+          <button class="btn-disconnect" onclick={handleDisconnectDir} title="断开本地目录">✕</button>
+        </div>
+      {/if}
+
+      <div class="file-badge" title="当前加载的标准 Octave .m 脚本">
+        <span class="file-icon">📜</span>
+        <span class="file-name">{activeFile || 'untitled.m'}</span>
+        {#if isMounted}
+          <span class="file-mount-tag">本地</span>
+        {/if}
+      </div>
+      <button class="btn-action primary" onclick={handleSave} title="保存脚本到本地文件">
+        💾 保存
+      </button>
+      <button class="btn-action" onclick={() => handleAddCell()} title="添加新单元格 (%%)">
+        + {t('workbench.add_cell')}
       </button>
       <button
         class="btn-action"
         onclick={handleRunAll}
         disabled={isRunning}
-        title="Run all notebook cells"
+        title="运行全部单元格"
       >
         ▶ {t('workbench.run_all')}
       </button>
-      <button class="btn-action" onclick={handleClear} title="Clear all cells">
+      <button class="btn-action" onclick={handleClear} title="重置工作台">
         🗑 {t('workbench.clear')}
       </button>
     </div>
-
-    {#if onOpenExamples}
-      <div class="toolbar-right">
-        <button class="btn-examples" onclick={onOpenExamples}>
-          💡 {t('examples.drawer_title')}
-        </button>
-      </div>
-    {/if}
   </div>
 
   <!-- 单元格流 -->
@@ -146,6 +182,29 @@
         </div>
 
         <div class="cell-main">
+          <!-- 小节标题 (%% Section) -->
+          <div class="cell-section-header">
+            <span class="section-marker">%%</span>
+            <input
+              type="text"
+              class="section-title-input"
+              value={cell.title}
+              placeholder="Section Title..."
+              oninput={(e) => projectWorkspace.updateCellTitle(cell.id, (e.target as HTMLInputElement).value)}
+            />
+          </div>
+
+          <!-- 小节注释 (% Comments) -->
+          {#if cell.description || cell.status === 'idle'}
+            <textarea
+              class="section-desc-input"
+              value={cell.description}
+              placeholder="% 可选小节文档说明注释..."
+              rows={cell.description ? Math.max(1, cell.description.split('\n').length) : 1}
+              oninput={(e) => projectWorkspace.updateCellDescription(cell.id, (e.target as HTMLTextAreaElement).value)}
+            ></textarea>
+          {/if}
+
           <!-- 代码输入区 -->
           <div class="cell-editor-box">
             <textarea
@@ -154,7 +213,7 @@
               placeholder={t('workbench.empty_placeholder')}
               rows={Math.max(3, cell.code.split('\n').length)}
               oninput={(e) =>
-                workbenchController.updateCellCode(
+                projectWorkspace.updateCellCode(
                   cell.id,
                   (e.target as HTMLTextAreaElement).value
                 )}
@@ -664,5 +723,111 @@
     font-size: 0.7rem;
     color: var(--text-muted);
     text-align: right;
+  }
+
+  .dir-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(137, 180, 250, 0.15);
+    border: 1px solid rgba(137, 180, 250, 0.4);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--accent-primary, #89b4fa);
+    font-weight: 500;
+  }
+
+  .dir-name {
+    font-family: var(--font-mono, monospace);
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .btn-disconnect {
+    background: transparent;
+    border: none;
+    color: var(--text-muted, #a6adc8);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0 2px;
+    border-radius: 3px;
+  }
+
+  .btn-disconnect:hover {
+    color: var(--accent-danger, #f38ba8);
+  }
+
+  .file-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-canvas);
+    border: 1px solid var(--border-subtle);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.825rem;
+    color: var(--text-main);
+  }
+
+  .file-name {
+    font-family: var(--font-mono, monospace);
+    font-weight: 600;
+  }
+
+  .file-mount-tag {
+    font-size: 10px;
+    background: rgba(166, 227, 161, 0.2);
+    color: #a6e3a1;
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+
+  .cell-section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .section-marker {
+    color: var(--accent-primary);
+    font-family: var(--font-mono, monospace);
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  .section-title-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed var(--border-subtle);
+    color: var(--text-main);
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 2px 4px;
+    outline: none;
+  }
+
+  .section-title-input:focus {
+    border-bottom-color: var(--accent-primary);
+  }
+
+  .section-desc-input {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    padding: 6px 8px;
+    line-height: 1.4;
+    outline: none;
+    resize: vertical;
+  }
+
+  .section-desc-input:focus {
+    border-color: var(--accent-primary);
+    color: var(--text-main);
   }
 </style>

@@ -24,7 +24,7 @@
       "text": "v1 embed 页面直接触发 plot",
       "why": "Wasm 64 位 Embed 页面存在 E6 GL 纹理未结边界，直接绘图会导致 WebGL 上下文崩溃击穿 Wasm 堆栈。",
       "evidence": "ArchivalEra/Octave-Full-Wasm#1 语义边界与 probe-embed-inventory.mjs 实测 §1.9",
-      "fixed_in": "CONTEXT.md §三与 src/modules/figure/FigureBoundary.ts"
+      "fixed_in": "CONTEXT.md §三与 src/modules/figure/CapabilityPolicy.ts"
     }
   ]
 }

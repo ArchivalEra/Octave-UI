@@ -1,13 +1,13 @@
 {
  "schema": 1,
- "generated": "2026-10-07T19:45:47+0800",
+ "generated": "2026-10-08T13:15:56+0800",
  "_why": "事实台账：每条 = 一个**测出来**的值 + 复跑命令 + 出处。别手改，跑 zreflect/facts.py。",
  "facts": {
   "ts_files": {
-   "value": 46,
+   "value": 48,
    "cmd": "find . \\( -path './src/*' -o -path './tests/*' \\) -name '*.ts' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-07T19:45:47+0800",
+   "measured_at": "2026-10-08T13:15:56+0800",
    "first_seen": "2026-10-07",
    "note": "TypeScript 源码与测试文件数"
   },
@@ -15,7 +15,7 @@
    "value": 10,
    "cmd": "find . -path './src/*' -name '*.svelte' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-07T19:45:47+0800",
+   "measured_at": "2026-10-08T13:15:56+0800",
    "first_seen": "2026-10-07",
    "note": "Svelte 5 组件与 Islands 数量"
   },
@@ -23,46 +23,46 @@
    "value": 2,
    "cmd": "find . -path './src/*' -name '*.astro' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-07T19:45:47+0800",
+   "measured_at": "2026-10-08T13:15:56+0800",
    "first_seen": "2026-10-04",
    "note": "Astro 静态页面与布局数"
   },
   "test_files": {
-   "value": 15,
+   "value": 16,
    "cmd": "find . -path './tests/*' -name '*.test.ts' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-07T19:45:47+0800",
+   "measured_at": "2026-10-08T13:15:56+0800",
    "first_seen": "2026-10-07",
    "note": "Vitest 单元测试套件数"
   },
   "py_files": {
-   "value": 23,
+   "value": 29,
    "cmd": "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-07T19:45:47+0800",
-   "first_seen": "2026-10-07"
+   "measured_at": "2026-10-08T13:15:56+0800",
+   "first_seen": "2026-10-08"
   },
   "py_lines": {
-   "value": 4393,
+   "value": 5350,
    "cmd": "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-07T19:45:47+0800",
-   "first_seen": "2026-10-07",
+   "measured_at": "2026-10-08T13:15:56+0800",
+   "first_seen": "2026-10-08",
    "note": "刻意 ≥100，用来示范裸数字判据"
   },
   "md_files": {
-   "value": 7,
+   "value": 8,
    "cmd": "find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-07T19:45:47+0800",
-   "first_seen": "2026-10-04"
+   "measured_at": "2026-10-08T13:15:56+0800",
+   "first_seen": "2026-10-08"
   },
   "md_lines": {
-   "value": 353,
+   "value": 583,
    "cmd": "find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-07T19:45:47+0800",
-   "first_seen": "2026-10-07",
+   "measured_at": "2026-10-08T13:15:56+0800",
+   "first_seen": "2026-10-08",
    "note": "不含机器块：块就渲染在文档里，数进去会让渲染一遍值就过期"
   }
  }

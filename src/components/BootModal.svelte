@@ -1,6 +1,6 @@
 <!-- src/components/BootModal.svelte -->
 <script lang="ts">
-  import { supervisor, t } from '../modules/appContext';
+  import { supervisor, projectWorkspace, t } from '../modules/appContext';
 
   let { isOpen = false, onClose } = $props<{
     isOpen?: boolean;
@@ -12,6 +12,44 @@
   let bootStep = $state<BootStep>('ready');
   let errorMsg = $state<string | null>(null);
 
+  let activeLane = $state(projectWorkspace.activeLane);
+
+  $effect(() => {
+    const unsub = projectWorkspace.subscribe(() => {
+      activeLane = projectWorkspace.activeLane;
+    });
+    return unsub;
+  });
+
+  const laneInfo = $derived.by(() => {
+    switch (activeLane) {
+      case 'wasm32-final':
+        return {
+          name: 'wasm32-final',
+          mode: 'Wasm32 通用兼容档 (32-bit Memory)',
+          size: '~39.3 MB',
+        };
+      case 'master':
+        return {
+          name: 'master',
+          mode: 'Master 主线稳定档 (WebAssembly / 线程)',
+          size: '~40.7 MB',
+        };
+      case 'IllegalPerformance':
+        return {
+          name: 'IllegalPerformance',
+          mode: 'IllegalPerformance 极限性能档 (mimalloc 优化编译)',
+          size: '~40.7 MB',
+        };
+      default:
+        return {
+          name: activeLane,
+          mode: `${activeLane} 档`,
+          size: '按需加载',
+        };
+    }
+  });
+
   async function startBoot() {
     booting = true;
     errorMsg = null;
@@ -19,7 +57,7 @@
 
     try {
       bootStep = 'starting';
-      await supervisor.boot();
+      await supervisor.boot({ lane: activeLane });
 
       bootStep = 'success';
       setTimeout(() => {
@@ -55,11 +93,11 @@
           </div>
           <div class="info-item">
             <span class="label">{t('boot.runtime_mode_label')}</span>
-            <span class="val">{t('boot.runtime_mode_val')}</span>
+            <span class="val">{laneInfo.mode}</span>
           </div>
           <div class="info-item">
             <span class="label">{t('boot.asset_size_label')}</span>
-            <span class="val">{t('boot.asset_size_val')}</span>
+            <span class="val">{laneInfo.size}</span>
           </div>
           <div class="info-item">
             <span class="label">{t('boot.data_privacy_label')}</span>

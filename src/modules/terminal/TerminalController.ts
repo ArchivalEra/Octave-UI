@@ -1,7 +1,7 @@
 // src/modules/terminal/TerminalController.ts
 // 终端状态机：输入缓冲、光标管理、历史寻迹、ANSI 解析、16ms 合并更新与零双重回显
 import { HistoryStore } from '../history/HistoryStore';
-import type { EngineSession } from '../engine/EngineSession';
+import type { EngineSessionLike } from '../engine/types';
 
 export interface AnsiSpan {
   text: string;
@@ -17,7 +17,7 @@ export type TerminalOutputListener = (lines: AnsiSpan[][]) => void;
 
 export class TerminalController {
   private _history: HistoryStore;
-  private _session: EngineSession | null = null;
+  private _session: EngineSessionLike | null = null;
   private _inputBuffer = '';
   private _cursorPos = 0;
   private _outputLines: AnsiSpan[][] = [];
@@ -26,7 +26,7 @@ export class TerminalController {
   private _listeners: Set<TerminalOutputListener> = new Set();
   private _inputChangeListeners: Set<(input: string, cursor: number) => void> = new Set();
 
-  constructor(history?: HistoryStore, session?: EngineSession) {
+  constructor(history?: HistoryStore, session?: EngineSessionLike) {
     this._history = history || new HistoryStore();
     if (session) {
       this.attachSession(session);
@@ -49,7 +49,7 @@ export class TerminalController {
     return this._outputLines;
   }
 
-  attachSession(session: EngineSession) {
+  attachSession(session: EngineSessionLike) {
     this._session = session;
     session.onOutput((text) => {
       this.appendOutput(text);

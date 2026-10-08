@@ -1,9 +1,8 @@
-<!-- src/components/HeaderBar.svelte -->
 <script lang="ts">
-  import { supervisor, themeManager, workbenchController, i18n, t } from '../modules/appContext';
-  import type { SupervisorState } from '../modules/engine/types';
+  import { supervisor, themeManager, projectWorkspace, i18n, t } from '../modules/appContext';
+  import type { SupervisorState, EngineLane } from '../modules/engine/types';
   import type { Locale } from '../modules/i18n/types';
-  import type { WorkbenchMode } from '../modules/workbench/types';
+  import type { WorkbenchMode } from '../modules/workspace/ProjectWorkspace';
 
   let {
     onOpenBootModal,
@@ -21,7 +20,8 @@
 
   let state = $state<SupervisorState>(supervisor.state);
   let theme = $state<'dark' | 'light' | 'auto'>(themeManager.theme);
-  let currentMode = $state<WorkbenchMode>(workbenchController.mode);
+  let currentMode = $state<WorkbenchMode>(projectWorkspace.mode);
+  let currentLane = $state<EngineLane>(projectWorkspace.activeLane);
 
   $effect(() => {
     const unsubState = supervisor.onStateChange((s) => {
@@ -30,15 +30,23 @@
     const unsubTheme = themeManager.subscribe((t) => {
       theme = t;
     });
-    const unsubWb = workbenchController.subscribe(() => {
-      currentMode = workbenchController.mode;
+    const unsubPw = projectWorkspace.subscribe(() => {
+      currentMode = projectWorkspace.mode;
+      currentLane = projectWorkspace.activeLane;
     });
+
     return () => {
       unsubState();
       unsubTheme();
-      unsubWb();
+      unsubPw();
     };
   });
+
+  function handleSwitchLane(targetLane: EngineLane) {
+    if (state !== 'unloaded') return;
+    if (currentLane === targetLane) return;
+    projectWorkspace.selectLane(targetLane);
+  }
 
   function handleInterrupt() {
     supervisor.abort(1500);
@@ -52,6 +60,10 @@
     supervisor.recover().catch(() => {});
   }
 
+  function handleStop() {
+    projectWorkspace.stopEngine();
+  }
+
   function toggleTheme() {
     const next = theme === 'dark' ? 'light' : 'dark';
     themeManager.setTheme(next);
@@ -61,6 +73,7 @@
     const target = e.currentTarget as HTMLSelectElement;
     i18n.setLocale(target.value as Locale);
   }
+
 </script>
 
 <header class="header-bar">
@@ -78,19 +91,55 @@
     </div>
   </div>
 
-  <!-- 工作台视图模式切换器 (Notebook / Console) -->
+  <!-- 进程内 3 档引擎车道无缝切换 (wasm32-final / master / IllegalPerformance) -->
+  <nav class="lane-switcher" aria-label="Backend lane switcher">
+    <button
+      type="button"
+      class="lane-btn"
+      class:active={currentLane === 'wasm32-final'}
+      disabled={state !== 'unloaded'}
+      onclick={() => handleSwitchLane('wasm32-final')}
+      title={state !== 'unloaded' ? '计算已启动，禁止切换引擎（需先点击停止引擎）' : 'Wasm32 终极冻结基线 (跨源隔离/通用兼容)'}
+    >
+      wasm32-final
+    </button>
+    <button
+      type="button"
+      class="lane-btn"
+      class:active={currentLane === 'master'}
+      disabled={state !== 'unloaded'}
+      onclick={() => handleSwitchLane('master')}
+      title={state !== 'unloaded' ? '计算已启动，禁止切换引擎（需先点击停止引擎）' : 'Master 主线稳定基线 (Wasm64 + Pthreads)'}
+    >
+      master
+    </button>
+    <button
+      type="button"
+      class="lane-btn"
+      class:active={currentLane === 'IllegalPerformance'}
+      disabled={state !== 'unloaded'}
+      onclick={() => handleSwitchLane('IllegalPerformance')}
+      title={state !== 'unloaded' ? '计算已启动，禁止切换引擎（需先点击停止引擎）' : 'IllegalPerformance 极限性能 (mimalloc + FMA + Rust)'}
+    >
+      IllegalPerformance
+    </button>
+  </nav>
+
+  <!-- 工作台视图模式切换器 (Notebook / Terminal) -->
   <nav class="mode-switcher" aria-label="Workbench mode">
     <button
+      type="button"
       class="mode-btn"
       class:active={currentMode === 'notebook'}
-      onclick={() => workbenchController.setMode('notebook')}
+      onclick={() => projectWorkspace.setMode('notebook')}
     >
       📓 {t('header.mode_notebook')}
     </button>
     <button
+      type="button"
       class="mode-btn"
-      class:active={currentMode === 'console'}
-      onclick={() => workbenchController.setMode('console')}
+      class:active={currentMode === 'terminal'}
+      onclick={() => projectWorkspace.setMode('terminal')}
     >
       💻 {t('header.mode_console')}
     </button>
@@ -129,10 +178,14 @@
       </span>
     </div>
 
-    <!-- 启动计算按钮 -->
+    <!-- 启动计算 / 停止引擎控制 -->
     {#if state === 'unloaded'}
       <button class="btn btn-primary" onclick={onOpenBootModal} title={t('action.boot_tooltip')}>
         {t('header.btn_start')}
+      </button>
+    {:else}
+      <button class="btn btn-outline-danger" onclick={handleStop} title={t('action.stop_tooltip')}>
+        🛑 {t('action.stop')}
       </button>
     {/if}
 
@@ -225,6 +278,55 @@
   .tagline {
     font-size: 11px;
     color: var(--text-secondary, #a6adc8);
+  }
+
+  .lane-switcher {
+    display: inline-flex;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-color, #313244);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .lane-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: var(--text-secondary, #a6adc8);
+    font-weight: 500;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .lane-btn:hover {
+    color: var(--text-primary, #cdd6f4);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .lane-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    color: var(--text-muted, #6c7086);
+  }
+
+  .lane-btn:disabled:hover {
+    background: transparent;
+    color: var(--text-muted, #6c7086);
+  }
+
+  .lane-btn.active {
+    background: var(--bg-surface, #1e1e2e);
+    color: var(--accent-primary, #89b4fa);
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
   .mode-switcher {
@@ -335,6 +437,18 @@
     border: 1px solid rgba(137, 180, 250, 0.3);
     color: var(--primary-color, #89b4fa);
     font-weight: 600;
+  }
+
+  .btn-outline-danger {
+    background: rgba(243, 139, 168, 0.1);
+    border: 1px solid rgba(243, 139, 168, 0.4);
+    color: #f38ba8;
+    font-weight: 600;
+  }
+
+  .btn-outline-danger:hover {
+    background: rgba(243, 139, 168, 0.2);
+    border-color: #f38ba8;
   }
 
   .btn-ghost {

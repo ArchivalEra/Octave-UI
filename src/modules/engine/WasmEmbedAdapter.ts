@@ -33,15 +33,53 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     if (typeof window === 'undefined' || !window.OctaveEmbed) {
       throw new Error('OctaveEmbed is not available on window. Ensure bridge scripts are loaded.');
     }
-    const embed = await window.OctaveEmbed.create({
-      base: opts.base || '',
+
+    const lane = opts.lane || 'wasm32-final';
+    const base = opts.base || `/lanes/${lane}/`;
+
+    // 确保按需加载对应车道的 Emscripten 胶水脚本
+    if (typeof document !== 'undefined') {
+      const scriptUrl = `${base}octave.js`;
+      if (!document.querySelector(`script[data-lane="${lane}"]`)) {
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = scriptUrl;
+          s.setAttribute('data-lane', lane);
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error(`Failed to load engine runtime script from ${scriptUrl}`));
+          document.head.appendChild(s);
+        });
+      }
+    }
+
+    // 构造符合 octave-core.js 契约的具象车道计划
+    const lanePlan = {
+      lane: lane === 'wasm32-final' ? 'base' : 'w64',
+      dir: '',
+      js: 'octave.js',
+      wasm: 'octave.wasm',
+      data: 'octave.data',
+    };
+
+    const bootPromise = window.OctaveEmbed.create({
+      base,
       mount: opts.mount || '#octave-raw-output',
       home: opts.home,
       id: opts.id || 'default',
+      lane: lanePlan,
     });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Octave 引擎 (${lane}) 启动超时 (30 秒)。请检查网络或控制台。`));
+      }, 30000);
+    });
+
+    const embed = await Promise.race([bootPromise, timeoutPromise]);
     window.octave = embed;
     return new WasmEmbedAdapter(embed);
   }
+
 
   get id(): string {
     return this._embed?.id || 'unknown';

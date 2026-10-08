@@ -61,12 +61,16 @@ export interface EvalJSONResult<T = any> {
   rc?: number;
 }
 
+export type EngineLane = 'wasm32-final' | 'master' | 'IllegalPerformance';
+
 export interface BootOptions {
   base?: string;
   mount?: string;
   home?: string;
   id?: string;
+  lane?: EngineLane;
 }
+
 
 export type OutputCallback = (text: string) => void;
 export type ErrorCallback = (error: string) => void;
@@ -111,3 +115,18 @@ export interface OctaveEmbedPort {
     export(): string | null;
   };
 }
+
+export interface EngineSessionLike {
+  eval(code: string): Promise<EvalResult>;
+  onOutput(cb: OutputCallback): () => void;
+  onError(cb: ErrorCallback): () => void;
+  onWorkspaceUpdate?(cb: (vars: WorkspaceVariable[]) => void): () => void;
+  getWorkspace?(): Promise<WorkspaceVariable[]>;
+  fsLs?(dir?: string): FsEntry[];
+  cd?(dir: string): Promise<EvalResult>;
+  pwd?(): Promise<string>;
+  fsRead?(path: string): string;
+  fsWrite?(path: string, content: string): boolean;
+  fsRm?(path: string): boolean;
+}
+
