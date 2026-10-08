@@ -61,30 +61,33 @@ jobs:
       # 把三条车道分支的 site/ 树落到 public/lanes/<lane>/，并把公共桥接胶水
       # 落到 public/bridge/ —— 等价于开发机上的 scripts/sync-lanes.sh（它读
       # /mnt/hdd 的本地引擎；CI 从公开引擎仓取同一份 site/ 树）。
+      # 复刻 scripts/sync-bridge.sh + sync-lanes.sh 的产物布局（本地能跑的 dist 结构）：
+      #   public/w64/          ← 默认车道二进制（引擎按站点根取 w64/octave.wasm）
+      #   public/bridge/        ← 胶水 + w64/ + assets/（引擎 baseOf() 指向 bridge/）
+      #   public/{*.js,w64,assets} ← 根级平铺（本地是软链到 bridge/，Pages 用实拷贝）
+      #   public/lanes/<lane>/  ← 三条工作区车道全树（UI 车道切换器）
+      # 之前只放了 lanes/，缺根级 w64/ ⇒ 引擎取 w64/octave.wasm 得 404、根本起不来。
       - name: Sync engine lanes and bridge glue
         run: |
           set -euo pipefail
           git -C .engine fetch -q origin wasm32-final master IllegalPerformance
+          ex() { git -C .engine archive "origin/$1" site; }
+          mkdir -p public/bridge public/lanes
           for lane in wasm32-final master IllegalPerformance; do
             mkdir -p "public/lanes/$lane"
-            git -C .engine archive "origin/$lane" site | tar -x -C /tmp/_lane --strip-components=1 2>/dev/null || {
-              rm -rf /tmp/_lane; mkdir -p /tmp/_lane
-              git -C .engine archive "origin/$lane" site | tar -x -C /tmp/_lane --strip-components=1
-            }
-            cp -rf /tmp/_lane/. "public/lanes/$lane/"
-            rm -rf /tmp/_lane
+            ex "$lane" | tar -x --strip-components=1 -C "public/lanes/$lane"
           done
-          # 桥接胶水（assets-loader/lane(s)/octave-*.js 等）取自一档 site 根
-          mkdir -p public/bridge
-          git -C .engine archive origin/IllegalPerformance site | tar -x -C /tmp/_b --strip-components=1 2>/dev/null || {
-            rm -rf /tmp/_b; mkdir -p /tmp/_b
-            git -C .engine archive origin/IllegalPerformance site | tar -x -C /tmp/_b --strip-components=1
-          }
-          for f in assets-loader.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js octave-core.js octave-page.js octave-embed.js lane.js lanes.js octave-worker.js; do
-            [ -f "/tmp/_b/$f" ] && cp -f "/tmp/_b/$f" public/bridge/ || true
-          done
-          rm -rf /tmp/_b
-          echo "lanes:"; ls public/lanes; echo "bridge:"; ls public/bridge | head
+          rm -rf /tmp/site && mkdir -p /tmp/site
+          ex IllegalPerformance | tar -x --strip-components=1 -C /tmp/site
+          # 默认引擎树（bridge/ + 站点根）
+          cp -rf /tmp/site/. public/bridge/
+          cp -f  /tmp/site/*.js public/ 2>/dev/null || true
+          cp -f  /tmp/site/embed-demo.html public/ 2>/dev/null || true
+          rm -rf public/w64 && cp -rf /tmp/site/w64 public/w64
+          mkdir -p public/assets && cp -rf /tmp/site/assets/. public/assets/ 2>/dev/null || true
+          echo "== root =="; ls public | head -40
+          echo "== w64 =="; ls public/w64 | head
+          test -f public/w64/octave.wasm && echo "OK: public/w64/octave.wasm present"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
