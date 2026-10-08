@@ -100,6 +100,9 @@ export const en = {
   'boot.cancel': 'Cancel',
   'boot.start': 'Start Engine Now',
   'boot.starting': 'Starting...',
+  'boot.coi_warning_title': 'Cross-Origin Isolation (COOP/COEP) Not Enabled',
+  'boot.coi_warning_desc': 'Host lacks cross-origin isolation headers. Multi-threaded lane ({lane}) cannot boot. We recommend switching to the universal wasm32-final single-threaded lane.',
+  'boot.coi_switch_btn': 'Switch to wasm32-final Compatible Lane',
 
   // Figure Warning Modal
   'figure.title': '⚠️ E6 GL Plot Boundary Intercept',

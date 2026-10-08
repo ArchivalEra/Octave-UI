@@ -13,11 +13,15 @@
   let errorMsg = $state<string | null>(null);
 
   let activeLane = $state(projectWorkspace.activeLane);
+  let isCoiAvailable = $state(true);
 
   $effect(() => {
     const unsub = projectWorkspace.subscribe(() => {
       activeLane = projectWorkspace.activeLane;
     });
+    if (typeof window !== 'undefined') {
+      isCoiAvailable = window.crossOriginIsolated === true;
+    }
     return unsub;
   });
 
@@ -105,6 +109,25 @@
           </div>
         </div>
 
+        {#if !isCoiAvailable && activeLane !== 'wasm32-final'}
+          <div class="warning-box">
+            <div class="warning-header">
+              <span class="warning-icon">⚠️</span>
+              <strong>{t('boot.coi_warning_title')}</strong>
+            </div>
+            <p class="warning-text">
+              {t('boot.coi_warning_desc', { lane: activeLane })}
+            </p>
+            <button
+              type="button"
+              class="btn-switch-lane"
+              onclick={() => { projectWorkspace.selectLane('wasm32-final'); errorMsg = null; }}
+            >
+              🔄 {t('boot.coi_switch_btn')}
+            </button>
+          </div>
+        {/if}
+
         <div class="status-box">
           <div class="status-indicator" class:loading={booting}></div>
           <span class="status-info">
@@ -124,7 +147,16 @@
 
         {#if errorMsg}
           <div class="error-box">
-            {errorMsg}
+            <div class="error-text">{errorMsg}</div>
+            {#if activeLane !== 'wasm32-final'}
+              <button
+                type="button"
+                class="btn-switch-lane error-btn"
+                onclick={() => { projectWorkspace.selectLane('wasm32-final'); errorMsg = null; }}
+              >
+                🔄 {t('boot.coi_switch_btn')}
+              </button>
+            {/if}
           </div>
         {/if}
       </div>
@@ -254,6 +286,64 @@
     to { opacity: 1; transform: scale(1.1); }
   }
 
+  .warning-box {
+    padding: 10px 12px;
+    background: rgba(234, 179, 8, 0.12);
+    border: 1px solid rgba(234, 179, 8, 0.4);
+    border-radius: 6px;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .warning-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #eab308;
+  }
+
+  .warning-text {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .btn-switch-lane {
+    align-self: flex-start;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 500;
+  }
+
+  .btn-switch-lane:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-muted);
+  }
+
+  .btn-switch-lane.error-btn {
+    margin-top: 4px;
+    background: var(--bg-surface);
+    border-color: var(--accent-danger);
+    color: var(--accent-danger);
+  }
+
+  .btn-switch-lane.error-btn:hover {
+    background: rgba(248, 81, 73, 0.15);
+  }
+
   .error-box {
     padding: 8px 12px;
     background: rgba(248, 81, 73, 0.15);
@@ -261,6 +351,9 @@
     color: var(--accent-danger);
     border-radius: 6px;
     font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .modal-footer {

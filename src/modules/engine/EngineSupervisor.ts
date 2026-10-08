@@ -128,19 +128,31 @@ export class EngineSupervisor {
   }
 
 
-  static checkPreflight(): { ok: boolean; reason?: string } {
+  static checkPreflight(lane: EngineLane = 'wasm32-final'): { ok: boolean; reason?: string } {
     if (typeof window !== 'undefined') {
-      if (!window.crossOriginIsolated) {
+      if (typeof WebAssembly === 'undefined') {
         return {
           ok: false,
-          reason: '跨源隔离 (crossOriginIsolated) 未启用，无法启用多线程与 SharedArrayBuffer。请检查 COOP/COEP 响应头。',
+          reason: '当前运行环境不支持 WebAssembly，无法运行任何 Octave 引擎。',
         };
       }
-      if (typeof SharedArrayBuffer === 'undefined') {
-        return {
-          ok: false,
-          reason: '环境不支持 SharedArrayBuffer，无法启动多线程 Wasm 引擎。',
-        };
+
+      // 仅多线程档位 (master / IllegalPerformance) 强制要求 COI 与 SharedArrayBuffer
+      // wasm32-final 属于 32 位单线程通用兼容档，在无 COI (静态网页托管 / GitHub Pages) 环境下可直接运行
+      const requiresMultiThreading = lane !== 'wasm32-final';
+      if (requiresMultiThreading) {
+        if (!window.crossOriginIsolated) {
+          return {
+            ok: false,
+            reason: `当前档位 (${lane}) 需要多线程与跨源隔离 (crossOriginIsolated)。当前环境未启用 COI (缺少 COOP/COEP 响应头)，请切换至 wasm32-final 基础单线程兼容档。`,
+          };
+        }
+        if (typeof SharedArrayBuffer === 'undefined') {
+          return {
+            ok: false,
+            reason: `当前档位 (${lane}) 需要 SharedArrayBuffer 多线程支持。当前环境不可用，请切换至 wasm32-final 基础单线程兼容档。`,
+          };
+        }
       }
     }
     return { ok: true };
@@ -202,17 +214,17 @@ export class EngineSupervisor {
   }
 
   async boot(opts: BootOptions & { skipPreflight?: boolean } = {}): Promise<void> {
+    const effectiveLane = opts.lane || this._currentLane;
+    this._currentLane = effectiveLane;
+
     const shouldSkip = opts.skipPreflight ?? this._skipPreflight;
     if (!shouldSkip) {
-      const preflight = EngineSupervisor.checkPreflight();
+      const preflight = EngineSupervisor.checkPreflight(effectiveLane);
       if (!preflight.ok) {
         this._setState('failed', 'boot-failed');
         throw new Error(`Preflight check failed: ${preflight.reason}`);
       }
     }
-
-    const effectiveLane = opts.lane || this._currentLane;
-    this._currentLane = effectiveLane;
 
     this._setState('booting');
 

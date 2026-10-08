@@ -101,6 +101,9 @@ const _de = {
   'boot.cancel': 'Abbrechen',
   'boot.start': 'Engine jetzt starten',
   'boot.starting': 'Wird gestartet…',
+  'boot.coi_warning_title': 'Cross-Origin Isolation (COOP/COEP) nicht aktiv',
+  'boot.coi_warning_desc': 'Dem Host fehlen COOP/COEP-Header. Die Multithread-Spur ({lane}) kann nicht gestartet werden. Bitte wechseln Sie zur kompatiblen Single-Thread-Spur wasm32-final.',
+  'boot.coi_switch_btn': 'Zu wasm32-final Kompatibilitätsspur wechseln',
 
   // Figure Warning Modal
   'figure.title': '⚠️ E6 GL Plot-Sicherheitsabfangung',

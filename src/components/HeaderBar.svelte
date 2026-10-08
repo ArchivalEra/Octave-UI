@@ -27,6 +27,7 @@
   let currentLocale = $state<Locale>(i18n.currentLocale);
   let isDirectoryMounted = $state<boolean>(projectWorkspace.isDirectoryMounted);
   let directoryName = $state<string | null>(projectWorkspace.directoryName);
+  let isCoiAvailable = $state(true);
 
   let menuOpen = $state(false);
   let paletteOpen = $state(false);
@@ -71,6 +72,7 @@
 
     if (typeof window !== 'undefined') {
       window.addEventListener('click', handleClickOutside);
+      isCoiAvailable = window.crossOriginIsolated === true;
     }
 
     return () => {
@@ -425,7 +427,12 @@
                 onclick={() => handleSwitchLane('master')}
               >
                 <div class="choice-text">
-                  <span class="choice-title">master</span>
+                  <span class="choice-title">
+                    master
+                    {#if !isCoiAvailable}
+                      <span class="coi-pill" title="需要宿主配置 COOP/COEP 跨源隔离响应头">(需 COI)</span>
+                    {/if}
+                  </span>
                   <span class="choice-desc">{t('header.lane_master_desc')}</span>
                 </div>
                 {#if currentLane === 'master'}
@@ -441,7 +448,12 @@
                 onclick={() => handleSwitchLane('IllegalPerformance')}
               >
                 <div class="choice-text">
-                  <span class="choice-title">IllegalPerformance</span>
+                  <span class="choice-title">
+                    IllegalPerformance
+                    {#if !isCoiAvailable}
+                      <span class="coi-pill" title="需要宿主配置 COOP/COEP 跨源隔离响应头">(需 COI)</span>
+                    {/if}
+                  </span>
                   <span class="choice-desc">{t('header.lane_illegal_desc')}</span>
                 </div>
                 {#if currentLane === 'IllegalPerformance'}
@@ -847,6 +859,19 @@
     font-size: 0.85rem;
     font-weight: 700;
     color: var(--md-sys-color-on-surface);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .coi-pill {
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-danger, #ef4444);
+    font-weight: 600;
+    line-height: 1.2;
   }
 
   .choice-desc {

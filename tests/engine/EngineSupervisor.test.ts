@@ -48,16 +48,53 @@ describe('EngineSupervisor Deep Module', () => {
     expect(states[states.length - 1]).toBe('idle');
   });
 
-  it('fails preflight check when crossOriginIsolated or SharedArrayBuffer is missing', async () => {
-    // Mock browser window lacking crossOriginIsolated
+  it('allows wasm32-final without COI, but fails preflight for multi-threaded lanes when COI is missing', async () => {
     const originalWindow = (globalThis as any).window;
     try {
       (globalThis as any).window = { crossOriginIsolated: false };
-      const sup = new EngineSupervisor({ skipPreflight: false });
 
-      await expect(sup.boot()).rejects.toThrow(/crossOriginIsolated/);
-      expect(sup.state).toBe('failed');
+      // 1. wasm32-final 单线程基线档：在无 COI 静态环境下预检必须放行，且能正常启动至 idle
+      const checkWasm32 = EngineSupervisor.checkPreflight('wasm32-final');
+      expect(checkWasm32.ok).toBe(true);
+
+      const supWasm32 = new EngineSupervisor({ skipPreflight: false });
+      await supWasm32.boot({ lane: 'wasm32-final' });
+      expect(supWasm32.state).toBe('idle');
+
+      // 2. 多线程档位 (master / IllegalPerformance)：缺少 COI 必须被预检严格拦截并报错
+      const checkMaster = EngineSupervisor.checkPreflight('master');
+      expect(checkMaster.ok).toBe(false);
+      expect(checkMaster.reason).toMatch(/crossOriginIsolated/);
+      expect(checkMaster.reason).toMatch(/wasm32-final/);
+
+      const checkIllegal = EngineSupervisor.checkPreflight('IllegalPerformance');
+      expect(checkIllegal.ok).toBe(false);
+      expect(checkIllegal.reason).toMatch(/crossOriginIsolated/);
+
+      const supMaster = new EngineSupervisor({ skipPreflight: false });
+      await expect(supMaster.boot({ lane: 'master' })).rejects.toThrow(/crossOriginIsolated/);
+      expect(supMaster.state).toBe('failed');
     } finally {
+      if (originalWindow !== undefined) {
+        (globalThis as any).window = originalWindow;
+      } else {
+        delete (globalThis as any).window;
+      }
+    }
+  });
+
+  it('fails preflight for all lanes when WebAssembly is unsupported', () => {
+    const originalWA = (globalThis as any).WebAssembly;
+    const originalWindow = (globalThis as any).window;
+    try {
+      (globalThis as any).window = { crossOriginIsolated: true };
+      delete (globalThis as any).WebAssembly;
+
+      expect(EngineSupervisor.checkPreflight('wasm32-final').ok).toBe(false);
+      expect(EngineSupervisor.checkPreflight('wasm32-final').reason).toMatch(/WebAssembly/);
+      expect(EngineSupervisor.checkPreflight('master').ok).toBe(false);
+    } finally {
+      (globalThis as any).WebAssembly = originalWA;
       if (originalWindow !== undefined) {
         (globalThis as any).window = originalWindow;
       } else {

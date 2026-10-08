@@ -101,6 +101,9 @@ const _zhHans = {
   'boot.cancel': '取消',
   'boot.start': '立即启动引擎',
   'boot.starting': '正在启动…',
+  'boot.coi_warning_title': '宿主环境未启用跨源隔离 (COOP/COEP)',
+  'boot.coi_warning_desc': '当前宿主未配置跨源隔离响应头，多线程档位 ({lane}) 无法正常启动。建议切换至 wasm32-final 基础单线程兼容档。',
+  'boot.coi_switch_btn': '一键切换至 wasm32-final 兼容档',
 
   // Figure Warning Modal
   'figure.title': '⚠️ E6 GL 绘图边界安全拦截',

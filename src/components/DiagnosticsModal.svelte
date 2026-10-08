@@ -77,7 +77,7 @@
           <div class="meta-item">
             <span class="label">{t('diagnostics.coi_status')}</span>
             <span class="val" class:pass={coiStatus} class:fail={!coiStatus}>
-              {coiStatus ? 'TRUE (COOP/COEP Active)' : 'FALSE (Degraded)'}
+              {coiStatus ? 'TRUE (COOP/COEP Active)' : 'FALSE (仅支持 wasm32-final 单线程档)'}
             </span>
           </div>
 
@@ -88,6 +88,12 @@
             </span>
           </div>
         </div>
+
+        {#if !coiStatus}
+          <div class="coi-notice">
+            <span>ℹ️ 当前未启用跨源隔离 (COOP/COEP)。<strong>wasm32-final</strong> 基础单线程兼容档不受影响、完全可用；多线程档位 (<strong>master</strong> / <strong>IllegalPerformance</strong>) 需宿主配置跨源隔离响应头。</span>
+          </div>
+        {/if}
 
         <div class="lane-switcher-box">
           <h3 class="box-title">{t('diagnostics.lane_specs')}</h3>
@@ -248,6 +254,16 @@
 
   .font-mono {
     font-family: var(--font-mono, monospace);
+  }
+
+  .coi-notice {
+    padding: 8px 12px;
+    background: rgba(56, 139, 253, 0.08);
+    border: 1px solid rgba(56, 139, 253, 0.25);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.45;
   }
 
   .lane-switcher-box {
