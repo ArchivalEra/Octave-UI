@@ -195,11 +195,11 @@ export const en = {
   'header.font_size_reset': 'Reset to default font size (14px)',
   'header.font_size_slider': 'Font Size (12px - 20px)',
   'header.font_size_presets': 'Preset Sizes',
-  'header.font_size_small': 'Small (12px)',
-  'header.font_size_standard': 'Default (14px)',
-  'header.font_size_medium': 'Medium (16px)',
-  'header.font_size_large': 'Large (18px)',
-  'header.font_size_huge': 'Extra Large (20px)',
+  'header.font_size_small': 'Small',
+  'header.font_size_standard': 'Default',
+  'header.font_size_medium': 'Medium',
+  'header.font_size_large': 'Large',
+  'header.font_size_huge': 'XL',
 
   // Workbench additions
   'workbench.mount_local_dir': 'Open Local Folder',

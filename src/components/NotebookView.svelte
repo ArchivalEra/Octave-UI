@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { projectWorkspace, supervisor, i18n, t } from '../modules/appContext';
+  import { projectWorkspace, supervisor, themeManager, i18n, t } from '../modules/appContext';
   import type { Locale } from '../modules/i18n/types';
   import type { ProjectCell } from '../modules/workspace/ProjectWorkspace';
   import type {
@@ -21,6 +21,9 @@
   let isMounted = $state<boolean>(projectWorkspace.isDirectoryMounted);
   let directoryName = $state<string | null>(projectWorkspace.directoryName);
 
+  // 追踪所有挂载的文本框重算回调，以便全站字号缩放或窗口变化时即时响应
+  const activeTextareaResizers = new Set<() => void>();
+
   $effect(() => {
     const unsubPw = projectWorkspace.subscribe(() => {
       cells = projectWorkspace.cells;
@@ -32,29 +35,49 @@
     const unsubI18n = i18n.subscribe((loc) => {
       currentLocale = loc;
     });
+    // 当调色板修改全站字号或主题时，通知所有文本框重新测量高度
+    const unsubTheme = themeManager.subscribe(() => {
+      requestAnimationFrame(() => {
+        activeTextareaResizers.forEach((resize) => resize());
+      });
+    });
     return () => {
       unsubPw();
       unsubI18n();
+      unsubTheme();
     };
   });
 
-  function autoResize(node: HTMLTextAreaElement) {
+  function autoResize(node: HTMLTextAreaElement, _dep?: any) {
     function resize() {
       node.style.height = 'auto';
-      node.style.height = `${node.scrollHeight}px`;
+      const borderOffset = node.offsetHeight - node.clientHeight;
+      const targetHeight = Math.ceil(node.scrollHeight + borderOffset + 2);
+      node.style.height = `${targetHeight}px`;
     }
-    // 初次挂载或更新时自适应撑开
+
+    activeTextareaResizers.add(resize);
+    resize();
     requestAnimationFrame(resize);
-    const observer = new ResizeObserver(resize);
+
+    const observer = new ResizeObserver(() => {
+      resize();
+    });
     observer.observe(node);
+
     node.addEventListener('input', resize);
+    window.addEventListener('resize', resize);
+
     return {
       update() {
         resize();
+        requestAnimationFrame(resize);
       },
       destroy() {
+        activeTextareaResizers.delete(resize);
         observer.disconnect();
         node.removeEventListener('input', resize);
+        window.removeEventListener('resize', resize);
       },
     };
   }
@@ -238,7 +261,7 @@
           <!-- 小节注释 (% Comments) -->
           {#if cell.description || cell.status === 'idle'}
             <textarea
-              use:autoResize
+              use:autoResize={cell.description}
               class="section-desc-input"
               value={cell.description}
               placeholder={t('workbench.section_desc_placeholder')}
@@ -249,7 +272,7 @@
           <!-- 代码输入区 -->
           <div class="cell-editor-box">
             <textarea
-              use:autoResize
+              use:autoResize={cell.code}
               class="code-input"
               value={cell.code}
               placeholder={t('workbench.empty_placeholder')}
@@ -551,17 +574,17 @@
 
   .code-input {
     flex: 1;
+    box-sizing: border-box;
     background: var(--bg-surface-hover);
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
-    padding: 10px;
+    padding: 10px 12px;
     font-family: var(--font-mono, monospace);
     font-size: 0.875rem;
     color: var(--text-main);
     outline: none;
-    line-height: 1.4;
+    line-height: 1.5;
     resize: none;
-    field-sizing: content;
     min-height: 3.5rem;
     overflow-y: hidden;
   }
@@ -890,17 +913,17 @@
   }
 
   .section-desc-input {
+    box-sizing: border-box;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--border-subtle);
     border-radius: 4px;
     color: var(--text-muted);
-    font-size: 0.8rem;
-    padding: 6px 8px;
-    line-height: 1.4;
+    font-size: 0.85rem;
+    padding: 8px 10px;
+    line-height: 1.5;
     outline: none;
     resize: none;
-    field-sizing: content;
-    min-height: 2rem;
+    min-height: 2.2rem;
     overflow-y: hidden;
   }
 

@@ -196,11 +196,11 @@ const _de = {
   'header.font_size_reset': 'Auf Standardgröße zurücksetzen (14px)',
   'header.font_size_slider': 'Schriftgröße (12px - 20px)',
   'header.font_size_presets': 'Größenvorlagen',
-  'header.font_size_small': 'Klein (12px)',
-  'header.font_size_standard': 'Standard (14px)',
-  'header.font_size_medium': 'Mittel (16px)',
-  'header.font_size_large': 'Groß (18px)',
-  'header.font_size_huge': 'Sehr groß (20px)',
+  'header.font_size_small': 'Klein',
+  'header.font_size_standard': 'Standard',
+  'header.font_size_medium': 'Mittel',
+  'header.font_size_large': 'Groß',
+  'header.font_size_huge': 'Riesig',
 
   // Workbench additions
   'workbench.mount_local_dir': 'Lokalen Ordner öffnen',

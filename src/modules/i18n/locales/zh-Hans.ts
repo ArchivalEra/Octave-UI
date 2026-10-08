@@ -196,11 +196,11 @@ const _zhHans = {
   'header.font_size_reset': '重置为默认字号 (14px)',
   'header.font_size_slider': '字号微调 (12px - 20px)',
   'header.font_size_presets': '预设字号',
-  'header.font_size_small': '小 (12px)',
-  'header.font_size_standard': '标准 (14px)',
-  'header.font_size_medium': '中等 (16px)',
-  'header.font_size_large': '大 (18px)',
-  'header.font_size_huge': '特大 (20px)',
+  'header.font_size_small': '小',
+  'header.font_size_standard': '标准',
+  'header.font_size_medium': '中等',
+  'header.font_size_large': '大',
+  'header.font_size_huge': '特大',
 
   // Workbench additions
   'workbench.mount_local_dir': '打开本地目录',

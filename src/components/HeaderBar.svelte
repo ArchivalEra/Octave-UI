@@ -42,14 +42,6 @@
     { name: '朱砂红', hue: 355 },
   ];
 
-  const PRESET_FONT_SIZES = [
-    { labelKey: 'header.font_size_small', size: 12 },
-    { labelKey: 'header.font_size_standard', size: 14 },
-    { labelKey: 'header.font_size_medium', size: 16 },
-    { labelKey: 'header.font_size_large', size: 18 },
-    { labelKey: 'header.font_size_huge', size: 20 },
-  ];
-
   $effect(() => {
     const unsubState = supervisor.onStateChange((s) => {
       state = s;
@@ -135,10 +127,6 @@
   function handleFontSizeChange(e: Event) {
     const val = parseInt((e.target as HTMLInputElement).value, 10);
     themeManager.setFontSize(val);
-  }
-
-  function selectFontSize(size: number) {
-    themeManager.setFontSize(size);
   }
 
   function resetFontSize() {
@@ -366,21 +354,6 @@
               oninput={handleFontSizeChange}
               class="font-range-slider"
             />
-          </div>
-          <div class="presets-section">
-            <span class="presets-label">{t('header.font_size_presets')}</span>
-            <div class="font-presets-grid">
-              {#each PRESET_FONT_SIZES as item}
-                <button
-                  type="button"
-                  class="font-preset-btn"
-                  class:active={currentFontSize === item.size}
-                  onclick={() => selectFontSize(item.size)}
-                >
-                  <span class="preset-name">{t(item.labelKey)}</span>
-                </button>
-              {/each}
-            </div>
           </div>
         </div>
       {/if}
@@ -1007,13 +980,16 @@
 
   /* Palette Popover */
   .palette-popover {
-    width: 300px;
+    width: 320px;
+    max-width: calc(100vw - 20px);
+    box-sizing: border-box;
     padding: 1.1rem;
     display: flex;
     flex-direction: column;
     gap: 0.85rem;
     max-height: calc(100vh - 80px);
     overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .popover-header {
@@ -1191,39 +1167,6 @@
     border: 2px solid #ffffff;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
     cursor: pointer;
-  }
-
-  .font-presets-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 0.25rem;
-  }
-
-  .font-preset-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--md-sys-color-surface-container);
-    border: 1px solid var(--md-sys-color-outline-variant);
-    padding: 0.35rem 0.15rem;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.7rem;
-    color: var(--md-sys-color-on-surface);
-    transition: all 0.15s;
-    text-align: center;
-  }
-
-  .font-preset-btn:hover {
-    background-color: var(--md-sys-color-surface-container-high);
-    border-color: var(--md-sys-color-primary);
-  }
-
-  .font-preset-btn.active {
-    border-color: var(--md-sys-color-primary);
-    background-color: var(--md-sys-color-primary-container);
-    color: var(--md-sys-color-on-primary-container);
-    font-weight: 700;
   }
 
   /* 移动端深度优化：隐藏次要文字，防止拥挤 */
