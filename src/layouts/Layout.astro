@@ -29,6 +29,66 @@ const base = import.meta.env.BASE_URL;
     <script is:inline set:html={themeAntiFlashScript} />
     <script is:inline set:html={i18nAntiFlashScript} />
 
+    <!-- —— 部署侧分片取数 shim（EdgeOne 甜点 ~5MB/片）——
+         引擎把 octave.wasm(~31MB) 当一次 GET 整包取；客户端↔EdgeOne 传 31MB 单块极慢
+         （实测 ~0.7MB/s、~42s），而本站实测 ~5MB 分片是甜点。边缘中间件已支持 Range→206，
+         这里把引擎对 .wasm/.data 的 GET 拆成 5MB 顺序分片、以 ReadableStream 拼回一体，
+         对引擎完全透明（它只看到一次 fetch）。边缘不支持 Range 时自动退回整包。
+         纯部署侧优化，不改引擎/接口；若不想要，删本 script 即恢复原状。 -->
+    <script is:inline>
+      (function () {
+        try {
+          var CHUNK = 5 * 1024 * 1024;
+          var origFetch = window.fetch.bind(window);
+          function bigBinary(u) {
+            try { return /\.(wasm|data)(?:[?#]|$)/i.test(String(u)); } catch (e) { return false; }
+          }
+          function mergeHeaders(a, b) {
+            var h = {};
+            try {
+              if (a instanceof Headers) { a.forEach(function (v, k) { h[k] = v; }); }
+              else if (a) { for (var k in a) { h[k] = a[k]; } }
+            } catch (e) { /* ignore */ }
+            for (var k2 in b) { h[k2] = b[k2]; }
+            return h;
+          }
+          window.fetch = function (input, init) {
+            var u = typeof input === "string" ? input : (input && input.url);
+            var method = (init && init.method) || "GET";
+            var hasRange = init && init.headers && /range/i.test(String(init.headers));
+            if (!u || method !== "GET" || hasRange || !bigBinary(u)) { return origFetch(input, init); }
+            var baseHeaders = (init && init.headers) || {};
+            var stream = new ReadableStream({
+              start: function (controller) {
+                var pos = 0, total = null, done = false;
+                function fetchSlice() {
+                  var end = pos + CHUNK - 1;
+                  origFetch(u, { headers: mergeHeaders(baseHeaders, { Range: "bytes=" + pos + "-" + end }) })
+                    .then(function (r) {
+                      if (r.status !== 206) {
+                        return r.arrayBuffer().then(function (b) { controller.enqueue(new Uint8Array(b)); done = true; });
+                      }
+                      var cr = r.headers.get("content-range");
+                      if (cr) { var m = /\/(\d+)\s*$/.exec(cr); if (m) { total = parseInt(m[1], 10); } }
+                      return r.arrayBuffer().then(function (b) {
+                        if (b.byteLength === 0) { done = true; return; }
+                        controller.enqueue(new Uint8Array(b));
+                        pos += b.byteLength;
+                        if (b.byteLength < CHUNK || (total !== null && pos >= total)) { done = true; }
+                      });
+                    })
+                    .then(function () { if (done) { controller.close(); } else { fetchSlice(); } })
+                    .catch(function (e) { controller.error(e); });
+                }
+                fetchSlice();
+              }
+            });
+            return Promise.resolve(new Response(stream, { status: 200, headers: { "Content-Type": "application/wasm" } }));
+          };
+        } catch (e) { /* shim 失败不致命：退回单次整包 fetch */ }
+      })();
+    </script>
+
     <!-- 静态引入上游胶水脚本（直通 public/bridge/，不经 Vite 打包混淆） -->
     <script is:inline src={`${base}bridge/assets-loader.js`}></script>
     <script is:inline src={`${base}bridge/queue.js`}></script>
