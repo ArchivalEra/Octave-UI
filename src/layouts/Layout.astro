@@ -11,6 +11,9 @@ interface Props {
 const { title = 'GNU Octave WebAssembly UI' } = Astro.props;
 const themeAntiFlashScript = ThemeManager.getAntiFlashScript();
 const i18nAntiFlashScript = I18nManager.getAntiFlashScript();
+// 站点可能部署在子路径（isui.ren/repo/Octave/）；所有站点资源引用走 base，
+// 不能硬编码根绝对路径（否则子路径下 404）。
+const base = import.meta.env.BASE_URL;
 ---
 
 <!doctype html>
@@ -19,7 +22,7 @@ const i18nAntiFlashScript = I18nManager.getAntiFlashScript();
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="GNU Octave 11.3.0 纯客户端 WebAssembly (Wasm64 + Pthreads) 交互前端" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
     <title>{title}</title>
 
     <!-- 防闪烁内联脚本：在 DOM 绘制前确定主题与语言 -->
@@ -27,18 +30,18 @@ const i18nAntiFlashScript = I18nManager.getAntiFlashScript();
     <script is:inline set:html={i18nAntiFlashScript} />
 
     <!-- 静态引入上游胶水脚本（直通 public/bridge/，不经 Vite 打包混淆） -->
-    <script is:inline src="/bridge/assets-loader.js"></script>
-    <script is:inline src="/bridge/queue.js"></script>
-    <script is:inline src="/bridge/p5canvas.js"></script>
-    <script is:inline src="/bridge/webaudio.js"></script>
-    <script is:inline src="/bridge/webaudiorec.js"></script>
-    <script is:inline src="/bridge/webfilepick.js"></script>
-    <script is:inline src="/bridge/webnet.js"></script>
-    <script is:inline src="/bridge/octave-core.js"></script>
-    <script is:inline src="/bridge/octave-page.js"></script>
-    <script is:inline src="/bridge/octave-embed.js"></script>
-    <script is:inline src="/bridge/lanes.js"></script>
-    <script is:inline src="/bridge/lane.js"></script>
+    <script is:inline src={`${base}bridge/assets-loader.js`}></script>
+    <script is:inline src={`${base}bridge/queue.js`}></script>
+    <script is:inline src={`${base}bridge/p5canvas.js`}></script>
+    <script is:inline src={`${base}bridge/webaudio.js`}></script>
+    <script is:inline src={`${base}bridge/webaudiorec.js`}></script>
+    <script is:inline src={`${base}bridge/webfilepick.js`}></script>
+    <script is:inline src={`${base}bridge/webnet.js`}></script>
+    <script is:inline src={`${base}bridge/octave-core.js`}></script>
+    <script is:inline src={`${base}bridge/octave-page.js`}></script>
+    <script is:inline src={`${base}bridge/octave-embed.js`}></script>
+    <script is:inline src={`${base}bridge/lanes.js`}></script>
+    <script is:inline src={`${base}bridge/lane.js`}></script>
     <script is:inline>
       if (typeof window !== 'undefined' && typeof octaveLaneFiles === 'function' && typeof octaveLaneState !== 'undefined') {
         window.__octaveLanePlan = octaveLaneFiles(octaveLaneState.lane);
