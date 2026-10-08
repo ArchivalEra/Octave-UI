@@ -45,8 +45,6 @@ function cmdBase() {
 
 // ───────────────────────── adapt（构建后） ─────────────────────────
 /** 5MB 分片取数 shim：引擎整包 GET → Range 分片（3 片并行、按序拼接），对引擎透明。 */
-// 分片取数 + 解压 shim：独立文件，便于单独语法检查与审阅（契约只负责注入）。
-const SHIM = fs.readFileSync(new URL("./chunk-shim.js", import.meta.url), "utf8").trim();
 
 function walk(dir, ext) {
   const out = [];
@@ -109,7 +107,6 @@ function cmdAdapt() {
 
   // HTML：属性前缀 + base 信号 + 分片 shim
   let rewrote = 0;
-  let injected = 0;
   let baseSignals = 0;
   for (const file of walk(DIST, ".html")) {
     let html = fs.readFileSync(file, "utf8");
@@ -122,15 +119,6 @@ function cmdAdapt() {
     const bs = injectBaseSignal(html);
     if (bs.injected && bs.out !== html) baseSignals += 1;
     html = bs.out;
-    if (!html.includes("__octaveChunkShim")) {
-      const idx = html.indexOf("</head>");
-      if (idx === -1) {
-        console.error(`[contract:adapt] ${file} 缺 </head>，无法注入 shim`);
-        process.exit(1);
-      }
-      html = `${html.slice(0, idx)}<script>${SHIM}</script>\n${html.slice(idx)}`;
-      injected += 1;
-    }
     if (html !== before) fs.writeFileSync(file, html);
   }
 
@@ -145,7 +133,7 @@ function cmdAdapt() {
     }
   }
   console.log(
-    `[contract:adapt] HTML 属性 ${rewrote} 处；JS 字面量 ${jsFixed} 处；base 信号 ${baseSignals} 页；shim ${injected} 页`,
+    `[contract:adapt] HTML 属性 ${rewrote} 处；JS 字面量 ${jsFixed} 处；base 信号 ${baseSignals} 页`,
   );
 }
 
@@ -168,7 +156,6 @@ function cmdVerify() {
   const idx = fs.readFileSync(path.join(DIST, "index.html"), "utf8");
   const problems = [];
   if (!idx.includes(`${BASE}bridge/`)) problems.push("index.html 未见部署前缀引用");
-  if (!idx.includes("__octaveChunkShim")) problems.push("index.html 缺分片 shim");
   const stale = walk(DIST, ".html").filter((f) =>
     /(?:href|src)=["']\/(?:w64|bridge|lanes|assets|_astro)\//.test(fs.readFileSync(f, "utf8")),
   );
