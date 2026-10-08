@@ -9,6 +9,8 @@ export default defineConfig({
   root: __dirname,
   outDir: path.resolve(__dirname, 'dist'),
   output: 'static',
+  // 子路径部署（isui.ren/repo/Octave/）：所有站点资源 URL 均带上此前缀
+  base: '/repo/Octave/',
   integrations: [svelte()],
   vite: {
     server: {
