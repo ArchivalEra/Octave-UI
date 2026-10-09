@@ -169,6 +169,18 @@ export const en = {
   'examples.recipe_matrix_eig_desc': 'Compute eigenvectors and diagonal eigenvalue matrix for symmetric matrices.',
   'examples.recipe_poly_fit_title': 'Polynomial Curve Fitting',
   'examples.recipe_poly_fit_desc': 'Fit parabolic curve coefficients against empirical data points.',
+  'examples.recipe_rc_transient_title': 'RC Charging Transient (Euler)',
+  'examples.recipe_rc_transient_desc': 'Numerically integrate the first-order RC charging process and observe the time constant.',
+  'examples.recipe_rlc_underdamped_title': 'Underdamped RLC Oscillation',
+  'examples.recipe_rlc_underdamped_desc': 'Second-order RLC underdamped response: decaying oscillation vs. exponential envelope.',
+  'examples.recipe_square_fourier_title': 'Fourier Series of a Square Wave',
+  'examples.recipe_square_fourier_desc': 'Synthesize a square wave by summing odd harmonics and see where Gibbs ringing comes from.',
+  'examples.recipe_sampling_alias_title': 'Sampling & Aliasing',
+  'examples.recipe_sampling_alias_desc': 'Show how undersampling folds a high frequency into a low alias frequency.',
+  'examples.recipe_hilbert_cond_title': 'Hilbert Matrix Condition Numbers',
+  'examples.recipe_hilbert_cond_desc': 'Condition numbers of Hilbert matrices explode with order — a lesson in numerical ill-conditioning.',
+  'examples.recipe_clt_histogram_title': 'Central Limit Theorem Histogram',
+  'examples.recipe_clt_histogram_desc': 'Means of many uniform samples approach a normal distribution.',
 
   // Diagnostics Modal
   'diagnostics.title': 'Engine & Lane Diagnostics',

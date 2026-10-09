@@ -25,6 +25,18 @@ describe('GallerySearchPlugin & S26-1 Algorithm Reference', () => {
       'examples.recipe_matrix_eig_desc': '计算对称方阵的特征向量矩阵与特征值对角阵。',
       'examples.recipe_poly_fit_title': '多项式曲线拟合 (polyfit)',
       'examples.recipe_poly_fit_desc': '针对实验散点数据拟合二次抛物线多项式系数。',
+      'examples.recipe_rc_transient_title': 'RC 电路充电暂态（欧拉法）',
+      'examples.recipe_rc_transient_desc': '欧拉法数值求解一阶 RC 电路充电过程，观察时间常数 τ 的物理意义。',
+      'examples.recipe_rlc_underdamped_title': 'RLC 欠阻尼振荡',
+      'examples.recipe_rlc_underdamped_desc': '二阶 RLC 电路欠阻尼响应：衰减振荡与指数包络对照。',
+      'examples.recipe_square_fourier_title': '方波傅里叶级数合成',
+      'examples.recipe_square_fourier_desc': '奇次谐波逐项叠加合成方波，直观看到吉布斯现象的来源。',
+      'examples.recipe_sampling_alias_title': '采样定理与频率混叠',
+      'examples.recipe_sampling_alias_desc': '欠采样把高频信号折叠为低频假频，验证奈奎斯特判据。',
+      'examples.recipe_hilbert_cond_title': '病态矩阵：希尔伯特条件数',
+      'examples.recipe_hilbert_cond_desc': '希尔伯特矩阵条件数随阶数暴涨，认识数值病态与误差放大。',
+      'examples.recipe_clt_histogram_title': '中心极限定理直方图',
+      'examples.recipe_clt_histogram_desc': '大量均匀样本的均值分布逼近正态，演示中心极限定理。',
     };
     return map[key] ?? key;
   };
@@ -161,6 +173,20 @@ describe('GallerySearchPlugin & S26-1 Algorithm Reference', () => {
       expect(hits[0].recipe.id).toBe('poly-fit');
       expect(hits[0].codeMatches).toBe(true);
       expect(hits[0].highlightedCode).toContain('<mark class="search-highlight">polyfit</mark>');
+    });
+
+    it('matches newly added recipes by tag and keyword (Nyquist, 欧拉法, 希尔伯特)', () => {
+      const aliasHits = plugin.searchRecipes(RECIPES, 'Nyquist', mockResolver);
+      expect(aliasHits.length).toBeGreaterThanOrEqual(1);
+      expect(aliasHits[0].recipe.id).toBe('sampling-alias');
+
+      const eulerHits = plugin.searchRecipes(RECIPES, '欧拉法', mockResolver);
+      expect(eulerHits.length).toBeGreaterThanOrEqual(1);
+      expect(eulerHits[0].recipe.id).toBe('rc-transient');
+
+      const hilbertHits = plugin.searchRecipes(RECIPES, '希尔伯特', mockResolver);
+      expect(hilbertHits.length).toBeGreaterThanOrEqual(1);
+      expect(hilbertHits[0].recipe.id).toBe('hilbert-cond');
     });
 
     it('returns uninhibited recipe list when plugin is disabled', () => {

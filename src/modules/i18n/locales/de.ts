@@ -170,6 +170,18 @@ const _de = {
   'examples.recipe_matrix_eig_desc': 'Berechne Eigenvektoren und Diagonalmatrix für symmetrische Matrizen.',
   'examples.recipe_poly_fit_title': 'Polynomische Kurvenanpassung (polyfit)',
   'examples.recipe_poly_fit_desc': 'Passe Parabelkoeffizienten an empirische Datenpunkte an.',
+  'examples.recipe_rc_transient_title': 'RC-Einschwingvorgang (Euler-Verfahren)',
+  'examples.recipe_rc_transient_desc': 'Numerische Integration des RC-Ladevorgangs erster Ordnung mit dem Euler-Verfahren.',
+  'examples.recipe_rlc_underdamped_title': 'Gedämpfte RLC-Schwingung',
+  'examples.recipe_rlc_underdamped_desc': 'Einschwingverhalten zweiter Ordnung: gedämpfte Schwingung mit exponentieller Einhüllender.',
+  'examples.recipe_square_fourier_title': 'Fourier-Reihe der Rechteckwelle',
+  'examples.recipe_square_fourier_desc': 'Rechteckwelle durch Summation ungerader Harmonischer synthetisieren.',
+  'examples.recipe_sampling_alias_title': 'Abtasttheorem & Aliasing',
+  'examples.recipe_sampling_alias_desc': 'Unterabtastung faltet hohe Frequenzen in niedrige Alias-Frequenzen.',
+  'examples.recipe_hilbert_cond_title': 'Hilbert-Matrix: Konditionszahlen',
+  'examples.recipe_hilbert_cond_desc': 'Konditionszahlen der Hilbert-Matrix wachsen exponentiell mit der Ordnung.',
+  'examples.recipe_clt_histogram_title': 'Histogramm des zentralen Grenzwertsatzes',
+  'examples.recipe_clt_histogram_desc': 'Mittelwerte vieler gleichverteilter Stichproben nähern sich der Normalverteilung.',
 
   // Diagnostics Modal
   'diagnostics.title': 'Engine- und Lane-Diagnose',

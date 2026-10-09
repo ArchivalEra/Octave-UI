@@ -19,7 +19,7 @@
       "kind": "version",
       "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
       "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short IllegalPerformance",
-      "expect_version": "5ba8e3e"
+      "expect_version": "a619a2a"
     }
   ]
 }

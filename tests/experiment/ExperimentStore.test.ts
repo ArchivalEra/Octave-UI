@@ -17,9 +17,9 @@ describe('ExperimentStore & ExampleRegistry', () => {
     supervisor = new EngineSupervisor({ adapter, skipPreflight: true });
   });
 
-  it('provides all 6 scientific recipes with valid code and metadata', () => {
+  it('provides all 12 scientific recipes with valid code and metadata', () => {
     const recipes = ExampleRegistry.getAll();
-    expect(recipes.length).toBe(6);
+    expect(recipes.length).toBe(12);
 
     const ids = recipes.map((r) => r.id);
     expect(ids).toContain('sine-wave');
@@ -28,6 +28,12 @@ describe('ExperimentStore & ExampleRegistry', () => {
     expect(ids).toContain('monte-carlo-pi');
     expect(ids).toContain('matrix-eig');
     expect(ids).toContain('poly-fit');
+    expect(ids).toContain('rc-transient');
+    expect(ids).toContain('rlc-underdamped');
+    expect(ids).toContain('square-fourier');
+    expect(ids).toContain('sampling-alias');
+    expect(ids).toContain('hilbert-cond');
+    expect(ids).toContain('clt-histogram');
 
     for (const r of recipes) {
       expect(r.code.length).toBeGreaterThan(10);

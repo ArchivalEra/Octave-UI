@@ -11,7 +11,13 @@ export type RecipeId =
   | 'fft-spectrum'
   | 'monte-carlo-pi'
   | 'matrix-eig'
-  | 'poly-fit';
+  | 'poly-fit'
+  | 'rc-transient'
+  | 'rlc-underdamped'
+  | 'square-fourier'
+  | 'sampling-alias'
+  | 'hilbert-cond'
+  | 'clt-histogram';
 
 export interface ExperimentRecipe {
   id: RecipeId;
