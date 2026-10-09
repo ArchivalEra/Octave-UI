@@ -79,7 +79,66 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
 
     const embed = await Promise.race([bootPromise, timeoutPromise]);
     window.octave = embed;
+    WasmEmbedAdapter.alignDocstringsPaths(embed);
     return new WasmEmbedAdapter(embed);
+  }
+
+  /**
+   * 自动对齐 MEMFS 中的 docstrings 与 doc-cache 路径。
+   * 当清单将基础资产挂载至 /src/work/octave-install-{lane}/，而 Octave 二进制
+   * 编译期固定检索 /src/work/octave-install/ 时，无感补齐文件，修复 help 与 print_usage。
+   */
+  static alignDocstringsPaths(embed: any): void {
+    try {
+      const FS =
+        embed?.mod?.FS ||
+        (typeof window !== 'undefined'
+          ? (window as any).__octaveHosts?.[0]?.mod?.FS || (window as any).Module?.FS
+          : null);
+      if (!FS) return;
+      const targetDir = '/src/work/octave-install/share/octave/11.3.0/etc';
+      const targetDocstrings = `${targetDir}/built-in-docstrings`;
+      const targetCache = `${targetDir}/doc-cache`;
+
+      const sourceDirs = [
+        '/src/work/octave-install-w64/share/octave/11.3.0/etc',
+        '/src/work/octave-install-threads/share/octave/11.3.0/etc',
+      ];
+
+      for (const src of sourceDirs) {
+        try {
+          const srcDocstrings = `${src}/built-in-docstrings`;
+          const srcCache = `${src}/doc-cache`;
+
+          let hasDocstrings = false;
+          let hasCache = false;
+          try { hasDocstrings = (FS.stat(srcDocstrings)?.size ?? 0) > 0; } catch {}
+          try { hasCache = (FS.stat(srcCache)?.size ?? 0) > 0; } catch {}
+
+          if (hasDocstrings || hasCache) {
+            try { FS.mkdirTree(targetDir); } catch {}
+            if (hasDocstrings) {
+              let targetExists = false;
+              try { targetExists = (FS.stat(targetDocstrings)?.size ?? 0) > 0; } catch {}
+              if (!targetExists) {
+                try {
+                  FS.writeFile(targetDocstrings, FS.readFile(srcDocstrings));
+                } catch {}
+              }
+            }
+            if (hasCache) {
+              let cacheExists = false;
+              try { cacheExists = (FS.stat(targetCache)?.size ?? 0) > 0; } catch {}
+              if (!cacheExists) {
+                try {
+                  FS.writeFile(targetCache, FS.readFile(srcCache));
+                } catch {}
+              }
+            }
+          }
+        } catch {}
+      }
+    } catch {}
   }
 
 

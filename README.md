@@ -20,6 +20,7 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 网页端用户界面与交�
   - **画廊高精度检索插件**（`GallerySearchPlugin`）：对标 S26-1 优雅检索体验，具备多词中英文拆分、Bigram 索引、实体防破坏安全高亮、`kbd` 快捷键聚焦与键盘上下箭头可视区联动。
   - **P5 运行时图形外挂补丁**（`P5FigureOverlayPlugin`）：参考 S26 外挂补丁设计，纯宿主 JS 运行时拦截，不写 MEMFS 规避引擎 m 树守卫清理、独立于 bridge 目录防范同步覆写；自动为绘图指令补全 `drawnow` 解决 Wasm 无事件循环不 flush 问题，并将原生 WebGL toolkit 渲染的 PNG 高清图安全精准注入单元格卡片，根治 DOM 溢出。
   - **权威图形栈同步与验收**：全面同步上游最新 bridge 修复（`_gfxAbsent` 守卫、`moduleOf` 宿主解析与 `plotbridge` 资产 shim），通过上游浏览器端真实渲染验收套件（14 项断言全绿）。
+  - **文档与参数报错自动对齐**（`WasmEmbedAdapter.alignDocstringsPaths`）：启动时自动检测并镜像 MEMFS 中的 `built-in-docstrings` 与 `doc-cache` 至官方安装前缀路径，彻底解决上游 Issue #6 中 `help` 不可用及函数参数误用被误导性报错掩盖的问题。
 
 ## 快速上手与命令
 
