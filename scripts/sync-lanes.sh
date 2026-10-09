@@ -37,6 +37,11 @@ for LANE in "${LANES[@]}"; do
     fi
     rm -rf "${TMP_EXTRACT}"
   fi
+
+  if [ -f "${UPSTREAM_REPO}/site/assets/m/plotbridge.js" ]; then
+    mkdir -p "${LANE_DIR}/assets/m"
+    cp -f "${UPSTREAM_REPO}/site/assets/m/plotbridge.js" "${LANE_DIR}/assets/m/plotbridge.js"
+  fi
 done
 
 echo "=========================================================="

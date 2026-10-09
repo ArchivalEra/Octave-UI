@@ -21,16 +21,20 @@ mkdir -p "${DEST_BRIDGE}"
 mkdir -p "public"
 
 # 1. 同步公共胶水 JS
-if [ -d "${SRC_DIR}" ]; then
-  for f in assets-loader.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js octave-core.js octave-page.js octave-embed.js lane.js lanes.js octave-worker.js; do
-    if [ -f "${SRC_DIR}/${f}" ]; then
-      cp -f "${SRC_DIR}/${f}" "${DEST_BRIDGE}/"
-    elif [ -f "${UPSTREAM_BRIDGE}/${f}" ]; then
+if [ -d "${UPSTREAM_BRIDGE}" ]; then
+  for f in assets-loader.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js octave-core.js octave-page.js octave-embed.js lane.js octave-worker.js; do
+    if [ -f "${UPSTREAM_BRIDGE}/${f}" ]; then
       cp -f "${UPSTREAM_BRIDGE}/${f}" "${DEST_BRIDGE}/"
+    elif [ -d "${SRC_DIR}" ] && [ -f "${SRC_DIR}/${f}" ]; then
+      cp -f "${SRC_DIR}/${f}" "${DEST_BRIDGE}/"
     fi
   done
-elif [ -d "${UPSTREAM_BRIDGE}" ]; then
-  cp -f "${UPSTREAM_BRIDGE}"/*.js "${DEST_BRIDGE}/"
+elif [ -d "${SRC_DIR}" ]; then
+  for f in assets-loader.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js octave-core.js octave-page.js octave-embed.js lane.js octave-worker.js; do
+    if [ -f "${SRC_DIR}/${f}" ]; then
+      cp -f "${SRC_DIR}/${f}" "${DEST_BRIDGE}/"
+    fi
+  done
 fi
 
 # 2. 同步 w64 档产物
@@ -39,10 +43,15 @@ if [ -d "${SRC_DIR}/w64" ]; then
   cp -rf "${SRC_DIR}/w64/"* "${DEST_BRIDGE}/w64/"
 fi
 
-# 3. 同步 assets 目录（若有清单）
+# 3. 同步 assets 目录（含 plotbridge.js 等 m 资产）
 if [ -d "${SRC_DIR}/assets" ]; then
   mkdir -p "${DEST_BRIDGE}/assets"
   cp -rf "${SRC_DIR}/assets/"* "${DEST_BRIDGE}/assets/"
+fi
+if [ -f "${UPSTREAM_REPO}/site/assets/m/plotbridge.js" ]; then
+  mkdir -p "${DEST_BRIDGE}/assets/m" "public/assets/m"
+  cp -f "${UPSTREAM_REPO}/site/assets/m/plotbridge.js" "${DEST_BRIDGE}/assets/m/plotbridge.js"
+  cp -f "${UPSTREAM_REPO}/site/assets/m/plotbridge.js" "public/assets/m/plotbridge.js"
 fi
 
 # 4. 同步 embed-demo.html 及根目录平级快捷访问（适配 probe-embed-inventory 验收探针）

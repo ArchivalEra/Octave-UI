@@ -5,7 +5,7 @@
       "version": "bridge",
       "url": "public/bridge/octave-core.js",
       "file": "public/bridge/octave-core.js",
-      "sha256": "038a67ca8cd53f0a90f20cc719c20afa496ecac256d6cadafcdf51bbd4e96561"
+      "sha256": "4eb8f265db3df72fefdec3ea801c107121ea9cad90b31a5e0f1309d308112b01"
     },
     {
       "name": "octave-page.js",
