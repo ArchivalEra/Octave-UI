@@ -51,5 +51,6 @@ pnpm build:lanes
 - 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)
 - 事实台账见 [FACTS.json](FACTS.json)
 - 安装 git hooks 守卫：`sh reflect-hooks/install.sh`
-- 闸门自证请运行 `sh gates-selftest.sh`
+- 闸门自证请运行：`sh gates-selftest.sh`
+- 13 道闸门全跑：`. Einfacht.env && for g in zreflect/check_*.py; do python3 "$g" || exit 1; done`
 
