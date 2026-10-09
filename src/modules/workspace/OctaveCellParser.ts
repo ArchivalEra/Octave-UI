@@ -32,7 +32,7 @@ export class OctaveCellParser {
       if (/^%%\s*/.test(line)) {
         if (hasEncounteredSection || currentCodeLines.length > 0 || currentDescLines.length > 0) {
           cells.push({
-            id: `cell_${++this._seq}_${Date.now().toString(36)}`,
+            id: `cell_${++this._seq}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
             title: currentTitle,
             description: currentDescLines.join('\n').trim(),
             code: currentCodeLines.join('\n').trim(),
@@ -72,7 +72,7 @@ export class OctaveCellParser {
     // 若内容完全为空，提供默认单元格
     if (cells.length === 0) {
       cells.push({
-        id: `cell_${++this._seq}_${Date.now().toString(36)}`,
+        id: `cell_${++this._seq}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
         title: 'Section 1',
         description: '',
         code: '',

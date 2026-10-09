@@ -466,7 +466,7 @@ export class ProjectWorkspace {
 
   addCell(code = '', title = '', afterId?: string): ProjectCell {
     const newCell: ProjectCell = {
-      id: `cell_${++this._cellSeq}_${Date.now().toString(36)}`,
+      id: `cell_${++this._cellSeq}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
       title: title || `Section ${this._cells.length + 1}`,
       description: '',
       code,

@@ -645,7 +645,7 @@
 
   .tab-btn.active {
     background: var(--accent-primary);
-    color: #ffffff;
+    color: var(--accent-primary-text, var(--md-sys-color-on-primary, #ffffff));
     font-weight: 600;
   }
 
@@ -858,7 +858,7 @@
 
   .btn-try {
     background: var(--accent-primary);
-    color: #ffffff;
+    color: var(--accent-primary-text, var(--md-sys-color-on-primary, #ffffff));
     border: none;
     padding: 7px 16px;
     border-radius: 6px;
@@ -920,6 +920,19 @@
 
   .btn-reset-search:hover {
     background: var(--accent-primary);
+    color: var(--accent-primary-text, var(--md-sys-color-on-primary, #ffffff));
+  }
+
+  /* 明暗模式自适应：确保主色调按钮高对比度可辨识 */
+  :global([data-theme="dark"]) .btn-try,
+  :global([data-theme="dark"]) .tab-btn.active,
+  :global([data-theme="dark"]) .btn-reset-search:hover {
+    color: var(--md-sys-color-on-primary, #0b1329);
+  }
+
+  :global([data-theme="light"]) .btn-try,
+  :global([data-theme="light"]) .tab-btn.active,
+  :global([data-theme="light"]) .btn-reset-search:hover {
     color: #ffffff;
   }
 </style>

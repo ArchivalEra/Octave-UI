@@ -55,6 +55,7 @@
   --border-muted: var(--md-sys-color-surface-container-high);
 
   --accent-primary: var(--md-sys-color-primary);
+  --accent-primary-text: var(--md-sys-color-on-primary);
   --accent-primary-hover: hsl(var(--primary-h), 80%, 36%);
   --accent-success: #1a7f37;
   --accent-warning: #9a6700;
@@ -132,6 +133,7 @@
   --border-muted: var(--md-sys-color-surface-container);
 
   --accent-primary: var(--md-sys-color-primary);
+  --accent-primary-text: var(--md-sys-color-on-primary);
   --accent-primary-hover: hsl(var(--primary-h), 90%, 82%);
   --accent-success: #3fb950;
   --accent-warning: #d29922;

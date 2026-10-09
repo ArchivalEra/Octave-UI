@@ -38,28 +38,45 @@ describe('ExperimentStore & ExampleRegistry', () => {
     for (const r of recipes) {
       expect(r.code.length).toBeGreaterThan(10);
       expect(r.svgIcon).toContain('<svg');
+      // 确保配方代码块中不含任何 % 或 # 注释字符
+      expect(r.code).not.toMatch(/%|#/);
     }
   });
 
-  it('launches recipe by booting engine, filling cell, and executing it', async () => {
+  it('launches recipe by booting engine, creating dedicated cell, and executing it', async () => {
+    const initialCellId = workbench.cells[0].id;
     const launched = await ExperimentStore.launch('solve-linear', supervisor, workbench);
     expect(launched).toBe(true);
     expect(workbench.mode).toBe('notebook');
     expect(supervisor.state).toBe('idle');
 
-    const cell = workbench.cells[0];
-    expect(cell.code).toContain('求解线性方程组');
-    expect(cell.status).toBe('success');
+    // 验证不再覆盖 1 号默认单元格，而是追加新单元格
+    expect(workbench.cells.length).toBe(2);
+    expect(workbench.cells[0].id).toBe(initialCellId);
+    expect(workbench.cells[0].code).toContain('A \\ b'); // 默认模板代码不受破坏覆盖
+
+    const targetCell = workbench.cells[1];
+    expect(targetCell.code).toContain('x = A \\ b');
+    expect(targetCell.code).not.toMatch(/%|#/);
+    expect(targetCell.status).toBe('success');
   });
 
-  it('launches recipe into ProjectWorkspace directly', async () => {
+  it('launches recipe into ProjectWorkspace by appending dedicated cell', async () => {
     const { ProjectWorkspace } = await import('../../src/modules/workspace/ProjectWorkspace');
     const { VirtualMemoryDirectoryAdapter } = await import('../../src/modules/workspace/DirectoryAdapter');
     const pw = new ProjectWorkspace(supervisor, new VirtualMemoryDirectoryAdapter());
+    const initialCellId = pw.cells[0].id;
     const launched = await ExperimentStore.launch('monte-carlo-pi', supervisor, pw);
     expect(launched).toBe(true);
     expect(pw.mode).toBe('notebook');
-    expect(pw.cells[0].code).toContain('蒙特卡洛');
-    expect(pw.cells[0].status).toBe('success');
+
+    // 验证 ProjectWorkspace 同样追加新单元格
+    expect(pw.cells.length).toBe(2);
+    expect(pw.cells[0].id).toBe(initialCellId);
+
+    const targetCell = pw.cells[1];
+    expect(targetCell.code).toContain('pi_estimate');
+    expect(targetCell.code).not.toMatch(/%|#/);
+    expect(targetCell.status).toBe('success');
   });
 });

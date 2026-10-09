@@ -11,13 +11,10 @@ export const RECIPES: ExperimentRecipe[] = [
     category: 'signal',
     expectedOutputKind: 'plot',
     tags: ['Signal', 'Trigonometry', 'Plot'],
-    code: `% 1. 生成正弦波与三次谐波合成信号
-t = linspace(0, 2*pi, 100);
+    code: `t = linspace(0, 2*pi, 100);
 y1 = sin(t);
 y2 = sin(3*t) / 3;
 signal = y1 + y2;
-
-% 2. 绘制合成波形
 plot(t, signal);
 `,
     svgIcon: `<svg viewBox="0 0 40 40" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 Q12 4 20 20 T36 20" stroke="#38bdf8" stroke-linecap="round"/></svg>`,
@@ -29,11 +26,8 @@ plot(t, signal);
     category: 'algebra',
     expectedOutputKind: 'matrix',
     tags: ['Linear Algebra', 'Equation', 'Matrix'],
-    code: `% 求解线性方程组 A * x = b
-A = [3, 2, -1; 2, -2, 4; -1, 0.5, -1];
+    code: `A = [3, 2, -1; 2, -2, 4; -1, 0.5, -1];
 b = [1; -2; 0];
-
-% 使用左除运算符高效求解
 x = A \\ b
 `,
     svgIcon: `<svg viewBox="0 0 40 40" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="8" width="12" height="24" rx="2" stroke="#a78bfa"/><path d="M22 20h4m4-4l4 4-4 4" stroke="#a78bfa" stroke-linecap="round"/><rect x="30" y="14" width="6" height="12" rx="1" stroke="#34d399"/></svg>`,
@@ -45,20 +39,15 @@ x = A \\ b
     category: 'signal',
     expectedOutputKind: 'plot',
     tags: ['FFT', 'DSP', 'Frequency'],
-    code: `% 快速傅里叶变换 (FFT) 频域谱分析
-Fs = 1000;            % 采样率 1000 Hz
-t = 0:1/Fs:0.2;       % 采样时长 0.2 秒
-f1 = 50; f2 = 120;    % 双频率分量 50Hz 与 120Hz
+    code: `Fs = 1000;
+t = 0:1/Fs:0.2;
+f1 = 50; f2 = 120;
 s = 0.7*sin(2*pi*f1*t) + sin(2*pi*f2*t);
-
-% 计算 FFT
 Y = fft(s);
 L = length(s);
 P2 = abs(Y / L);
 P1 = P2(1:floor(L/2)+1);
 f = Fs * (0:floor(L/2)) / L;
-
-% 绘制单侧频谱幅值
 plot(f, P1);
 `,
     svgIcon: `<svg viewBox="0 0 40 40" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 34 L12 28 L16 34 L22 10 L26 34 L30 18 L34 34" stroke="#f472b6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -70,12 +59,9 @@ plot(f, P1);
     category: 'simulation',
     expectedOutputKind: 'scalar',
     tags: ['Monte Carlo', 'Simulation', 'Probability'],
-    code: `% 蒙特卡洛随机投点估算圆周率 π
-N = 10000;
+    code: `N = 10000;
 x = rand(N, 1);
 y = rand(N, 1);
-
-% 判断落在单位四分之一圆内的点
 inside = (x.^2 + y.^2) <= 1;
 pi_estimate = 4 * sum(inside) / N
 `,
@@ -88,10 +74,7 @@ pi_estimate = 4 * sum(inside) / N
     category: 'algebra',
     expectedOutputKind: 'matrix',
     tags: ['Eigenvalues', 'Matrix', 'Decomposition'],
-    code: `% 对称矩阵特征值与特征向量分解
-M = [4, 1, 2; 1, 3, 0; 2, 0, 5];
-
-% 计算特征向量矩阵 V 与特征值对角阵 D
+    code: `M = [4, 1, 2; 1, 3, 0; 2, 0, 5];
 [V, D] = eig(M)
 `,
     svgIcon: `<svg viewBox="0 0 40 40" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 8v24M30 8v24" stroke="#4ade80" stroke-linecap="round"/><path d="M15 15l10 10m0-10L15 25" stroke="#4ade80" stroke-linecap="round"/></svg>`,
@@ -103,11 +86,8 @@ M = [4, 1, 2; 1, 3, 0; 2, 0, 5];
     category: 'statistics',
     expectedOutputKind: 'matrix',
     tags: ['Curve Fitting', 'Polynomial', 'Regression'],
-    code: `% 多项式曲线拟合 (2 次抛物线)
-x = [1, 2, 3, 4, 5, 6, 7];
+    code: `x = [1, 2, 3, 4, 5, 6, 7];
 y = [1.2, 3.8, 8.9, 16.5, 25.1, 35.8, 49.2];
-
-% 拟合系数 [p2, p1, p0]
 p = polyfit(x, y, 2)
 `,
     svgIcon: `<svg viewBox="0 0 40 40" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="30" r="2" fill="#38bdf8"/><circle cx="18" cy="24" r="2" fill="#38bdf8"/><circle cx="26" cy="16" r="2" fill="#38bdf8"/><circle cx="34" cy="8" r="2" fill="#38bdf8"/><path d="M8 32 Q22 26 34 8" stroke="#38bdf8" stroke-dasharray="3 3"/></svg>`,
@@ -119,8 +99,7 @@ p = polyfit(x, y, 2)
     category: 'simulation',
     expectedOutputKind: 'plot',
     tags: ['Circuit', 'Transient', 'ODE'],
-    code: `% RC 一阶电路充电暂态：欧拉法数值求解 dv/dt = (Vs - v)/(RC)
-R = 1000; C = 1e-6; Vs = 5;
+    code: `R = 1000; C = 1e-6; Vs = 5;
 tau = R*C;
 dt = tau/100;
 t = 0:dt:5*tau;
@@ -128,8 +107,6 @@ v = zeros(size(t));
 for k = 1:length(t)-1
   v(k+1) = v(k) + dt*(Vs - v(k))/tau;
 end
-
-% 绘制电容电压，可见 1 tau 时达到约 63.2% 稳态
 plot(t*1000, v)
 title('RC Charging Transient'); xlabel('t (ms)'); ylabel('vC (V)'); grid on
 `,
@@ -142,14 +119,12 @@ title('RC Charging Transient'); xlabel('t (ms)'); ylabel('vC (V)'); grid on
     category: 'simulation',
     expectedOutputKind: 'plot',
     tags: ['Circuit', 'Oscillation', 'Second-Order'],
-    code: `% RLC 二阶电路欠阻尼暂态：衰减振荡与指数包络
-R = 20; L = 0.01; C = 1e-6; V0 = 5;
+    code: `R = 20; L = 0.01; C = 1e-6; V0 = 5;
 alpha = R/(2*L);
 w0 = 1/sqrt(L*C);
 wd = sqrt(w0^2 - alpha^2);
 t = linspace(0, 0.01, 600);
 v = V0*exp(-alpha*t).*cos(wd*t);
-
 plot(t*1000, v)
 hold on
 plot(t*1000, V0*exp(-alpha*t), 'r--')
@@ -165,15 +140,13 @@ title('Underdamped RLC Transient'); xlabel('t (ms)'); grid on
     category: 'signal',
     expectedOutputKind: 'plot',
     tags: ['Fourier', 'Harmonics', 'Signal'],
-    code: `% 方波的傅里叶级数合成：前 6 个奇次谐波逐项叠加
-t = linspace(0, 2*pi, 500);
+    code: `t = linspace(0, 2*pi, 500);
 y = zeros(size(t));
 for n = 1:6
   k = 2*n - 1;
   y = y + sin(k*t)/k;
 end
 y = 4/pi*y;
-
 plot(t, y)
 title('Fourier Series of Square Wave'); xlabel('t'); ylabel('y'); grid on
 `,
@@ -186,11 +159,9 @@ title('Fourier Series of Square Wave'); xlabel('t'); ylabel('y'); grid on
     category: 'signal',
     expectedOutputKind: 'plot',
     tags: ['Sampling', 'Aliasing', 'Nyquist'],
-    code: `% 采样定理：欠采样（fs < 2f）导致频率混叠
-f = 3; fs = 4;
+    code: `f = 3; fs = 4;
 t = linspace(0, 1.5, 800);
 ts = 0:1/fs:1.5;
-
 plot(t, sin(2*pi*f*t))
 hold on
 plot(ts, sin(2*pi*f*ts), 'ro-')
@@ -205,12 +176,10 @@ title('Sampling & Aliasing'); xlabel('t (s)'); ylabel('x'); grid on
     category: 'algebra',
     expectedOutputKind: 'matrix',
     tags: ['Condition Number', 'Ill-Conditioned', 'Numerics'],
-    code: `% 病态矩阵实验：希尔伯特矩阵条件数随阶数暴涨（数值稳定性）
-cond_values = zeros(1, 5);
+    code: `cond_values = zeros(1, 5);
 for n = 3:7
   cond_values(n-2) = cond(hilb(n));
 end
-% 条件数从小到大对应 n = 3..7
 cond_values
 `,
     svgIcon: `<svg viewBox="0 0 40 40" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 32V25M17 32V19M25 32V13M33 32V7" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/><path d="M5 34h30" stroke="#475569" stroke-width="1"/></svg>`,
@@ -222,8 +191,7 @@ cond_values
     category: 'statistics',
     expectedOutputKind: 'plot',
     tags: ['CLT', 'Statistics', 'Histogram'],
-    code: `% 中心极限定理：均匀分布样本均值的分布趋近正态
-N = 10000; n = 30;
+    code: `N = 10000; n = 30;
 samples = mean(rand(n, N), 1);
 hist(samples, 30)
 title('CLT: Distribution of Sample Means');

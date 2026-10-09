@@ -39,16 +39,8 @@ export class ExperimentStore {
     }
     SafePlotSinkPolyfill.install(supervisor);
 
-    // 3. 填充单元格：如果当前仅有一个且内容为空/默认，直接复用，否则追加新单元格
-    let targetCell = workbench.cells[0];
-    if (
-      workbench.cells.length === 1 &&
-      (targetCell.status === 'idle' || targetCell.code.trim().length === 0)
-    ) {
-      workbench.updateCellCode(targetCell.id, recipe.code);
-    } else {
-      targetCell = workbench.addCell(recipe.code);
-    }
+    // 3. 新建独立单元格并追加到 Notebook（不再覆盖 1 号默认单元格）
+    const targetCell = workbench.addCell(recipe.code);
 
     // 4. 执行该单元格
     await (workbench as any).executeCell(targetCell.id, supervisor);

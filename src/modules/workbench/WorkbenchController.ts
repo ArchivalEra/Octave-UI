@@ -69,7 +69,7 @@ export class WorkbenchController {
   }
 
   private _generateId(): string {
-    return `cell_${++this._cellSeq}_${Date.now().toString(36)}`;
+    return `cell_${++this._cellSeq}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   }
 
   saveToStorage() {
