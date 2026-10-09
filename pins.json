@@ -5,21 +5,21 @@
       "kind": "version",
       "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
       "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short wasm32-final",
-      "expect_version": "ac6ac01"
+      "expect_version": "2729a1e"
     },
     {
       "name": "octave-master",
       "kind": "version",
       "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
       "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short master",
-      "expect_version": "929fc63"
+      "expect_version": "b82de77"
     },
     {
       "name": "octave-illegalperformance",
       "kind": "version",
       "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
       "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short IllegalPerformance",
-      "expect_version": "203889a"
+      "expect_version": "269363f"
     }
   ]
 }

@@ -20,6 +20,14 @@
 !/pins.json
 !/upstream-lock.json
 !/HANDOFF.md
+!/gates-selftest.sh
+!/Einfacht.env
+!/reflect-hooks/
+!/reflect-hooks/**
+!/zreflect/
+!/zreflect/**
+!/questions/
+!/questions/**
 
 # 3. 前端/项目常见配置文件
 !/package.json

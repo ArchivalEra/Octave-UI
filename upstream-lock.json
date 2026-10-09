@@ -5,14 +5,14 @@
       "version": "bridge",
       "url": "public/bridge/octave-core.js",
       "file": "public/bridge/octave-core.js",
-      "sha256": "a6f2555bff355c0b55e82b528d76ed904f27ad94d680cead1e38d65df5cce52a"
+      "sha256": "038a67ca8cd53f0a90f20cc719c20afa496ecac256d6cadafcdf51bbd4e96561"
     },
     {
       "name": "octave-page.js",
       "version": "bridge",
       "url": "public/bridge/octave-page.js",
       "file": "public/bridge/octave-page.js",
-      "sha256": "3f5c9a0ab9997fe8721971d2afa778f01d60652c1ed2d50ce25c9f9d5f1e13a1"
+      "sha256": "a472a021949c4439f4ca60b676a1cf52c059a8a454cafd84787e1d5db419ffed"
     },
     {
       "name": "octave-w64.wasm",

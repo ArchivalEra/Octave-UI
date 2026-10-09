@@ -50,5 +50,6 @@ pnpm build:lanes
 - 开发方向与地图见 [maintaince.md](maintaince.md)
 - 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)
 - 事实台账见 [FACTS.json](FACTS.json)
+- 安装 git hooks 守卫：`sh reflect-hooks/install.sh`
 - 闸门自证请运行 `sh gates-selftest.sh`
 
