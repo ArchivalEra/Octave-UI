@@ -10,8 +10,8 @@
   }
  },
  "build": {
-  "when": "2026-10-05T05:09:10+0000",
-  "out": "/src/websrc/w64-rust-on-out",
+  "when": "2026-10-05T06:51:51+0000",
+  "out": "/src/websrc/w64-out",
   "mode": "w64"
  },
  "declared": {
@@ -77,8 +77,8 @@
     "bytes": 31003790
    },
    "octave.js": {
-    "sha256": "146783797b0913725daa66b83c3d9e50512981b98e0f55820b09f56c81797b37",
-    "bytes": 515041
+    "sha256": "42dc9f797c30d2f2e66abaacd0d00a58696ba768505b6fba680bbd6dfc97fdb8",
+    "bytes": 515017
    },
    "octave.data": {
     "sha256": "024c17d0dbde837fafce6ab5a1068c9986c66b0c2fec1c202f110a8de1ed5163",
@@ -119,7 +119,7 @@
  "verdict": "ok",
  "mismatches": [],
  "checked": {
-  "when": "2026-10-05T05:09:10+0000",
+  "when": "2026-10-05T06:51:51+0000",
   "by": "check-build-manifest.py",
   "script_sha256": "777f2e99912d27175080a3611de8069ce3d24cc6596c8a33b4561049a0d81c24"
  }

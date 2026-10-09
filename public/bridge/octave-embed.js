@@ -86,12 +86,10 @@
 
     // ── 输出订阅：挂在实例输出区的 DOM 变更上（core 的 print 汇会写进 mount 的 pre）──
     var outEl = (opts.mount && document.querySelector(opts.mount)) || document.getElementById('output');
-    var outObserver = null;
-    function processMutations(muts) {
-      if (!muts) return;
-      for (var i = 0; i < muts.length; i++) {
-        var add = muts[i].addedNodes;
-        if (add) {
+    if (outEl && typeof MutationObserver === 'function') {
+      new MutationObserver(function (muts) {
+        for (var i = 0; i < muts.length; i++) {
+          var add = muts[i].addedNodes;
           for (var j = 0; j < add.length; j++) {
             var t = add[j].textContent || '';
             if (!t) continue;
@@ -100,28 +98,7 @@
             }
           }
         }
-        if (muts[i].type === 'characterData' && muts[i].target) {
-          var ct = muts[i].target.textContent || '';
-          if (ct) {
-            for (var cs = 0; cs < subs.output.length; cs++) {
-              try { subs.output[cs](ct); } catch (e) {}
-            }
-          }
-        }
-      }
-    }
-    if (outEl && typeof MutationObserver === 'function') {
-      outObserver = new MutationObserver(processMutations);
-      outObserver.observe(outEl, { childList: true, subtree: true, characterData: true });
-    }
-
-    function flushOutput() {
-      if (outObserver && typeof outObserver.takeRecords === 'function') {
-        var records = outObserver.takeRecords();
-        if (records && records.length) {
-          processMutations(records);
-        }
-      }
+      }).observe(outEl, { childList: true, subtree: true, characterData: true });
     }
 
     // ── 图形订阅：#p5figure 容器出 <canvas>/<img> 即回调（默认实例边界，见文件头）──
@@ -177,11 +154,9 @@
         var rc;
         try { rc = mod.eval_string(code); } catch (e) { rc = -1; }
         setState('idle');
-        flushOutput();
         if (rc !== 0) fireError('eval 失败 rc=' + rc + '（Octave 错误文本走 on.output 通道）');
         return Promise.resolve({ ok: rc === 0, rc: rc });
       },
-      flushOutput: flushOutput,
       evalJSON: evalJSON,
       workspace: function () { return evalJSON("whos()"); },   // 通道自带 jsonencode，别套娃
       pwd: function () { return evalJSON("pwd()"); },

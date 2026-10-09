@@ -10,19 +10,12 @@ export interface PlotData {
 
 export class SafePlotSinkPolyfill {
   static readonly PLOT_M_PATH = '/home/web_user/plot.m';
-  static readonly FIGURE_M_PATH = '/home/web_user/figure.m';
   static readonly DRAWNOW_M_PATH = '/home/web_user/drawnow.m';
 
   static readonly PLOT_PATHS = [
     '/usr/src/octave/m/plot/draw/plot.m',
     '/plot.m',
     '/home/web_user/plot.m',
-  ];
-
-  static readonly FIGURE_PATHS = [
-    '/usr/src/octave/m/plot/util/figure.m',
-    '/figure.m',
-    '/home/web_user/figure.m',
   ];
 
   static readonly DRAWNOW_PATHS = [
@@ -38,7 +31,7 @@ export class SafePlotSinkPolyfill {
   ];
 
   static readonly PLOT_SCRIPT = `% In-Engine Safe Shadow Plot Sink
-function plot (varargin)
+function h = plot (varargin)
   x = [];
   y = [];
   if nargin == 1
@@ -58,12 +51,7 @@ function plot (varargin)
   s = struct('x', x, 'y', y, 'count', length(x));
   assignin('base', '__octave_web_plot__', s);
   printf("[OCTAVE_WEB_PLOT: %d points captured]\\n", length(x));
-endfunction
-`;
-
-  static readonly FIGURE_SCRIPT = `% Safe Figure Stub
-function figure (varargin)
-  % No-op safe stub preventing GL4ES window init
+  h = 1;
 endfunction
 `;
 
@@ -94,9 +82,6 @@ endfunction
       let anyOk = false;
       for (const p of this.PLOT_PATHS) {
         if (supervisor.fsWrite(p, this.PLOT_SCRIPT)) anyOk = true;
-      }
-      for (const p of this.FIGURE_PATHS) {
-        if (supervisor.fsWrite(p, this.FIGURE_SCRIPT)) anyOk = true;
       }
       for (const p of this.DRAWNOW_PATHS) {
         if (supervisor.fsWrite(p, this.DRAWNOW_SCRIPT)) anyOk = true;
