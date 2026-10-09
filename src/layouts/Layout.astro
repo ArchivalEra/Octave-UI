@@ -56,6 +56,10 @@ const base = import.meta.env.BASE_URL;
   <body>
     <!-- 全局隐藏输出挂点，供 OctaveEmbed 接收解释器标准输出流（hidden #octave-raw-output pre） -->
     <div id="octave-raw-output"><pre></pre></div>
+    <!-- P5 图形输出暂存参照锚点（Issue #2 方案 B），隔离 p5canvas 默认直接注入 document.body 的行为 -->
+    <div id="octave-p5-staging" style="display: none;" aria-hidden="true">
+      <div id="output"></div>
+    </div>
 
     <slot />
   </body>

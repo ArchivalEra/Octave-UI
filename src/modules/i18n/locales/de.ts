@@ -142,6 +142,8 @@ const _de = {
   'workbench.clear': 'Leeren',
   'workbench.delete_cell': 'Löschen',
   'workbench.empty_placeholder': 'Octave- / MATLAB-Code hier eingeben...',
+  'workbench.figure_title': 'Octave-Grafik (Natives WebGL)',
+  'workbench.download_figure': 'PNG herunterladen',
   'workbench.plot_title': 'Erfasste Plot-Vektoren ({count} Punkte)',
   'workbench.matrix_title': 'Matrix {name} ({rows}x{cols})',
   'workbench.scalar_title': 'Skalar {name}',

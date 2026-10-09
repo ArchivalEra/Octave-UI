@@ -9,6 +9,7 @@ import { OctaveCellParser, type ParsedCell } from './OctaveCellParser';
 import { SemanticResultRenderer, type SemanticResult } from '../semantic/SemanticResultRenderer';
 import { SafePlotSinkPolyfill } from '../semantic/SafePlotSinkPolyfill';
 import type { WorkspaceStorageManager } from '../storage/WorkspaceStorageManager';
+import { p5FigureOverlayPlugin } from '../plugins';
 
 export type WorkbenchMode = 'notebook' | 'terminal';
 
@@ -589,8 +590,9 @@ export class ProjectWorkspace {
       }
     }
 
-    // 安装绘图影子管线
-    SafePlotSinkPolyfill.install(this._supervisor);
+    // 自动部署图形外挂与绘图补丁
+    const codeToEval = p5FigureOverlayPlugin ? p5FigureOverlayPlugin.prepareCode(cell.code) : cell.code;
+    const initialFigCount = p5FigureOverlayPlugin?.lastFigureCount ?? 0;
 
     const unsubOut = this._supervisor.onOutput((chunk) => {
       cell.streamingOutput = (cell.streamingOutput || '') + chunk;
@@ -609,16 +611,31 @@ export class ProjectWorkspace {
     });
 
     try {
-      const evalRes = await this._supervisor.eval(cell.code);
+      const evalRes = await this._supervisor.eval(codeToEval);
       // 等待 DOM MutationObserver 与引擎 stdout 缓冲完全沉降
       await new Promise((resolve) => setTimeout(resolve, 60));
       this._supervisor._flushBufferedOutput();
       const durationMs = Date.now() - startTime;
 
+      // 1. 优先提取原生 WebGL toolkit 图形输出（Issue #2 权威化管线）
+      let figureImage: { url: string; bytes?: number } | null = null;
+      if (
+        p5FigureOverlayPlugin &&
+        p5FigureOverlayPlugin.lastFigureCount > initialFigCount &&
+        p5FigureOverlayPlugin.lastFigure
+      ) {
+        figureImage = {
+          url: p5FigureOverlayPlugin.lastFigure.url,
+          bytes: p5FigureOverlayPlugin.lastFigure.bytes,
+        };
+      }
+
+      // 2. 降级尝试提取传统 plot 数据结构（兼容旧逻辑）
       let plotData = null;
       if (
-        cell.code.includes('plot') ||
-        (cell.streamingOutput && cell.streamingOutput.includes('[OCTAVE_WEB_PLOT:'))
+        !figureImage &&
+        (cell.code.includes('plot') ||
+          (cell.streamingOutput && cell.streamingOutput.includes('[OCTAVE_WEB_PLOT:')))
       ) {
         plotData = await SafePlotSinkPolyfill.extractPlotData(this._supervisor);
       }
@@ -630,6 +647,7 @@ export class ProjectWorkspace {
         ok: evalRes.ok,
         rc: evalRes.rc,
         plotData,
+        figureImage,
       });
 
       await this.syncVariables();

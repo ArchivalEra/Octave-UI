@@ -141,6 +141,8 @@ export const en = {
   'workbench.clear': 'Clear',
   'workbench.delete_cell': 'Delete',
   'workbench.empty_placeholder': 'Enter Octave / MATLAB code here...',
+  'workbench.figure_title': 'Octave Figure (Native WebGL)',
+  'workbench.download_figure': 'Download PNG',
   'workbench.plot_title': 'Captured Plot Vectors ({count} points)',
   'workbench.matrix_title': 'Matrix {name} ({rows}x{cols})',
   'workbench.scalar_title': 'Scalar {name}',

@@ -142,6 +142,8 @@ const _zhHans = {
   'workbench.clear': '清空',
   'workbench.delete_cell': '删除',
   'workbench.empty_placeholder': '在此输入 Octave / MATLAB 代码...',
+  'workbench.figure_title': 'Octave 绘图 (原生 WebGL 图形)',
+  'workbench.download_figure': '下载 PNG',
   'workbench.plot_title': '已提取绘图矢量 ({count} 点)',
   'workbench.matrix_title': '矩阵 {name} ({rows}x{cols})',
   'workbench.scalar_title': '标量 {name}',

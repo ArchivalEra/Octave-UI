@@ -5,7 +5,14 @@ import type { PlotData } from './SafePlotSinkPolyfill';
 import type { SanitizedError } from './ErrorSanitizer';
 import { ErrorSanitizer } from './ErrorSanitizer';
 
-export type SemanticResultKind = 'plot' | 'matrix' | 'scalar' | 'sanitized_error' | 'stream';
+export type SemanticResultKind = 'figure_image' | 'plot' | 'matrix' | 'scalar' | 'sanitized_error' | 'stream';
+
+export interface FigureImageSemanticResult {
+  kind: 'figure_image';
+  url: string;
+  bytes?: number;
+  title?: string;
+}
 
 export interface PlotSemanticResult {
   kind: 'plot';
@@ -38,6 +45,7 @@ export interface StreamSemanticResult {
 }
 
 export type SemanticResult =
+  | FigureImageSemanticResult
   | PlotSemanticResult
   | MatrixSemanticResult
   | ScalarSemanticResult
@@ -54,6 +62,7 @@ export class SemanticResultRenderer {
       ok?: boolean;
       rc?: number;
       plotData?: PlotData | null;
+      figureImage?: { url: string; bytes?: number; title?: string } | null;
     }
   ): SemanticResult {
     const isOk = options?.ok !== false && (options?.rc === undefined || options?.rc === 0);
@@ -67,7 +76,17 @@ export class SemanticResultRenderer {
       };
     }
 
-    // 2. 绘图数据优先
+    // 2. 原生渲染图像优先（Issue #2 权威化管线：WebGL toolkit PNG 输出）
+    if (options?.figureImage && options.figureImage.url) {
+      return {
+        kind: 'figure_image',
+        url: options.figureImage.url,
+        bytes: options.figureImage.bytes,
+        title: options.figureImage.title,
+      };
+    }
+
+    // 3. 绘图数据通道
     if (options?.plotData && options.plotData.count > 0) {
       return {
         kind: 'plot',

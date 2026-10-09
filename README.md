@@ -14,10 +14,11 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 网页端用户界面与交�
   - 核心模型：遵循工业标准「导入 → OPFS 持久工作区 → 导出」模型，摒弃脆弱的用户磁盘实时双向句柄绑定，以 OPFS 作为唯一真源（支持纯内存 `MemoryStore` 自动回落）。
   - 三通道导入：文件夹选择（`webkitdirectory`，同一激活帧同步触发）、文件/目录拖拽（`webkitGetAsEntry` 递归解析）、ZIP 压缩包（`fflate` 纯客户端解包与安全校验）。
   - 双向二进制桥接：与 Octave Wasm MEMFS (`/home/web_user/workspace`) 无感双向同步，保持 `Uint8Array` 二进制透传，防止 `.mat` 矩阵文件被误编码为 UTF-8 损坏。
-- **可插拔插件系统与 Gallery 优雅排版**：
+- **可插拔插件系统与优雅排版/图形外挂**：
   - **插件注册架构**（`PluginRegistry`）：支持插件热插拔、动态启用/禁用、生命周期托管与事件响应。
   - **Pretext 算术排版插件**（`PretextLayoutPlugin`）：对标 S26-1 算术纯排版，零 forced reflow 预测卡片高度，基于贪心最短列分配卡片瀑布流，文本框自动根据代码长度自然伸展无截断，支持不同大小卡片混排。
   - **画廊高精度检索插件**（`GallerySearchPlugin`）：对标 S26-1 优雅检索体验，具备多词中英文拆分、Bigram 索引、实体防破坏安全高亮、`kbd` 快捷键聚焦与键盘上下箭头可视区联动。
+  - **P5 运行时图形外挂补丁**（`P5FigureOverlayPlugin`）：参考 S26 外挂补丁设计，纯宿主 JS 运行时拦截，不写 MEMFS 规避引擎 m 树守卫清理、独立于 bridge 目录防范同步覆写；自动为绘图指令补全 `drawnow` 解决 Wasm 无事件循环不 flush 问题，并将原生 WebGL toolkit 渲染的 PNG 高清图安全精准注入单元格卡片，根治 DOM 溢出。
 
 ## 快速上手与命令
 

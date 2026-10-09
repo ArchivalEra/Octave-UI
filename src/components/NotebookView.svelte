@@ -3,6 +3,7 @@
   import type { Locale } from '../modules/i18n/types';
   import type { ProjectCell } from '../modules/workspace/ProjectWorkspace';
   import type {
+    FigureImageSemanticResult,
     PlotSemanticResult,
     MatrixSemanticResult,
     ScalarSemanticResult,
@@ -322,8 +323,32 @@
             </div>
           {:else if cell.result}
             <div class="cell-output">
-              <!-- 1. 绘图卡片 -->
-              {#if cell.result.kind === 'plot'}
+              <!-- 0. 原生图形渲染卡片 (Issue #2 权威化 WebGL toolkit 真实输出) -->
+              {#if cell.result.kind === 'figure_image'}
+                {@const fig = cell.result as FigureImageSemanticResult}
+                <div class="result-card figure-image-card">
+                  <div class="card-header">
+                    <span class="card-title">
+                      🖼️ {t('workbench.figure_title')}
+                    </span>
+                    <div class="card-actions">
+                      <a
+                        href={fig.url}
+                        download={`octave_figure_${cell.id || 'plot'}.png`}
+                        class="btn-download-fig"
+                        title={t('workbench.download_figure')}
+                      >
+                        ⬇ {t('workbench.download_figure')}
+                      </a>
+                    </div>
+                  </div>
+                  <div class="figure-image-wrapper">
+                    <img src={fig.url} alt="Octave figure" class="figure-rendered-img" />
+                  </div>
+                </div>
+
+              <!-- 1. 绘图卡片 (传统数据结构降级) -->
+              {:else if cell.result.kind === 'plot'}
                 {@const plot = cell.result as PlotSemanticResult}
                 {@const meta = computePlotPath(plot.data.x, plot.data.y)}
                 <div class="result-card plot-card">
@@ -693,6 +718,45 @@
     font-size: 0.75rem;
     color: var(--text-muted);
     font-family: var(--font-mono, monospace);
+  }
+
+  .figure-image-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #ffffff;
+    border-radius: 6px;
+    padding: 10px;
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+  }
+
+  .figure-rendered-img {
+    max-width: 100%;
+    height: auto;
+    max-height: 460px;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .btn-download-fig {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--bg-surface);
+    color: var(--accent-primary);
+    border: 1px solid var(--border-subtle);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+  }
+
+  .btn-download-fig:hover {
+    background: var(--bg-surface-hover);
+    border-color: var(--accent-primary);
   }
 
   .plot-canvas-wrapper {

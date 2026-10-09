@@ -5,6 +5,7 @@ import type { NotebookCell, WorkbenchMode, WorkbenchListener } from './types';
 import type { EngineSupervisor } from '../engine/EngineSupervisor';
 import { SafePlotSinkPolyfill } from '../semantic/SafePlotSinkPolyfill';
 import { SemanticResultRenderer } from '../semantic/SemanticResultRenderer';
+import { p5FigureOverlayPlugin } from '../plugins';
 
 const STORAGE_KEY_CELLS = 'octave_workbench_cells';
 const STORAGE_KEY_MODE = 'octave_workbench_mode';
@@ -221,8 +222,9 @@ x = A \\ b
       }
     }
 
-    // 自动部署 Safe Plot 影子管线
-    SafePlotSinkPolyfill.install(supervisor);
+    // 自动部署图形外挂与绘图补丁
+    const codeToEval = p5FigureOverlayPlugin ? p5FigureOverlayPlugin.prepareCode(cell.code) : cell.code;
+    const initialFigCount = p5FigureOverlayPlugin?.lastFigureCount ?? 0;
 
     // 挂接流式输出与错误收集
     const unsubOutput = supervisor.onOutput((chunk: string) => {
@@ -235,7 +237,7 @@ x = A \\ b
     });
 
     try {
-      const evalRes = await supervisor.eval(cell.code);
+      const evalRes = await supervisor.eval(codeToEval);
       // 等待 DOM MutationObserver 异步任务交付与缓冲池合并
       await new Promise((r) => setTimeout(r, 60));
       if (typeof (supervisor as any)._flushBufferedOutput === 'function') {
@@ -243,11 +245,24 @@ x = A \\ b
       }
       const durationMs = Date.now() - startTime;
 
-      // 提取绘图数据（若代码包含 plot 相关指令或输出触发标记）
+      // 1. 优先提取原生 WebGL toolkit 图形输出（Issue #2 权威化管线）
+      let figureImage: { url: string; bytes?: number } | null = null;
+      if (
+        p5FigureOverlayPlugin &&
+        p5FigureOverlayPlugin.lastFigureCount > initialFigCount &&
+        p5FigureOverlayPlugin.lastFigure
+      ) {
+        figureImage = {
+          url: p5FigureOverlayPlugin.lastFigure.url,
+          bytes: p5FigureOverlayPlugin.lastFigure.bytes,
+        };
+      }
+
+      // 2. 降级尝试提取传统 plot 数据结构（兼容旧逻辑）
       let plotData = null;
       if (
-        cell.code.includes('plot') ||
-        cell.streamingOutput.includes('[OCTAVE_WEB_PLOT:')
+        !figureImage &&
+        (cell.code.includes('plot') || cell.streamingOutput.includes('[OCTAVE_WEB_PLOT:'))
       ) {
         plotData = await SafePlotSinkPolyfill.extractPlotData(supervisor);
       }
@@ -259,6 +274,7 @@ x = A \\ b
         ok: evalRes.ok,
         rc: evalRes.rc,
         plotData,
+        figureImage,
       });
     } catch (err: any) {
       cell.status = 'error';
