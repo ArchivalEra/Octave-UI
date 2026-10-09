@@ -147,10 +147,15 @@ const _de = {
   'workbench.scalar_title': 'Skalar {name}',
   'workbench.execution_time': 'Ausgeführt in {ms}ms',
 
-  // Examples Gallery
   'examples.drawer_title': 'Beispielgalerie für Algorithmen',
   'examples.drawer_subtitle': 'Erkunden Sie wissenschaftliches Rechnen, lineare Algebra, DSP und Simulationen mit 1 Klick.',
   'examples.try_button': 'Ausführen',
+  'examples.search_placeholder': 'Beispiele suchen (Titel, Tags, Code...) [/ oder Strg+K]',
+  'examples.no_results': 'Keine passenden Algorithmus-Beispiele gefunden',
+  'examples.clear_search': 'Suche zurücksetzen',
+  'examples.copy_code': 'Code kopieren',
+  'examples.copied': 'Kopiert!',
+  'examples.matching_count': '{count} passende Beispiele',
   'examples.recipe_sine_wave_title': 'Sinuswelle & Harmonische',
   'examples.recipe_sine_wave_desc': 'Harmonische Signale generieren und die zusammengesetzte Wellenform sicher darstellen.',
   'examples.recipe_solve_linear_title': 'Lineares Gleichungssystem (A \\ b)',

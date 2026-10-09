@@ -146,10 +146,15 @@ export const en = {
   'workbench.scalar_title': 'Scalar {name}',
   'workbench.execution_time': 'Executed in {ms}ms',
 
-  // Examples Gallery
   'examples.drawer_title': 'Algorithm Examples Gallery',
   'examples.drawer_subtitle': 'Explore scientific computing, linear algebra, and simulation recipes with 1-click execution.',
   'examples.try_button': 'Try Example',
+  'examples.search_placeholder': 'Search examples (title, tags, code...) [/ or Ctrl+K]',
+  'examples.no_results': 'No matching algorithm examples found',
+  'examples.clear_search': 'Clear search',
+  'examples.copy_code': 'Copy code',
+  'examples.copied': 'Copied!',
+  'examples.matching_count': '{count} matching recipes',
   'examples.recipe_sine_wave_title': 'Sine Wave & Harmonics',
   'examples.recipe_sine_wave_desc': 'Generate harmonic signals and safely plot the composite waveform.',
   'examples.recipe_solve_linear_title': 'Linear System Solver',
