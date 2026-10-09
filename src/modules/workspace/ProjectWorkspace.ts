@@ -8,6 +8,7 @@ import { FSAccessDirectoryAdapter, VirtualMemoryDirectoryAdapter } from './Direc
 import { OctaveCellParser, type ParsedCell } from './OctaveCellParser';
 import { SemanticResultRenderer, type SemanticResult } from '../semantic/SemanticResultRenderer';
 import { SafePlotSinkPolyfill } from '../semantic/SafePlotSinkPolyfill';
+import type { WorkspaceStorageManager } from '../storage/WorkspaceStorageManager';
 
 export type WorkbenchMode = 'notebook' | 'terminal';
 
@@ -79,14 +80,26 @@ export class ProjectWorkspace {
 
   private _supervisor: EngineSupervisor;
   private _dirAdapter: DirectoryAdapter;
+  private _storageManager?: WorkspaceStorageManager;
 
-  constructor(supervisor: EngineSupervisor, dirAdapter?: DirectoryAdapter) {
+  constructor(
+    supervisor: EngineSupervisor,
+    dirAdapter?: DirectoryAdapter,
+    storageManager?: WorkspaceStorageManager
+  ) {
     this._supervisor = supervisor;
+    this._storageManager = storageManager;
     this._dirAdapter = dirAdapter ?? (
       typeof window !== 'undefined'
         ? new FSAccessDirectoryAdapter()
         : new VirtualMemoryDirectoryAdapter()
     );
+
+    if (this._storageManager) {
+      this._storageManager.subscribe(() => {
+        void this.refreshFiles();
+      });
+    }
 
     // 监听引擎变量更新
     this._supervisor.onWorkspaceUpdate((vars) => {
@@ -100,8 +113,8 @@ export class ProjectWorkspace {
     // 初始化默认分节
     this._initDefaultScript();
 
-    // 如果是浏览器环境，静默尝试恢复之前的目录句柄
-    if (this._dirAdapter instanceof FSAccessDirectoryAdapter) {
+    // 如果是浏览器环境且未传入 storageManager，静默尝试恢复之前的目录句柄
+    if (!this._storageManager && this._dirAdapter instanceof FSAccessDirectoryAdapter) {
       void this._dirAdapter.restorePreviousSession().then((restored) => {
         if (restored) {
           void this.refreshFiles();
@@ -129,11 +142,18 @@ export class ProjectWorkspace {
   }
 
   get isDirectoryMounted(): boolean {
-    return this._dirAdapter.isMounted;
+    return this._storageManager ? this._storageManager.isMounted : this._dirAdapter.isMounted;
   }
 
   get directoryName(): string | null {
+    if (this._storageManager) {
+      return this._storageManager.storageType === 'opfs' ? 'OPFS 浏览器沙箱' : '内存工作区';
+    }
     return this._dirAdapter.directoryName;
+  }
+
+  get storageManager(): WorkspaceStorageManager | undefined {
+    return this._storageManager;
   }
 
   get variables(): WorkspaceVariable[] {
@@ -141,6 +161,13 @@ export class ProjectWorkspace {
   }
 
   get files(): FileEntry[] {
+    if (this._storageManager) {
+      return this._storageManager.entries.map((e) => ({
+        name: e.path,
+        kind: (e.kind === 'dir' ? 'directory' : 'file') as 'directory' | 'file',
+        size: e.size,
+      }));
+    }
     return [...this._files];
   }
 
@@ -199,9 +226,14 @@ export class ProjectWorkspace {
     this._notify();
   }
 
-  // --- 本地目录管理 (File System Access) ---
+  // --- 本地目录与工作区文件管理 ---
 
   async syncFilesToEngine(): Promise<void> {
+    if (this._storageManager) {
+      await this._storageManager.syncToEngine(this._supervisor);
+      return;
+    }
+
     if (!this._dirAdapter.isMounted || !this._supervisor.isReady) {
       return;
     }
@@ -225,6 +257,24 @@ export class ProjectWorkspace {
   }
 
   async mountLocalDirectory(): Promise<boolean> {
+    if (this._storageManager) {
+      const count = await this._storageManager.importFromPicker();
+      if (count > 0 || this._storageManager.isMounted) {
+        await this.refreshFiles();
+        if (this._storageManager.activeFile) {
+          await this.openFile(this._storageManager.activeFile);
+        } else {
+          this._initDefaultScript();
+          this._activeFile = 'untitled.m';
+          await this.saveActiveFile();
+        }
+        await this.syncFilesToEngine();
+        this._notify();
+        return true;
+      }
+      return false;
+    }
+
     const success = await this._dirAdapter.mount();
     if (success) {
       await this.refreshFiles();
@@ -248,6 +298,14 @@ export class ProjectWorkspace {
   }
 
   disconnectDirectory(): void {
+    if (this._storageManager) {
+      void this._storageManager.clearWorkspace();
+      this._files = [];
+      this._activeFile = null;
+      this._notify();
+      return;
+    }
+
     this._dirAdapter.disconnect();
     this._files = [];
     this._activeFile = null;
@@ -255,6 +313,13 @@ export class ProjectWorkspace {
   }
 
   async refreshFiles(): Promise<FileEntry[]> {
+    if (this._storageManager) {
+      await this._storageManager.refresh();
+      this._files = this.files;
+      this._notify();
+      return this._files;
+    }
+
     if (!this._dirAdapter.isMounted) {
       this._files = [];
       return [];
@@ -267,10 +332,15 @@ export class ProjectWorkspace {
   // --- 原生 .m 文件管理 ---
 
   async openFile(filename: string): Promise<void> {
-    if (!this._dirAdapter.isMounted) return;
-    const content = await this._dirAdapter.readText(filename);
-    const parsed = OctaveCellParser.parse(content);
+    let content: string;
+    if (this._storageManager) {
+      content = await this._storageManager.readText(filename);
+    } else {
+      if (!this._dirAdapter.isMounted) return;
+      content = await this._dirAdapter.readText(filename);
+    }
 
+    const parsed = OctaveCellParser.parse(content);
     this._cells = parsed.map((p) => ({
       id: p.id,
       title: p.title,
@@ -313,7 +383,11 @@ export class ProjectWorkspace {
       );
     }
 
-    if (this._dirAdapter.isMounted) {
+    if (this._storageManager) {
+      await this._storageManager.writeFile(targetFile, textToSave);
+      await this.refreshFiles();
+      await this.syncFilesToEngine();
+    } else if (this._dirAdapter.isMounted) {
       await this._dirAdapter.writeText(targetFile, textToSave);
       await this.refreshFiles();
       await this.syncFilesToEngine();
@@ -326,7 +400,11 @@ export class ProjectWorkspace {
       initialContent ??
       `%% 主小节\n% 脚本: ${filename}\ndisp("正在运行 ${filename}");\n`;
 
-    if (this._dirAdapter.isMounted) {
+    if (this._storageManager) {
+      await this._storageManager.writeFile(filename, defaultContent);
+      await this.refreshFiles();
+      await this.syncFilesToEngine();
+    } else if (this._dirAdapter.isMounted) {
       await this._dirAdapter.writeText(filename, defaultContent);
       await this.refreshFiles();
       await this.syncFilesToEngine();
@@ -348,6 +426,22 @@ export class ProjectWorkspace {
   }
 
   async deleteFile(filename: string): Promise<void> {
+    if (this._storageManager) {
+      await this._storageManager.deleteEntry(filename);
+      if (this._activeFile === filename) {
+        const remaining = await this.refreshFiles();
+        const nextM = remaining.find((f) => f.kind === 'file' && f.name.endsWith('.m'));
+        if (nextM) {
+          await this.openFile(nextM.name);
+        } else {
+          this._initDefaultScript();
+        }
+      } else {
+        await this.refreshFiles();
+      }
+      return;
+    }
+
     if (!this._dirAdapter.isMounted) return;
     await this._dirAdapter.remove(filename);
     if (this._activeFile === filename) {
@@ -361,6 +455,10 @@ export class ProjectWorkspace {
     } else {
       await this.refreshFiles();
     }
+  }
+
+  async deleteLocalFile(filename: string): Promise<void> {
+    await this.deleteFile(filename);
   }
 
   // --- 单元格生命周期管理 ---

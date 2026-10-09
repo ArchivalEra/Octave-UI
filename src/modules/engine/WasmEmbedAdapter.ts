@@ -152,7 +152,7 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
 
   fs = {
     read: (path: string): string => this._embed.fs.read(path),
-    write: (path: string, content: string): boolean => this._embed.fs.write(path, content),
+    write: (path: string, content: string | Uint8Array): boolean => (this._embed.fs.write as any)(path, content),
     ls: (dir: string): FsEntry[] => this._embed.fs.ls(dir),
     rm: (path: string): boolean => this._embed.fs.rm(path),
     download: (path: string): boolean => this._embed.fs.download(path),

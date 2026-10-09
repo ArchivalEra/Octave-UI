@@ -625,7 +625,7 @@ export class EngineSupervisor {
     return this._adapter.fs.read(path);
   }
 
-  fsWrite(path: string, content: string): boolean {
+  fsWrite(path: string, content: string | Uint8Array): boolean {
     if (!this._adapter) return false;
     return this._adapter.fs.write(path, content);
   }

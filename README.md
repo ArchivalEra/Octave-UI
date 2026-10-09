@@ -10,6 +10,10 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 网页端用户界面与交�
 - **纯静态 gzip 交付**：产物为纯静态资源与 pre-compressed `.gz` 文件，直接适配 CDN/EdgeOne 的 `gzip_static on;` 静态托管。
 - **上游绝对只读**：`ArchivalEra/Octave-Full-Wasm` 引擎仓库保持绝对只读，交互严格经由 14/14 Embed API 契约进行。
 - **深模块架构**：`EngineSession`（FIFO 互斥队列与渲染让帧）、`TerminalController`（零双重回显与 16ms 批量合并）、`FigureBoundary`（E6 GL 防崩安全屏障）。
+- **OPFS 工业标准持久沙箱工作区**：
+  - 核心模型：遵循工业标准「导入 → OPFS 持久工作区 → 导出」模型，摒弃脆弱的用户磁盘实时双向句柄绑定，以 OPFS 作为唯一真源（支持纯内存 `MemoryStore` 自动回落）。
+  - 三通道导入：文件夹选择（`webkitdirectory`，同一激活帧同步触发）、文件/目录拖拽（`webkitGetAsEntry` 递归解析）、ZIP 压缩包（`fflate` 纯客户端解包与安全校验）。
+  - 双向二进制桥接：与 Octave Wasm MEMFS (`/home/web_user/workspace`) 无感双向同步，保持 `Uint8Array` 二进制透传，防止 `.mat` 矩阵文件被误编码为 UTF-8 损坏。
 
 ## 快速上手与命令
 

@@ -221,8 +221,8 @@ export class MockEmbedAdapter implements OctaveEmbedPort {
       }
       return content;
     },
-    write: (path: string, content: string): boolean => {
-      this._files.set(path, content);
+    write: (path: string, content: string | Uint8Array): boolean => {
+      this._files.set(path, typeof content === 'string' ? content : new TextDecoder().decode(content));
       return true;
     },
     ls: (dir: string): FsEntry[] => {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     projectWorkspace,
+    workspaceStorage,
     filesystemStore,
     historyStore,
     supervisor,
@@ -13,6 +14,9 @@
   import { ProjectWorkspace, type WorkspaceSnapshot } from '../modules/workspace/ProjectWorkspace';
   import type { FileEntry } from '../modules/workspace/DirectoryAdapter';
   import type { WorkspaceVariable, FsEntry } from '../modules/engine/types';
+  import type { FileTreeNode } from '../modules/storage/types';
+  import { splitPath } from '../modules/storage/types';
+  import { downloadFile } from '../modules/storage/ExportService';
 
   type Tab = 'workspace' | 'files' | 'history' | 'docs';
   let activeTab = $state<Tab>('workspace');
@@ -26,11 +30,18 @@
   let snapshotNameInput = $state('');
   let snapshotDescInput = $state('');
 
-  // Local Directory State
+  // Persistent Workspace Storage State (OPFS / Memory)
+  let tree = $state<FileTreeNode[]>(workspaceStorage.tree);
+  let storageType = $state<'opfs' | 'memory'>(workspaceStorage.storageType);
+  let activeFile = $state<string | null>(projectWorkspace.activeFile);
+  let collapsedDirs = $state<Set<string>>(new Set());
+  let isDragging = $state(false);
+  let storageStats = $state<{ filesCount: number; totalBytes: number }>({ filesCount: 0, totalBytes: 0 });
+
+  // Legacy local files compatibility
   let isLocalMounted = $state<boolean>(projectWorkspace.isDirectoryMounted);
   let localDirName = $state<string | null>(projectWorkspace.directoryName);
   let localFiles = $state<FileEntry[]>(projectWorkspace.files);
-  let activeFile = $state<string | null>(projectWorkspace.activeFile);
 
   // Filesystem State (Virtual fallback)
   let currentDir = $state<string>(filesystemStore.currentDir);
@@ -51,6 +62,15 @@
   let docLoading = $state(false);
 
   $effect(() => {
+    void workspaceStorage.init();
+
+    const unsubStorage = workspaceStorage.subscribe(async () => {
+      tree = workspaceStorage.tree;
+      storageType = workspaceStorage.storageType;
+      activeFile = projectWorkspace.activeFile;
+      const stats = await workspaceStorage.getStats();
+      storageStats = { filesCount: stats.filesCount, totalBytes: stats.totalBytes };
+    });
     const unsubPw = projectWorkspace.subscribe(() => {
       variables = projectWorkspace.variables;
       snapshots = projectWorkspace.snapshots;
@@ -70,6 +90,7 @@
       currentLocale = loc;
     });
     return () => {
+      unsubStorage();
       unsubPw();
       unsubFs();
       unsubHist();
@@ -77,49 +98,148 @@
     };
   });
 
-
-  function refreshWorkspace() {
-    projectWorkspace.syncVariables();
+  function formatBytes(bytes?: number): string {
+    if (bytes === undefined || bytes === null) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  async function handleMountLocalDir() {
+  function toggleDir(path: string) {
+    if (collapsedDirs.has(path)) {
+      collapsedDirs.delete(path);
+    } else {
+      collapsedDirs.add(path);
+    }
+    collapsedDirs = new Set(collapsedDirs);
+  }
+
+  async function handlePickFolder() {
     try {
-      await projectWorkspace.mountLocalDirectory();
+      const count = await workspaceStorage.importFromPicker();
+      if (count > 0) {
+        if (workspaceStorage.activeFile) {
+          await projectWorkspace.openFile(workspaceStorage.activeFile);
+        }
+        await workspaceStorage.syncToEngine(supervisor);
+      }
     } catch (err: any) {
-      alert(t('workbench.mount_error', { error: err?.message || err }));
+      console.warn('[SidebarIsland] import folder error:', err);
     }
   }
 
-  async function handleReselectDir() {
+  async function handlePickZip() {
+    if (typeof document === 'undefined') return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip';
+    input.style.display = 'none';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (file) {
+        try {
+          const count = await workspaceStorage.importFromZip(file);
+          if (count > 0) {
+            if (workspaceStorage.activeFile) {
+              await projectWorkspace.openFile(workspaceStorage.activeFile);
+            }
+            await workspaceStorage.syncToEngine(supervisor);
+          }
+        } catch (e: any) {
+          alert('ZIP 导入失败: ' + (e?.message || e));
+        }
+      }
+      if (input.parentNode) {
+        document.body.removeChild(input);
+      }
+    };
+    document.body.appendChild(input);
+    input.click();
+  }
+
+  async function handleExportZip() {
     try {
-      await projectWorkspace.reselectDirectory();
+      await workspaceStorage.exportAsZip('octave-workspace.zip');
     } catch (err: any) {
-      alert(t('workbench.mount_error', { error: err?.message || err }));
+      alert('导出失败: ' + (err?.message || err));
     }
   }
 
-  function handleDisconnectDir() {
-    projectWorkspace.disconnectDirectory();
-  }
+  async function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    isDragging = false;
+    if (!e.dataTransfer) return;
 
-  async function handleOpenFile(filename: string) {
-    if (filename.endsWith('.m')) {
-      await projectWorkspace.openFile(filename);
+    const files = Array.from(e.dataTransfer.files || []);
+    const zipFile = files.find((f) => f.name.endsWith('.zip'));
+
+    try {
+      if (zipFile) {
+        await workspaceStorage.importFromZip(zipFile);
+      } else {
+        await workspaceStorage.importFromDrop(e.dataTransfer);
+      }
+      if (workspaceStorage.activeFile) {
+        await projectWorkspace.openFile(workspaceStorage.activeFile);
+      }
+      await workspaceStorage.syncToEngine(supervisor);
+    } catch (err: any) {
+      alert('拖拽导入失败: ' + (err?.message || err));
     }
   }
 
   async function handleNewScript() {
-    const name = prompt('请输入新脚本文件名 (例如: analysis.m):', 'script.m');
+    const name = prompt('请输入新脚本文件名 (例如: script.m):', 'script.m');
     if (name && name.trim()) {
       const filename = name.trim().endsWith('.m') ? name.trim() : `${name.trim()}.m`;
-      await projectWorkspace.createFile(filename);
+      await workspaceStorage.writeFile(filename, `%% 主小节\n% 脚本: ${filename}\ndisp("正在运行 ${filename}");\n`);
+      await projectWorkspace.openFile(filename);
+      await workspaceStorage.syncToEngine(supervisor);
     }
   }
 
-  async function handleDeleteLocalFile(filename: string) {
-    if (confirm(`确定要删除文件 ${filename} 吗？`)) {
-      await projectWorkspace.deleteFile(filename);
+  async function handleNewFolder() {
+    const name = prompt('请输入新目录名 (例如: utils 或 data/sub):', 'utils');
+    if (name && name.trim()) {
+      await workspaceStorage.createDirectory(name.trim());
     }
+  }
+
+  async function handleClearStorage() {
+    if (confirm('确定要清空当前工作区中所有的文件和目录吗？')) {
+      await workspaceStorage.clearWorkspace();
+    }
+  }
+
+  async function handleFileClick(node: FileTreeNode) {
+    if (node.kind === 'dir') {
+      toggleDir(node.path);
+      return;
+    }
+    if (node.name.endsWith('.m')) {
+      await projectWorkspace.openFile(node.path);
+      workspaceStorage.setActiveFile(node.path);
+    }
+  }
+
+  async function handleDownloadFile(path: string) {
+    try {
+      const data = await workspaceStorage.readFile(path);
+      const { name } = splitPath(path);
+      downloadFile(data, name, 'application/octet-stream');
+    } catch (err: any) {
+      alert('下载文件失败: ' + (err?.message || err));
+    }
+  }
+
+  async function handleDeleteEntry(path: string) {
+    if (confirm(`确定要删除 ${path} 吗？`)) {
+      await workspaceStorage.deleteEntry(path);
+    }
+  }
+
+  function refreshWorkspace() {
+    projectWorkspace.syncVariables();
   }
 
   function refreshFiles() {
@@ -348,72 +468,144 @@
         </div>
       </div>
 
-    <!-- 2. 本地工作目录与文件面板 -->
+    <!-- 2. 工作区存储与文件面板 (OPFS / Memory + 三通道导入/导出) -->
     {:else if activeTab === 'files'}
-      <div class="panel">
-        <div class="local-mount-card">
-          {#if !isLocalMounted}
-            <div class="mount-prompt">
-              <button class="btn btn-sm btn-primary w-full" onclick={handleMountLocalDir}>
-                📁 选择本地工作目录
-              </button>
-              <div class="mount-tip">
-                连接本地文件夹，直接读写本地磁盘标准 .m 脚本与数据，零网络上传。
-              </div>
-            </div>
-          {:else}
-            <div class="mounted-bar">
-              <div class="mounted-info">
-                <span class="mounted-name" title={localDirName}>📁 {localDirName}</span>
-                <span class="badge-authorized">{t('sidebar.status_connected')}</span>
-              </div>
-              <div class="mounted-btns">
-                <button class="btn btn-xs btn-outline" onclick={handleReselectDir} title={t('sidebar.reselect_dir_tooltip')}>
-                  🔄 {t('sidebar.reselect_dir')}
-                </button>
-                <button class="btn btn-xs btn-outline" onclick={handleNewScript} title={t('sidebar.new_script_tooltip')}>
-                  + {t('sidebar.btn_script')}
-                </button>
-                <button class="btn btn-xs btn-ghost" onclick={handleDisconnectDir} title={t('sidebar.disconnect_tooltip')}>
-                  {t('sidebar.disconnect')}
-                </button>
-              </div>
-            </div>
-          {/if}
+      <div
+        class="panel"
+        class:drop-active={isDragging}
+        ondragover={(e) => { e.preventDefault(); isDragging = true; }}
+        ondragleave={() => { isDragging = false; }}
+        ondrop={handleDrop}
+      >
+        <!-- 存储状态卡片 -->
+        <div class="storage-card">
+          <div class="storage-header">
+            <span class="storage-title">
+              {storageType === 'opfs' ? '📁 OPFS 持久沙箱' : '💾 纯内存工作区'}
+            </span>
+            <span class="storage-badge" class:badge-opfs={storageType === 'opfs'} class:badge-memory={storageType === 'memory'}>
+              {storageType === 'opfs' ? '持久化' : '无持久化'}
+            </span>
+          </div>
+
+          <div class="storage-meta">
+            <span>文件: {storageStats.filesCount} 个</span>
+            {#if storageStats.totalBytes > 0}
+              <span>· 大小: {formatBytes(storageStats.totalBytes)}</span>
+            {/if}
+          </div>
+
+          <!-- 通道操作栏 -->
+          <div class="storage-actions">
+            <button class="btn btn-xs btn-primary" onclick={handlePickFolder} title="通过文件夹选择器导入目录">
+              📁 导入目录
+            </button>
+            <button class="btn btn-xs btn-outline" onclick={handlePickZip} title="导入 .zip 压缩包为项目">
+              📦 导入 ZIP
+            </button>
+            <button class="btn btn-xs btn-outline" onclick={handleExportZip} title="将整个工作区导出下载为 .zip">
+              💾 导出 ZIP
+            </button>
+          </div>
+
+          <div class="storage-sub-actions">
+            <button class="btn btn-xs" onclick={handleNewScript} title="新建 .m 脚本文件">
+              + 脚本
+            </button>
+            <button class="btn btn-xs" onclick={handleNewFolder} title="新建子文件夹">
+              + 目录
+            </button>
+            <button class="btn btn-xs btn-danger-outline" onclick={handleClearStorage} title="清空工作区中所有文件">
+              清空
+            </button>
+          </div>
         </div>
 
-        {#if isLocalMounted}
-          <div class="panel-toolbar" style="margin-top: 8px;">
-            <span class="panel-title">本地文件 ({localFiles.length})</span>
-          </div>
-          <div class="files-list">
-            {#if localFiles.length === 0}
-              <div class="empty-state">当前目录下无文件</div>
-            {:else}
-              {#each localFiles as f (f.name)}
-                <div
-                  class="file-item"
-                  class:active-file={activeFile === f.name}
-                  onclick={() => handleOpenFile(f.name)}
-                  title={f.name.endsWith('.m') ? '点击在工作台中打开 .m 脚本' : f.name}
-                >
-                  <span class="file-icon">{f.kind === 'directory' ? '📁' : (f.name.endsWith('.m') ? '📜' : '📄')}</span>
-                  <span class="file-name">{f.name}</span>
-                  <div class="file-actions">
-                    <button
-                      class="btn-icon-xs"
-                      title="删除本地文件"
-                      onclick={(e) => { e.stopPropagation(); handleDeleteLocalFile(f.name); }}
-                    >×</button>
-                  </div>
-                </div>
-              {/each}
-            {/if}
+        {#if isDragging}
+          <div class="drag-overlay">
+            <span>松开鼠标立即导入文件或 ZIP 压缩包</span>
           </div>
         {/if}
 
-        <details class="memfs-details" open={!isLocalMounted}>
-          <summary class="memfs-summary">虚拟环境文件 (MEMFS: {currentDir})</summary>
+        <!-- 层级文件树 -->
+        <div class="panel-toolbar" style="margin-top: 8px;">
+          <span class="panel-title">工作区文件 ({storageStats.filesCount})</span>
+          <button class="btn btn-xs" onclick={() => workspaceStorage.refresh()} title="刷新文件列表">
+            🔄
+          </button>
+        </div>
+
+        <div class="files-list">
+          {#if tree.length === 0}
+            <div class="empty-state">
+              工作区为空<br />
+              <span class="empty-sub">支持点击上方导入按钮，或直接拖拽文件夹/ZIP 压缩包至此处</span>
+            </div>
+          {:else}
+            {#snippet renderTree(nodes: FileTreeNode[], depth: number)}
+              {#each nodes as node (node.path)}
+                {#if node.kind === 'dir'}
+                  {@const isCollapsed = collapsedDirs.has(node.path)}
+                  <div
+                    class="file-item dir-item"
+                    style="padding-left: {depth * 14 + 8}px;"
+                    onclick={() => toggleDir(node.path)}
+                    title={node.path}
+                  >
+                    <span class="dir-toggle">{isCollapsed ? '▶' : '▼'}</span>
+                    <span class="file-icon">📁</span>
+                    <span class="file-name">{node.name}</span>
+                    <div class="file-actions">
+                      <button
+                        class="btn-icon-xs"
+                        title="删除目录"
+                        onclick={(e) => { e.stopPropagation(); handleDeleteEntry(node.path); }}
+                      >×</button>
+                    </div>
+                  </div>
+                  {#if !isCollapsed && node.children && node.children.length > 0}
+                    {@render renderTree(node.children, depth + 1)}
+                  {/if}
+                {:else}
+                  <div
+                    class="file-item"
+                    class:active-file={activeFile === node.path}
+                    style="padding-left: {depth * 14 + 8}px;"
+                    onclick={() => handleFileClick(node)}
+                    title={node.name.endsWith('.m') ? '点击在编辑器中打开 .m 脚本' : node.name}
+                  >
+                    <span class="dir-toggle spacer"></span>
+                    <span class="file-icon">
+                      {node.name.endsWith('.m') ? '📜' : (node.name.endsWith('.mat') ? '📊' : '📄')}
+                    </span>
+                    <span class="file-name">{node.name}</span>
+                    {#if node.size !== undefined}
+                      <span class="file-size-tag">{formatBytes(node.size)}</span>
+                    {/if}
+                    <div class="file-actions">
+                      <button
+                        class="btn-icon-xs"
+                        title="下载"
+                        onclick={(e) => { e.stopPropagation(); handleDownloadFile(node.path); }}
+                      >⬇</button>
+                      <button
+                        class="btn-icon-xs"
+                        title="删除"
+                        onclick={(e) => { e.stopPropagation(); handleDeleteEntry(node.path); }}
+                      >×</button>
+                    </div>
+                  </div>
+                {/if}
+              {/each}
+            {/snippet}
+
+            {@render renderTree(tree, 0)}
+          {/if}
+        </div>
+
+        <!-- 底层虚拟环境查看 (可折叠调试视图) -->
+        <details class="memfs-details">
+          <summary class="memfs-summary">Octave MEMFS 镜像 (调试: {currentDir})</summary>
           <div class="panel-toolbar" style="margin-top: 6px;">
             <button class="btn btn-xs" onclick={refreshFiles}>{t('files.refresh')}</button>
           </div>
@@ -827,6 +1019,112 @@
     border-radius: 6px;
     padding: 8px;
     margin-bottom: 4px;
+  }
+
+  /* 存储卡片与操作 */
+  .storage-card {
+    background: var(--bg-canvas);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .storage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .storage-title {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-main);
+  }
+
+  .storage-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-weight: 500;
+  }
+
+  .badge-opfs {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .badge-memory {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .storage-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .storage-actions,
+  .storage-sub-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .drop-active {
+    outline: 2px dashed var(--accent-primary);
+    outline-offset: -2px;
+    background: rgba(14, 165, 233, 0.05);
+  }
+
+  .drag-overlay {
+    margin-top: 6px;
+    padding: 12px;
+    border: 2px dashed var(--accent-primary);
+    border-radius: 6px;
+    background: var(--bg-surface-hover);
+    color: var(--accent-primary);
+    font-size: 12px;
+    text-align: center;
+    font-weight: 500;
+  }
+
+  .dir-item {
+    font-weight: 500;
+    color: var(--text-main);
+  }
+
+  .dir-toggle {
+    display: inline-block;
+    width: 14px;
+    font-size: 9px;
+    color: var(--text-muted);
+    user-select: none;
+  }
+
+  .dir-toggle.spacer {
+    visibility: hidden;
+  }
+
+  .file-size-tag {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 6px;
+    margin-right: 6px;
+  }
+
+  .empty-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: inline-block;
+    margin-top: 4px;
   }
 
   .mount-prompt {

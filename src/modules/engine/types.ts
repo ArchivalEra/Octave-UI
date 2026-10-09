@@ -105,7 +105,7 @@ export interface OctaveEmbedPort {
 
   fs: {
     read(path: string): string;
-    write(path: string, content: string): boolean;
+    write(path: string, content: string | Uint8Array): boolean;
     ls(dir: string): FsEntry[];
     rm(path: string): boolean;
     download(path: string): boolean;
@@ -126,7 +126,7 @@ export interface EngineSessionLike {
   cd?(dir: string): Promise<EvalResult>;
   pwd?(): Promise<string>;
   fsRead?(path: string): string;
-  fsWrite?(path: string, content: string): boolean;
+  fsWrite?(path: string, content: string | Uint8Array): boolean;
   fsRm?(path: string): boolean;
 }
 

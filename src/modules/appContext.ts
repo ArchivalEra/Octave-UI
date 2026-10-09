@@ -15,12 +15,15 @@ import { ProjectWorkspace } from './workspace/ProjectWorkspace';
 import { VariableInspectorStore } from './inspector/VariableInspectorStore';
 import { SafePlotSinkPolyfill } from './semantic/SafePlotSinkPolyfill';
 
+import { WorkspaceStorageManager } from './storage/WorkspaceStorageManager';
+
 export const historyStore = new HistoryStore();
 export const supervisor = new EngineSupervisor();
 // 兼容性别名：支持已有引用
 export const engineSession = supervisor as any;
 
-export const projectWorkspace = new ProjectWorkspace(supervisor);
+export const workspaceStorage = new WorkspaceStorageManager();
+export const projectWorkspace = new ProjectWorkspace(supervisor, undefined, workspaceStorage);
 export const terminalController = new TerminalController(historyStore, supervisor as any);
 export const workspaceStore = new WorkspaceStore(supervisor as any);
 export const filesystemStore = new FilesystemStore(supervisor as any);
@@ -34,5 +37,12 @@ export const graphicsSink = new GraphicsSink();
 
 i18n.subscribe((locale) => {
   projectWorkspace.syncLocale(locale);
+});
+
+// 当引擎达到 idle 状态时，自动将工作区文件推送到 Wasm MEMFS 并配置 addpath
+supervisor.onStateChange((state) => {
+  if (state === 'idle') {
+    void workspaceStorage.syncToEngine(supervisor);
+  }
 });
 
