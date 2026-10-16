@@ -48,3 +48,15 @@
 3. **同源 COI 拓扑**：UI 页自身即为 `crossOriginIsolated` 宿主，不使用 iframe 套娃。
 4. **适配声明**：在 UI 仓文档中声明所适配的引擎构建版本 sha。
 5. **验收标准**：改动可经 `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/probe-embed-inventory.mjs <URL>` 运行验收。
+
+## 五、内容契约（Content Contract 与 Octave-Extra-Content）
+
+根据接缝判决（宿主 `build/113/NOTES-extra-content-seam.md` §8.1 与来信 `mail/001`），架构上存在两条相互正交的契约：
+1. **引擎契约（宿主 `ArchivalEra/Octave-Full-Wasm` ↔ UI）**：负责 14/14 Embed API、三车道选档、`install` 四态返回码、`statusOf` 接口实现。
+2. **内容契约（`ArchivalEra/Octave-Extra-Content` ↔ UI）**：负责**内容语义**：
+   - **归属 ≠ 投送**：内容语义对话对象为 `ArchivalEra/Octave-Extra-Content`（跨 agent 通信走 `mail/` 通道）；机器产物（表）由宿主装配进同源站点 `assets/forge-catalog.json`，UI 仅读取该装配态资产。
+   - **状态与兼容性分工**：`stage`（`staged` / `withheld`）只表征静态字节在站点是否可下载；兼容性由引擎侧 `statusOf().compatible` 负责。
+   - **内容构成诚实性**：`content` 准确反映源码构成（对于能力层如 Pyodide/clang 为 `form: "tree"`，`content: []` 空数组表示非包结构，不塞虚假内容）。
+   - **引擎分流**：`consumer` 显式分流消费引擎（默认 `octave`，可选 `omc`）。
+   - **硬依赖约束**：`deps` 为硬依赖，缺失即响亮失败；UI 若展示总下载开销，采用依赖闭包交集计算。
+

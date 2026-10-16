@@ -9,6 +9,7 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 网页端用户界面与交�
 - **100% 纯客户端计算**：无任何后端计算服务，所有算力由浏览器端 WebAssembly 本地提供。
 - **纯静态 gzip 交付**：产物为纯静态资源与 pre-compressed `.gz` 文件，直接适配 CDN/EdgeOne 的 `gzip_static on;` 静态托管。
 - **上游绝对只读**：`ArchivalEra/Octave-Full-Wasm` 引擎仓库保持绝对只读，交互严格经由 14/14 Embed API 契约进行。
+- **双契约分工与跨 Agent 通信**：严格区分引擎契约（`ArchivalEra/Octave-Full-Wasm` ↔ UI，只读 Issue 提单）与内容契约（`ArchivalEra/Octave-Extra-Content` ↔ UI，内容语义归属，通过 `mail/` 通道交流）；机器表由宿主装配至同源站点 `assets/forge-catalog.json`。
 - **深模块架构**：`EngineSession`（FIFO 互斥队列与渲染让帧）、`TerminalController`（零双重回显与 16ms 批量合并）、`FigureBoundary`（E6 GL 防崩安全屏障）。
 - **OPFS 工业标准持久沙箱工作区**：
   - 核心模型：遵循工业标准「导入 → OPFS 持久工作区 → 导出」模型，摒弃脆弱的用户磁盘实时双向句柄绑定，以 OPFS 作为唯一真源（支持纯内存 `MemoryStore` 自动回落）。
@@ -61,6 +62,7 @@ pnpm build:lanes
 - Agent 纪律与硬规矩见 [AGENTS.md](AGENTS.md)
 - 开发方向与地图见 [maintaince.md](maintaince.md)
 - 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)
+- 跨 Agent 往来信箱见 [mail/README.md](mail/README.md)
 - 事实台账见 [FACTS.json](FACTS.json)
 - 安装 git hooks 守卫：`sh reflect-hooks/install.sh`
 - 闸门自证请运行：`sh gates-selftest.sh`
