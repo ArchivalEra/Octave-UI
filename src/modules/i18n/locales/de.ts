@@ -122,6 +122,7 @@ const _de = {
   'header.brand_tag': 'Bereit · Lokal · 100% Privat',
   'header.btn_diagnostics': 'Diagnose',
   'header.btn_examples': 'Beispiele',
+  'header.btn_packages': 'Pakete & Erweiterungen',
   'header.btn_start': 'Rechnen Starten',
   'header.mode_notebook': 'Notebook',
   'header.mode_console': 'Konsole',

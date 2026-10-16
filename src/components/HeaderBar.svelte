@@ -9,12 +9,14 @@
     onToggleSidebar,
     onOpenExamples,
     onOpenDiagnostics,
+    onOpenPackages,
     sidebarOpen = false,
   } = $props<{
     onOpenBootModal: () => void;
     onToggleSidebar: () => void;
     onOpenExamples: () => void;
     onOpenDiagnostics: () => void;
+    onOpenPackages?: () => void;
     sidebarOpen?: boolean;
   }>();
 
@@ -512,6 +514,11 @@
             <button class="menu-action-btn" onclick={() => { menuOpen = false; onOpenExamples(); }}>
               <span class="action-icon">💡</span>
               <span>{t('header.btn_examples')}</span>
+            </button>
+
+            <button class="menu-action-btn" onclick={() => { menuOpen = false; onOpenPackages?.(); }}>
+              <span class="action-icon">📦</span>
+              <span>{t('header.btn_packages')}</span>
             </button>
 
             <button class="menu-action-btn" onclick={() => { menuOpen = false; onOpenDiagnostics(); }}>

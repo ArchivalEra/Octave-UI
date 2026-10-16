@@ -9,6 +9,7 @@
   import ExampleGallery from './ExampleGallery.svelte';
   import DiagnosticsModal from './DiagnosticsModal.svelte';
   import VariableInspectorModal from './VariableInspectorModal.svelte';
+  import PackageManagerModal from './PackageManagerModal.svelte';
   import { projectWorkspace } from '../modules/appContext';
   import type { WorkbenchMode } from '../modules/workspace/ProjectWorkspace';
 
@@ -20,6 +21,7 @@
   let warningModalOpen = $state(false);
   let examplesOpen = $state(false);
   let diagnosticsOpen = $state(false);
+  let packagesOpen = $state(false);
   let interceptedCmd = $state('');
   let interceptReason = $state('');
   let currentMode = $state<WorkbenchMode>(projectWorkspace.mode);
@@ -103,6 +105,7 @@
     onToggleSidebar={() => (sidebarOpen = !sidebarOpen)}
     onOpenExamples={() => (examplesOpen = true)}
     onOpenDiagnostics={() => (diagnosticsOpen = true)}
+    onOpenPackages={() => (packagesOpen = true)}
     {sidebarOpen}
   />
 
@@ -161,6 +164,11 @@
   <DiagnosticsModal
     isOpen={diagnosticsOpen}
     onClose={() => (diagnosticsOpen = false)}
+  />
+
+  <PackageManagerModal
+    isOpen={packagesOpen}
+    onClose={() => (packagesOpen = false)}
   />
 
   <VariableInspectorModal />

@@ -58,5 +58,5 @@
    - **状态与兼容性分工**：`stage`（`staged` / `withheld`）只表征静态字节在站点是否可下载；兼容性由引擎侧 `statusOf().compatible` 负责。
    - **内容构成诚实性**：`content` 准确反映源码构成（对于能力层如 Pyodide/clang 为 `form: "tree"`，`content: []` 空数组表示非包结构，不塞虚假内容）。
    - **引擎分流**：`consumer` 显式分流消费引擎（默认 `octave`，可选 `omc`）。
-   - **硬依赖约束**：`deps` 为硬依赖，缺失即响亮失败；UI 若展示总下载开销，采用依赖闭包交集计算。
+   - **硬依赖约束**：`deps` 为硬依赖，缺失即响亮失败；UI 预估额外运行时下载开销按 `Σ size of { 依赖闭包 ∩ form:"tree" 条目 }` 计算（真值出口以引擎 `install(name, {planOnly: true})` 为准）。
 

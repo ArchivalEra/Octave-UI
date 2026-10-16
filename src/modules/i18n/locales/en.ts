@@ -121,6 +121,7 @@ export const en = {
   'header.brand_tag': 'Ready · Local · 100% Private',
   'header.btn_diagnostics': 'Diagnostics',
   'header.btn_examples': 'Examples',
+  'header.btn_packages': 'Packages',
   'header.btn_start': 'Start Computing',
   'header.mode_notebook': 'Notebook',
   'header.mode_console': 'Console',

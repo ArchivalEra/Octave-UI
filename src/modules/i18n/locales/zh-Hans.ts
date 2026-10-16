@@ -122,6 +122,7 @@ const _zhHans = {
   'header.brand_tag': '就绪 · 纯本地 · 隐私安全',
   'header.btn_diagnostics': '开发诊断',
   'header.btn_examples': '示例画廊',
+  'header.btn_packages': '包与扩展',
   'header.btn_start': '开始计算',
   'header.mode_notebook': '笔记本',
   'header.mode_console': '控制台',

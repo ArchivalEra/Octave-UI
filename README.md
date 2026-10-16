@@ -23,6 +23,7 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 网页端用户界面与交�
   - **权威图形栈同步与验收**：全面同步上游最新 bridge 修复（`_gfxAbsent` 守卫、`moduleOf` 宿主解析与 `plotbridge` 资产 shim），通过上游浏览器端真实渲染验收套件（14 项断言全绿）。
   - **文档与参数报错自动对齐**（`WasmEmbedAdapter.alignDocstringsPaths`）：启动时自动检测并镜像 MEMFS 中的 `built-in-docstrings` 与 `doc-cache` 至官方安装前缀路径，彻底解决上游 Issue #6 中 `help` 不可用及函数参数误用被误导性报错掩盖的问题。
   - **科学计算示例画廊扩充与体验升级**：全面扩充典型科学计算算法配方（覆盖一阶 RC 暂态、二阶 RLC 欠阻尼衰减、方波奇次谐波合成、奈奎斯特采样混叠、病态希尔伯特条件数、中心极限定理直方图等），各配方均具备中/英/德三语详尽解析与专属矢量图示；示例代码块全面纯净化（不含注释）、Try Example 自动追加新建独立单元格保护现有代码，并深度适配深浅色主题高对比度按钮文字。
+  - **包与扩展管理插件**（`PackageManagerPlugin`）：严格遵循与 `Octave-Extra-Content` 的内容契约与接入规范，基于 `PluginRegistry` 挂载；直读同源装配态 `assets/forge-catalog.json` 货架，委托宿主引擎 `statusOf` 与 `install(..., { planOnly: true })` 拿取兼容性与真算下载预算，支持版本候选切换、`form: "tree"` 能力层识别与四态安装，并配有深浅色自适应管理面板 `PackageManagerModal`。
 
 ## 快速上手与命令
 
