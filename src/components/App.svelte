@@ -10,8 +10,9 @@
   import DiagnosticsModal from './DiagnosticsModal.svelte';
   import VariableInspectorModal from './VariableInspectorModal.svelte';
   import PackageManagerModal from './PackageManagerModal.svelte';
-  import { projectWorkspace } from '../modules/appContext';
+  import { projectWorkspace, i18n, t } from '../modules/appContext';
   import type { WorkbenchMode } from '../modules/workspace/ProjectWorkspace';
+  import type { Locale } from '../modules/i18n/types';
 
   let sidebarOpen = $state(false);
   let sidebarWidth = $state(320);
@@ -25,6 +26,7 @@
   let interceptedCmd = $state('');
   let interceptReason = $state('');
   let currentMode = $state<WorkbenchMode>(projectWorkspace.mode);
+  let currentLocale = $state<Locale>(i18n.currentLocale);
 
   const MIN_WIDTH = 240;
   const MAX_WIDTH = 580;
@@ -33,6 +35,9 @@
   $effect(() => {
     const unsub = projectWorkspace.subscribe(() => {
       currentMode = projectWorkspace.mode;
+    });
+    const unsubI18n = i18n.subscribe((loc) => {
+      currentLocale = loc;
     });
 
     if (typeof window !== 'undefined') {
@@ -54,11 +59,15 @@
       window.addEventListener('keydown', handleKeyDown);
       return () => {
         unsub();
+        unsubI18n();
         window.removeEventListener('keydown', handleKeyDown);
       };
     }
 
-    return unsub;
+    return () => {
+      unsub();
+      unsubI18n();
+    };
   });
 
   function handleInterceptPlot(cmd: string, reason: string) {
@@ -134,7 +143,7 @@
           class:resizing={isResizing}
           onmousedown={handleStartResize}
           ondblclick={handleResetWidth}
-          title="拖拽调整侧边栏宽度，双击恢复默认 320px"
+          title={t('app.sidebar_resize_tooltip')}
           role="separator"
           tabindex="0"
         ></div>
@@ -228,7 +237,7 @@
 
   .sidebar-resizer:hover,
   .sidebar-resizer.resizing {
-    background-color: var(--md-sys-color-primary, #005f87);
+    background-color: var(--accent-primary);
   }
 
   .sidebar-backdrop {
@@ -244,7 +253,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.45);
+      background: var(--bg-overlay);
       z-index: 80;
       backdrop-filter: blur(2px);
     }

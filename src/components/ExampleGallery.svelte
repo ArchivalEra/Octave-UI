@@ -329,7 +329,7 @@
             <div class="empty-icon">🔍</div>
             <h3 class="empty-title">{t('examples.no_results')}</h3>
             <p class="empty-desc">
-              没有找到与 "<strong>{searchQuery}</strong>" 相关的配方。尝试搜索其他关键词如 <em>fft</em>、<em>eig</em>、<em>sin</em> 或 <em>pi</em>。
+              {t('examples.no_results_desc', { query: searchQuery })}
             </p>
             <button class="btn-reset-search" onclick={() => { searchQuery = ''; activeCategory = 'all'; }}>
               {t('examples.clear_search')}
@@ -502,9 +502,9 @@
     letter-spacing: 0.02em;
     padding: 2px 8px;
     border-radius: 9999px;
-    background: rgba(99, 102, 241, 0.15);
-    color: #818cf8;
-    border: 1px solid rgba(99, 102, 241, 0.3);
+    background: var(--md-sys-color-primary-container);
+    color: var(--accent-primary);
+    border: 1px solid var(--border-subtle);
   }
 
   .header-titles .subtitle {
@@ -645,7 +645,7 @@
 
   .tab-btn.active {
     background: var(--accent-primary);
-    color: var(--accent-primary-text, var(--md-sys-color-on-primary, #ffffff));
+    color: var(--accent-primary-text);
     font-weight: 600;
   }
 
@@ -743,9 +743,9 @@
   }
 
   .recipe-tag.tag-hit {
-    background: rgba(99, 102, 241, 0.15);
-    color: #a5b4fc;
-    border-color: rgba(99, 102, 241, 0.4);
+    background: var(--md-sys-color-primary-container);
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
     font-weight: 600;
   }
 
@@ -803,7 +803,7 @@
   }
 
   .copied-indicator {
-    color: #4ade80;
+    color: var(--accent-success);
     font-weight: 600;
   }
 
@@ -838,7 +838,7 @@
   }
 
   .comment-line .line-content {
-    color: #94a3b8;
+    color: var(--text-muted);
     font-style: italic;
   }
 
@@ -858,7 +858,7 @@
 
   .btn-try {
     background: var(--accent-primary);
-    color: var(--accent-primary-text, var(--md-sys-color-on-primary, #ffffff));
+    color: var(--accent-primary-text);
     border: none;
     padding: 7px 16px;
     border-radius: 6px;
@@ -920,19 +920,6 @@
 
   .btn-reset-search:hover {
     background: var(--accent-primary);
-    color: var(--accent-primary-text, var(--md-sys-color-on-primary, #ffffff));
-  }
-
-  /* 明暗模式自适应：确保主色调按钮高对比度可辨识 */
-  :global([data-theme="dark"]) .btn-try,
-  :global([data-theme="dark"]) .tab-btn.active,
-  :global([data-theme="dark"]) .btn-reset-search:hover {
-    color: var(--md-sys-color-on-primary, #0b1329);
-  }
-
-  :global([data-theme="light"]) .btn-try,
-  :global([data-theme="light"]) .tab-btn.active,
-  :global([data-theme="light"]) .btn-reset-search:hover {
-    color: #ffffff;
+    color: var(--accent-primary-text);
   }
 </style>

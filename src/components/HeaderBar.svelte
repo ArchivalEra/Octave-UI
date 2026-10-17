@@ -35,15 +35,15 @@
   let paletteOpen = $state(false);
 
   const PRESET_HUES = [
-    { name: '粉紫', hue: 315 },
-    { name: '紫罗兰', hue: 280 },
-    { name: '学术蓝', hue: 248 },
-    { name: '青碧', hue: 195 },
-    { name: '薄荷绿', hue: 155 },
-    { name: '暖金', hue: 45 },
-    { name: '落日橙', hue: 25 },
-    { name: '朱砂红', hue: 355 },
-  ];
+    { key: 'header.hue_pink_purple', hue: 315 },
+    { key: 'header.hue_violet', hue: 280 },
+    { key: 'header.hue_academic_blue', hue: 248 },
+    { key: 'header.hue_cyan', hue: 195 },
+    { key: 'header.hue_mint_green', hue: 155 },
+    { key: 'header.hue_warm_gold', hue: 45 },
+    { key: 'header.hue_sunset_orange', hue: 25 },
+    { key: 'header.hue_cinnabar_red', hue: 355 },
+  ] as const;
 
   $effect(() => {
     const unsubState = supervisor.onStateChange((s) => {
@@ -325,7 +325,7 @@
                   onclick={() => selectHuePreset(p.hue)}
                 >
                   <span class="preset-dot" style="background: hsl({p.hue}, 75%, 45%);"></span>
-                  <span class="preset-name">{p.name}</span>
+                  <span class="preset-name">{t(p.key)}</span>
                 </button>
               {/each}
             </div>
@@ -538,24 +538,30 @@
                 class="lang-pill"
                 class:active={currentLocale === 'zh-Hans'}
                 onclick={() => handleLocaleChange('zh-Hans')}
+                data-action="set-locale"
+                data-locale="zh-Hans"
               >
-                🇨🇳 中文
+                {t('header.lang_zh')}
               </button>
               <button
                 type="button"
                 class="lang-pill"
                 class:active={currentLocale === 'en'}
                 onclick={() => handleLocaleChange('en')}
+                data-action="set-locale"
+                data-locale="en"
               >
-                🇺🇸 English
+                {t('header.lang_en')}
               </button>
               <button
                 type="button"
                 class="lang-pill"
                 class:active={currentLocale === 'de'}
                 onclick={() => handleLocaleChange('de')}
+                data-action="set-locale"
+                data-locale="de"
               >
-                🇩🇪 Deutsch
+                {t('header.lang_de')}
               </button>
             </div>
           </div>
@@ -568,8 +574,8 @@
 <style>
   .m3-top-app-bar {
     height: 60px;
-    background-color: var(--md-sys-color-surface-container-lowest, #ffffff);
-    border-bottom: 1px solid var(--md-sys-color-outline-variant, rgba(0,0,0,0.1));
+    background-color: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -608,15 +614,15 @@
   .brand-title {
     font-size: 1.05rem;
     font-weight: 700;
-    color: var(--md-sys-color-primary, #005f87);
+    color: var(--accent-primary);
     white-space: nowrap;
   }
 
   /* Segmented button (Notebook vs Console) */
   .m3-segmented-button {
     display: flex;
-    background-color: var(--md-sys-color-surface-container, rgba(0,0,0,0.05));
-    border: 1px solid var(--md-sys-color-outline-variant, rgba(0,0,0,0.1));
+    background-color: var(--bg-surface-hover);
+    border: 1px solid var(--border-subtle);
     border-radius: 9999px;
     padding: 3px;
     gap: 2px;
@@ -626,7 +632,7 @@
   .segment-btn {
     background: transparent;
     border: none;
-    color: var(--md-sys-color-on-surface-variant, #49454f);
+    color: var(--text-muted);
     padding: 4px 12px;
     border-radius: 9999px;
     font-size: 0.82rem;
@@ -639,13 +645,13 @@
   }
 
   .segment-btn:hover {
-    color: var(--md-sys-color-on-surface);
+    color: var(--text-main);
   }
 
   .segment-btn.active {
-    background-color: var(--md-sys-color-surface-container-lowest, #ffffff);
-    color: var(--md-sys-color-primary, #005f87);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    background-color: var(--bg-surface);
+    color: var(--accent-primary);
+    box-shadow: var(--shadow-1);
   }
 
   .top-bar-right {
@@ -662,11 +668,11 @@
     gap: 6px;
     padding: 4px 10px;
     border-radius: 9999px;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    background-color: var(--md-sys-color-surface-container, rgba(0,0,0,0.05));
-    border: 1px solid var(--md-sys-color-outline-variant, rgba(0,0,0,0.1));
-    color: var(--md-sys-color-on-surface, #1d1b20);
+    background-color: var(--bg-surface-hover);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-main);
   }
 
   .status-dot {
@@ -675,14 +681,14 @@
     border-radius: 50%;
   }
 
-  .status-unloaded .status-dot { background-color: var(--md-sys-color-outline, #79747e); }
-  .status-booting .status-dot { background-color: #f59e0b; animation: pulse 1s infinite; }
-  .status-idle .status-dot { background-color: #10b981; }
-  .status-busy .status-dot { background-color: var(--md-sys-color-primary, #3b82f6); animation: pulse 1s infinite; }
-  .status-aborting .status-dot { background-color: #f97316; animation: pulse 0.5s infinite; }
-  .status-crashed .status-dot { background-color: #ef4444; }
-  .status-recovering .status-dot { background-color: #8b5cf6; animation: pulse 0.8s infinite; }
-  .status-failed .status-dot { background-color: #ef4444; }
+  .status-unloaded .status-dot { background-color: var(--text-dim); }
+  .status-booting .status-dot { background-color: var(--accent-warning); animation: pulse 1s infinite; }
+  .status-idle .status-dot { background-color: var(--accent-success); }
+  .status-busy .status-dot { background-color: var(--accent-busy); animation: pulse 1s infinite; }
+  .status-aborting .status-dot { background-color: var(--accent-warning); animation: pulse 0.5s infinite; }
+  .status-crashed .status-dot { background-color: var(--accent-danger); }
+  .status-recovering .status-dot { background-color: var(--md-sys-color-tertiary); animation: pulse 0.8s infinite; }
+  .status-failed .status-dot { background-color: var(--accent-danger); }
 
   @keyframes pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
@@ -691,8 +697,8 @@
 
   /* Action Buttons */
   .m3-filled-btn {
-    background-color: var(--md-sys-color-primary, #005f87);
-    color: var(--md-sys-color-on-primary, #ffffff);
+    background-color: var(--accent-primary);
+    color: var(--accent-primary-text);
     border: none;
     border-radius: 9999px;
     padding: 0 16px;
@@ -703,19 +709,19 @@
     align-items: center;
     gap: 6px;
     cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    box-shadow: var(--shadow-1);
     transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
   }
 
   .m3-filled-btn:hover {
     filter: brightness(1.1);
-    box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+    box-shadow: var(--shadow-2);
   }
 
   .m3-tonal-danger-btn {
-    background-color: rgba(239, 68, 68, 0.12);
-    color: #ef4444;
-    border: 1px solid rgba(239, 68, 68, 0.35);
+    background-color: var(--bg-surface-hover);
+    color: var(--accent-danger);
+    border: 1px solid var(--accent-danger);
     border-radius: 9999px;
     padding: 0 14px;
     height: 36px;
@@ -729,12 +735,12 @@
   }
 
   .m3-tonal-danger-btn:hover {
-    background-color: rgba(239, 68, 68, 0.22);
+    background-color: var(--bg-canvas);
   }
 
   .m3-danger-btn {
-    background: #ef4444;
-    color: #fff;
+    background: var(--accent-danger);
+    color: var(--accent-primary-text);
     border: none;
     border-radius: 9999px;
     height: 34px;
@@ -745,8 +751,8 @@
   }
 
   .m3-warning-btn {
-    background: #f59e0b;
-    color: #fff;
+    background: var(--accent-warning);
+    color: var(--accent-primary-text);
     border: none;
     border-radius: 9999px;
     height: 34px;
@@ -763,7 +769,7 @@
     border-radius: 9999px;
     border: none;
     background: transparent;
-    color: var(--md-sys-color-on-surface-variant, #49454f);
+    color: var(--text-muted);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -787,10 +793,10 @@
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
-    background-color: var(--md-sys-color-surface-container-lowest, #ffffff);
-    border: 1px solid var(--md-sys-color-outline-variant, rgba(0,0,0,0.15));
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
     border-radius: 16px;
-    box-shadow: 0 10px 24px rgba(0,0,0,0.18);
+    box-shadow: var(--shadow-3);
     z-index: 100;
     animation: popoverFadeIn 0.15s cubic-bezier(0.2, 0, 0, 1);
   }
@@ -818,7 +824,7 @@
   .menu-section-title {
     font-size: 0.75rem;
     font-weight: 700;
-    color: var(--md-sys-color-outline, #79747e);
+    color: var(--text-dim);
     padding: 0 0.4rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -849,7 +855,7 @@
 
   .menu-item-choice.selected {
     background-color: var(--md-sys-color-primary-container, rgba(0, 95, 135, 0.15));
-    border-color: var(--md-sys-color-primary, #005f87);
+    border-color: var(--accent-primary);
   }
 
   .menu-item-choice:disabled {
@@ -875,8 +881,9 @@
     font-size: 0.65rem;
     padding: 1px 5px;
     border-radius: 4px;
-    background: rgba(239, 68, 68, 0.15);
-    color: var(--color-danger, #ef4444);
+    background: var(--bg-surface-hover);
+    color: var(--accent-danger);
+    border: 1px solid var(--accent-danger);
     font-weight: 600;
     line-height: 1.2;
   }
@@ -893,7 +900,7 @@
 
   .menu-divider {
     height: 1px;
-    background-color: var(--md-sys-color-outline-variant, rgba(0,0,0,0.1));
+    background-color: var(--border-subtle);
     margin: 0.25rem 0;
   }
 
@@ -915,12 +922,12 @@
   }
 
   .menu-action-btn:hover {
-    background-color: var(--md-sys-color-surface-container, rgba(0,0,0,0.05));
+    background-color: var(--bg-surface-hover);
   }
 
   .menu-folder-card {
-    background: var(--md-sys-color-surface-container, rgba(255, 255, 255, 0.04));
-    border: 1px solid var(--md-sys-color-outline-variant, rgba(255, 255, 255, 0.08));
+    background: var(--bg-surface-hover);
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
     padding: 8px 10px;
     display: flex;
@@ -939,7 +946,7 @@
     font-size: 0.825rem;
     font-weight: 500;
     font-family: var(--font-mono, monospace);
-    color: var(--md-sys-color-primary, #89b4fa);
+    color: var(--accent-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -965,25 +972,25 @@
     font-size: 0.75rem;
     padding: 4px 6px;
     border-radius: 4px;
-    border: 1px solid var(--md-sys-color-outline-variant, rgba(255, 255, 255, 0.15));
+    border: 1px solid var(--border-subtle);
     background: transparent;
-    color: var(--md-sys-color-on-surface, #e2e8f0);
+    color: var(--text-main);
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
   .menu-sub-btn:hover {
-    background: var(--md-sys-color-surface-container-high, rgba(255, 255, 255, 0.1));
+    background: var(--bg-surface-hover);
   }
 
   .menu-sub-btn.primary {
-    border-color: var(--md-sys-color-primary);
-    color: var(--md-sys-color-primary);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
   }
 
   .menu-sub-btn.danger {
-    color: var(--accent-danger, #ef4444);
-    border-color: rgba(239, 68, 68, 0.3);
+    color: var(--accent-danger);
+    border-color: var(--accent-danger);
   }
 
   .lang-grid {
@@ -1110,7 +1117,7 @@
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: #ffffff;
+    background: var(--bg-surface);
     border: 2px solid var(--md-sys-color-outline);
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     cursor: pointer;
@@ -1197,7 +1204,7 @@
     height: 16px;
     border-radius: 50%;
     background: var(--md-sys-color-primary);
-    border: 2px solid #ffffff;
+    border: 2px solid var(--bg-surface);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
     cursor: pointer;
   }

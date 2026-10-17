@@ -518,7 +518,7 @@
 
   .btn-action.primary {
     background: var(--accent-primary);
-    color: #ffffff;
+    color: var(--accent-primary-text);
     font-weight: 600;
     border-color: transparent;
   }
@@ -626,7 +626,7 @@
 
   .btn-run {
     background: var(--accent-primary);
-    color: #ffffff;
+    color: var(--accent-primary-text);
     border: none;
     border-radius: 6px;
     width: 32px;
@@ -724,7 +724,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    background: #ffffff;
+    background: var(--figure-canvas);
     border-radius: 6px;
     padding: 10px;
     border: 1px solid var(--border-subtle);
@@ -824,7 +824,7 @@
 
   .error-badge {
     background: var(--accent-danger);
-    color: #ffffff;
+    color: var(--accent-primary-text);
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.7rem;
@@ -872,12 +872,12 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: rgba(137, 180, 250, 0.15);
-    border: 1px solid rgba(137, 180, 250, 0.4);
+    background: var(--md-sys-color-primary-container);
+    border: 1px solid var(--border-subtle);
     padding: 3px 8px;
     border-radius: 6px;
     font-size: 12px;
-    color: var(--accent-primary, #89b4fa);
+    color: var(--accent-primary);
     font-weight: 500;
   }
 

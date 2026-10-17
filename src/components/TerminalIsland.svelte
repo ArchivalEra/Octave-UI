@@ -323,12 +323,12 @@
 
   .btn-danger {
     background: var(--accent-danger);
-    color: #fff;
+    color: var(--accent-primary-text);
   }
 
   .btn-warning {
     background: var(--accent-warning);
-    color: #fff;
+    color: var(--accent-primary-text);
   }
 
   .btn-secondary {

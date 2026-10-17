@@ -276,7 +276,7 @@
 
   .btn-action.primary {
     background: var(--accent-primary);
-    color: #ffffff;
+    color: var(--accent-primary-text);
     font-weight: 600;
     border-color: transparent;
   }

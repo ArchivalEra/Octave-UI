@@ -24,6 +24,9 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 网页端用户界面与交�
   - **文档与参数报错自动对齐**（`WasmEmbedAdapter.alignDocstringsPaths`）：启动时自动检测并镜像 MEMFS 中的 `built-in-docstrings` 与 `doc-cache` 至官方安装前缀路径，彻底解决上游 Issue #6 中 `help` 不可用及函数参数误用被误导性报错掩盖的问题。
   - **科学计算示例画廊扩充与体验升级**：全面扩充典型科学计算算法配方（覆盖一阶 RC 暂态、二阶 RLC 欠阻尼衰减、方波奇次谐波合成、奈奎斯特采样混叠、病态希尔伯特条件数、中心极限定理直方图等），各配方均具备中/英/德三语详尽解析与专属矢量图示；示例代码块全面纯净化（不含注释）、Try Example 自动追加新建独立单元格保护现有代码，并深度适配深浅色主题高对比度按钮文字。
   - **包与扩展管理插件**（`PackageManagerPlugin`）：严格遵循与 `Octave-Extra-Content` 的内容契约与接入规范，基于 `PluginRegistry` 挂载；直读同源装配态 `assets/forge-catalog.json` 货架，委托宿主引擎 `statusOf` 与 `install(..., { planOnly: true })` 拿取兼容性与真算下载预算，支持版本候选切换、`form: "tree"` 能力层识别与四态安装，并配有深浅色自适应管理面板 `PackageManagerModal`。
+  - **全站 Design Tokens 严格约束与明暗模式自适应**：全面根除历史残留的幽灵 CSS 变量（`--bg-primary`、`--text-primary`、`--border-color` 等）与 `<style>` 块硬编码颜色，所有组件界面颜色均受控于 `src/styles/theme.css` 的语义化 Design Tokens，并配备自动化质量闸门 `check_theme_tokens.py` 阻止任何变量泄漏回归。
+  - **三语完整平权国际化（i18n）**：提供英语（`en`）、简体中文（`zh-Hans`）与德语（`de`）全量键位字典对齐（100% 字典平权），全站所有组件模板及交互逻辑彻底移除硬编码中文，由专属质量闸门 `check_i18n.py` 实施静态正则扫描与反向断言防护。
+  - **AI / WebMCP 代理原生桥接插件**（`WebMcpPlugin`）：面向未来 AI Agent 操作与 WebMCP 协议，内置开箱即用的 DOM-free 机器控制接口（双层协议暴露于 `document.modelContext` 与 `navigator.modelContext`，并支持标准 `webmcp:ready` 与 `webmcp:call` 事件广播），提供 `octave_eval`、`octave_run_cell`、`octave_get_workspace`、`octave_list_packages`、`octave_install_package` 与 `octave_get_system_state` 等原生高维计算与系统状态工具；全站交互元素配齐 `data-action`、`data-testid` 等机器识别锚点，支持按需卸载（`pluginRegistry.unregister('webmcp')`）。
 
 ## 快速上手与命令
 
@@ -67,5 +70,5 @@ pnpm build:lanes
 - 事实台账见 [FACTS.json](FACTS.json)
 - 安装 git hooks 守卫：`sh reflect-hooks/install.sh`
 - 闸门自证请运行：`sh gates-selftest.sh`
-- 13 道闸门全跑：`. Einfacht.env && for g in zreflect/check_*.py; do python3 "$g" || exit 1; done`
+- 15 道闸门全跑：`. Einfacht.env && for g in zreflect/check_*.py; do python3 "$g" || exit 1; done`
 

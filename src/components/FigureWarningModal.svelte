@@ -158,7 +158,7 @@
 
   .btn-primary {
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--accent-primary-text);
     border-color: var(--accent-primary);
   }
 

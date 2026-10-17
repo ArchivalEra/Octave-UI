@@ -80,6 +80,11 @@
   --term-bright-magenta: #6639ba;
   --term-bright-cyan: #0e5f66;
   --term-bright-white: #24292f;
+
+  /* Typography & Figure */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --base-font-size: 13px;
+  --figure-canvas: #ffffff;
 }
 
 [data-theme="dark"] {

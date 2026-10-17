@@ -46,14 +46,14 @@
 
 | 键 | 值 | 测于 | 复跑命令 |
 |---|---|---|---|
-| `astro_files` | **2** | 2026-10-16T20:23:27+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
-| `md_files` | **15** | 2026-10-16T20:23:27+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `md_lines` | **1067** | 2026-10-16T20:23:27+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
-| `py_files` | **27** | 2026-10-16T20:23:27+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `py_lines` | **5253** | 2026-10-16T20:23:27+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
-| `svelte_files` | **11** | 2026-10-16T20:23:27+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
-| `test_files` | **26** | 2026-10-16T20:23:27+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
-| `ts_files` | **75** | 2026-10-16T20:23:27+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
+| `astro_files` | **2** | 2026-10-17T12:27:07+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
+| `md_files` | **16** | 2026-10-17T12:27:07+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `md_lines` | **1108** | 2026-10-17T12:27:08+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
+| `py_files` | **29** | 2026-10-17T12:27:07+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `py_lines` | **5576** | 2026-10-17T12:27:07+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
+| `svelte_files` | **11** | 2026-10-17T12:27:07+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
+| `test_files` | **27** | 2026-10-17T12:27:07+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
+| `ts_files` | **78** | 2026-10-17T12:27:07+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
 
 8 条事实。
 <!-- /AUTO:FACTS -->
@@ -67,6 +67,7 @@
 | `check_envfile.py`（env 文件闸门） | 守钩子的 REFLECT_* 载体（旋钮 typo / 指向缺失 / 空值） | `REFLECT_ENV_FILE` |
 | `check_facts.py`（事实闸门） | 块一致性 / 裸数字 / 坏引用 | `REFLECT_FACTS`, `REFLECT_DOC`, `REFLECT_NAKED_MIN` |
 | `check_facts_replay.py`（复跑闸门） | 台账 cmd 逐字复跑（裸值契约：stdout 必须等于值） | `REFLECT_FACTS`, `REFLECT_REPLAY`, `REFLECT_REPLAY_TIMEOUT` |
+| `check_i18n.py`（i18n 硬编码闸门） | 检查 Svelte 组件中未国际化的硬编码中文字符串 | — |
 | `check_instruments.py`（仪器生命周期闸门） | 恒常检测（first_seen）+ 被证伪量法登记 | `REFLECT_INSTRUMENTS`, `REFLECT_INSTRUMENT_DAYS`, `REFLECT_FACTS` |
 | `check_invariants.py`（不变量闸门） | 声明式不变量：仓库文件必须/不得含某片段（grep 级） | `REFLECT_INVARIANTS` |
 | `check_locks.py`（锁定源闸门） | 锁定源清单（URL + 文件 + sha256 的内容指纹） | — |
@@ -75,7 +76,8 @@
 | `check_readme_sync.py`（三语 README 闸门） | 语言版本是同一条断言的三份拷贝：结构互链 + 每次推送同批 | `REFLECT_READMES` |
 | `check_retractions.py`（翻案重现检测） | 被推翻的断言不许悄悄回来当现状 | `REFLECT_RETRACTIONS`, `REFLECT_DOCS`, `REFLECT_HISTORY_SECS` |
 | `check_stale.py`（陈旧断言检测） | sha 出处 / 退役名 / 测龄 | `REFLECT_DOCS`, `REFLECT_FACTS`, `REFLECT_HISTORY_SECS`, `REFLECT_RETIRED`, `REFLECT_STALE_DAYS` |
+| `check_theme_tokens.py`（主题变量与硬编码颜色闸门） | 检查 Svelte 组件中的 CSS 变量合法性与禁止硬编码十六进制颜色 | — |
 | `check_world.py`（world 闸门） | 声明式验证对象：多线仓库共享验证环境的世界对账 | `REFLECT_WORLD`, `REFLECT_WORLD_LINE` |
 
-13 道闸门（发现式名录派生 —— 手写清单会漂，加闸门 = 落一个声明行，这里自动长出来）。
+15 道闸门（发现式名录派生 —— 手写清单会漂，加闸门 = 落一个声明行，这里自动长出来）。
 <!-- /AUTO:GATES -->

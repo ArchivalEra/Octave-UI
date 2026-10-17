@@ -324,7 +324,7 @@
     padding: 1px 5px;
     border-radius: 3px;
     background: var(--accent-primary);
-    color: #ffffff;
+    color: var(--accent-primary-text);
     font-weight: 600;
   }
 
@@ -344,7 +344,7 @@
 
   .btn-primary {
     background: var(--accent-primary);
-    color: #ffffff;
+    color: var(--accent-primary-text);
     border: none;
     padding: 6px 16px;
     border-radius: 6px;

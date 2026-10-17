@@ -1,7 +1,8 @@
 <!-- src/components/PackageManagerModal.svelte -->
 <script lang="ts">
-  import { packageManagerPlugin, t } from '../modules/appContext';
+  import { packageManagerPlugin, i18n, t } from '../modules/appContext';
   import type { ForgePackageItem, InstallPlan } from '../modules/plugins/package/types';
+  import type { Locale } from '../modules/i18n/types';
 
   let { isOpen, onClose } = $props<{
     isOpen: boolean;
@@ -12,6 +13,7 @@
   let selectedConsumer = $state<'all' | 'octave' | 'omc'>('all');
   let selectedForm = $state<'all' | 'pkg' | 'tree'>('all');
   let installedOnly = $state(false);
+  let currentLocale = $state<Locale>(i18n.currentLocale);
 
   let selectedVersions = $state<Record<string, string>>({});
   let packageStatuses = $state<Record<string, { compatible: boolean; fromSource: boolean; installed: boolean; detail?: any }>>({});
@@ -35,6 +37,10 @@
   }
 
   $effect(() => {
+    const unsubI18n = i18n.subscribe((loc) => {
+      currentLocale = loc;
+    });
+
     if (isOpen) {
       if (!packageManagerPlugin.getCatalog()) {
         packageManagerPlugin.loadCatalog()
@@ -43,14 +49,14 @@
             refreshStatuses();
           })
           .catch((err) => {
-            errorMsg = err.message || 'Failed to load catalog';
+            errorMsg = t('package_manager.err_load_catalog', { error: err.message || String(err) });
           });
       } else {
         catalogLoaded = true;
         refreshStatuses();
       }
 
-      const unsub = packageManagerPlugin.subscribe(() => {
+      const unsubPlugin = packageManagerPlugin.subscribe(() => {
         refreshStatuses();
       });
 
@@ -67,10 +73,15 @@
 
       window.addEventListener('keydown', handleKeyDown);
       return () => {
-        unsub();
+        unsubI18n();
+        unsubPlugin();
         window.removeEventListener('keydown', handleKeyDown);
       };
     }
+
+    return () => {
+      unsubI18n();
+    };
   });
 
   const filteredPackages = $derived.by(() => {
@@ -98,7 +109,7 @@
     try {
       activePlan = await packageManagerPlugin.planInstall(item.name, version);
     } catch (err: any) {
-      errorMsg = err.message || 'Failed to compute install plan';
+      errorMsg = t('package_manager.err_compute_plan', { error: err.message || String(err) });
     } finally {
       planLoading = false;
     }
@@ -110,27 +121,27 @@
     try {
       const res = await packageManagerPlugin.installPackage(item.name, { version });
       if (res.state !== 'ok') {
-        errorMsg = res.message || `Installation failed: ${res.cause || res.state}`;
+        errorMsg = t('package_manager.err_install_failed', { error: res.message || res.cause || res.state });
       } else {
         activePlan = null;
         activePlanItem = null;
         refreshStatuses();
       }
     } catch (err: any) {
-      errorMsg = err.message || 'Installation encountered an error';
+      errorMsg = t('package_manager.err_install_generic', { error: err.message || String(err) });
     }
   }
 </script>
 
 {#if isOpen}
-  <div class="modal-overlay" onclick={onClose} role="dialog" aria-modal="true">
+  <div class="modal-overlay" onclick={onClose} role="dialog" aria-modal="true" data-testid="package-manager-modal">
     <div class="modal-card" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <div class="title-group">
-          <h2 class="title">包与扩展管理 (Packages & Extensions)</h2>
-          <span class="subtitle">基于同源站点 Forge 货架与额外内容契约，支持 Octave Forge 扩展包与运行时能力层</span>
+          <h2 class="title">{t('package_manager.title')}</h2>
+          <span class="subtitle">{t('package_manager.subtitle')}</span>
         </div>
-        <button class="btn-close" onclick={onClose} aria-label="Close">✕</button>
+        <button class="btn-close" onclick={onClose} aria-label={t('package_manager.plan_btn_cancel')} data-action="close">✕</button>
       </div>
 
       <!-- 搜索与筛选工具栏 -->
@@ -139,56 +150,69 @@
           <input
             type="text"
             class="input-search"
-            placeholder="搜索扩展包名、描述或依赖..."
+            placeholder={t('package_manager.search_placeholder')}
             bind:value={searchQuery}
+            data-action="search"
           />
           {#if searchQuery}
-            <button class="btn-clear" onclick={() => (searchQuery = '')}>✕</button>
+            <button class="btn-clear" onclick={() => (searchQuery = '')} aria-label="Clear search">✕</button>
           {/if}
         </div>
 
         <div class="filter-row">
           <div class="filter-group">
-            <span class="filter-label">引擎:</span>
+            <span class="filter-label">{t('package_manager.filter_engine')}</span>
             <button
               class="filter-pill"
               class:active={selectedConsumer === 'all'}
               onclick={() => (selectedConsumer = 'all')}
-            >全部</button>
+              data-action="filter-consumer"
+              data-consumer="all"
+            >{t('package_manager.filter_all')}</button>
             <button
               class="filter-pill"
               class:active={selectedConsumer === 'octave'}
               onclick={() => (selectedConsumer = 'octave')}
-            >Octave</button>
+              data-action="filter-consumer"
+              data-consumer="octave"
+            >{t('package_manager.filter_octave')}</button>
             <button
               class="filter-pill"
               class:active={selectedConsumer === 'omc'}
               onclick={() => (selectedConsumer = 'omc')}
-            >OMC</button>
+              data-action="filter-consumer"
+              data-consumer="omc"
+            >{t('package_manager.filter_omc')}</button>
           </div>
 
           <div class="filter-group">
-            <span class="filter-label">形态:</span>
+            <span class="filter-label">{t('package_manager.filter_form')}</span>
             <button
               class="filter-pill"
               class:active={selectedForm === 'all'}
               onclick={() => (selectedForm = 'all')}
-            >全部</button>
+              data-action="filter-form"
+              data-form="all"
+            >{t('package_manager.filter_all')}</button>
             <button
               class="filter-pill"
               class:active={selectedForm === 'pkg'}
               onclick={() => (selectedForm = 'pkg')}
-            >标准包</button>
+              data-action="filter-form"
+              data-form="pkg"
+            >{t('package_manager.filter_pkg')}</button>
             <button
               class="filter-pill"
               class:active={selectedForm === 'tree'}
               onclick={() => (selectedForm = 'tree')}
-            >能力层</button>
+              data-action="filter-form"
+              data-form="tree"
+            >{t('package_manager.filter_tree')}</button>
           </div>
 
           <label class="checkbox-label">
-            <input type="checkbox" bind:checked={installedOnly} />
-            <span>仅看已安装</span>
+            <input type="checkbox" bind:checked={installedOnly} data-action="filter-installed-only" />
+            <span>{t('package_manager.filter_installed_only')}</span>
           </label>
         </div>
       </div>
@@ -196,7 +220,7 @@
       {#if errorMsg}
         <div class="error-banner">
           <span>⚠️ {errorMsg}</span>
-          <button class="btn-dismiss" onclick={() => (errorMsg = null)}>✕</button>
+          <button class="btn-dismiss" onclick={() => (errorMsg = null)} aria-label="Dismiss error">✕</button>
         </div>
       {/if}
 
@@ -205,11 +229,11 @@
         {#if !catalogLoaded}
           <div class="loading-state">
             <span class="spinner"></span>
-            <span>正在加载扩展货架目录 (assets/forge-catalog.json)...</span>
+            <span>{t('package_manager.loading_catalog')}</span>
           </div>
         {:else if filteredPackages.length === 0}
           <div class="empty-state">
-            <p>没有找到匹配的扩展包。</p>
+            <p>{t('package_manager.empty')}</p>
           </div>
         {:else}
           <div class="package-grid">
@@ -220,7 +244,7 @@
               {@const currentVer = selectedVersions[item.name] || item.version}
               {@const extraSize = packageManagerPlugin.estimateExtraDownload(item.name)}
 
-              <div class="package-card" class:installed={status.installed}>
+              <div class="package-card" class:installed={status.installed} data-package={item.name}>
                 <div class="card-header">
                   <div class="title-row">
                     <span class="package-name">{item.name}</span>
@@ -233,26 +257,26 @@
                     </span>
                     <!-- 投送形态 -->
                     <span class="badge form-badge" class:tree={item.form === 'tree'}>
-                      {item.form === 'tree' ? '能力层 (tree)' : '扩展包 (pkg)'}
+                      {item.form === 'tree' ? t('package_manager.tag_tree') : t('package_manager.tag_pkg')}
                     </span>
                     <!-- 内容构成 -->
                     {#if item.form === 'tree'}
-                      <span class="badge runtime-badge">运行时能力</span>
+                      <span class="badge runtime-badge">{t('package_manager.tag_runtime')}</span>
                     {:else if item.content && item.content.length > 0}
                       {#each item.content as c}
                         <span class="badge content-badge content-{c}">
-                          {c === 'm' ? '纯 M' : c === 'src' ? '含源码' : '.oct 预编'}
+                          {c === 'm' ? t('package_manager.content_m') : c === 'src' ? t('package_manager.content_src') : t('package_manager.content_oct')}
                         </span>
                       {/each}
                     {/if}
                   </div>
                 </div>
 
-                <p class="package-desc">{item.description || '无详细描述'}</p>
+                <p class="package-desc">{item.description || t('package_manager.no_desc')}</p>
 
                 {#if item.deps && item.deps.length > 0}
                   <div class="deps-row">
-                    <span class="deps-label">依赖:</span>
+                    <span class="deps-label">{t('package_manager.deps_label')}</span>
                     {#each item.deps as dep}
                       <span class="dep-pill">{dep}</span>
                     {/each}
@@ -263,15 +287,17 @@
                 <div class="version-select-row">
                   {#if versions.length > 1}
                     <label class="select-label">
-                      <span>版本:</span>
+                      <span>{t('package_manager.version_label')}</span>
                       <select
                         class="version-select"
                         bind:value={selectedVersions[item.name]}
                         disabled={isInst || status.installed}
+                        data-action="select-version"
+                        data-package={item.name}
                       >
                         {#each versions as v}
                           <option value={v.version} disabled={v.stage === 'withheld'}>
-                            {v.version} {v.stage === 'withheld' ? '(未上架)' : ''}
+                            {v.version} {v.stage === 'withheld' ? t('package_manager.stage_withheld') : ''}
                           </option>
                         {/each}
                       </select>
@@ -279,9 +305,11 @@
                   {/if}
 
                   <div class="size-info">
-                    <span>体积: {formatBytes(item.size)}</span>
+                    <span>{t('package_manager.size_label', { size: formatBytes(item.size) })}</span>
                     {#if extraSize > 0}
-                      <span class="extra-size" title="依赖能力层需要的额外体积">+ 运行时 {formatBytes(extraSize)}</span>
+                      <span class="extra-size" title={t('package_manager.runtime_extra_tooltip')}>
+                        {t('package_manager.runtime_extra_size', { size: formatBytes(extraSize) })}
+                      </span>
                     {/if}
                   </div>
                 </div>
@@ -289,24 +317,24 @@
                 <!-- 底部操作按钮栏 -->
                 <div class="card-footer">
                   {#if status.installed}
-                    <button class="btn-action btn-installed" disabled>
-                      ✓ 已安装
+                    <button class="btn-action btn-installed" disabled data-action="installed" data-package={item.name}>
+                      {t('package_manager.btn_installed')}
                     </button>
                   {:else if !status.compatible}
-                    <button class="btn-action btn-incompatible" disabled title="架构或前置条件不满足">
-                      ⊘ 架构不兼容
+                    <button class="btn-action btn-incompatible" disabled title={t('package_manager.btn_incompatible_tooltip')} data-action="incompatible" data-package={item.name}>
+                      {t('package_manager.btn_incompatible')}
                     </button>
                   {:else if isInst}
-                    <button class="btn-action btn-installing" disabled>
-                      <span class="btn-spinner"></span> 安装中...
+                    <button class="btn-action btn-installing" disabled data-action="installing" data-package={item.name}>
+                      <span class="btn-spinner"></span> {t('package_manager.btn_installing')}
                     </button>
                   {:else}
                     <div class="btn-action-group">
-                      <button class="btn-action btn-plan" onclick={() => openPlanPreview(item)}>
-                        预演
+                      <button class="btn-action btn-plan" onclick={() => openPlanPreview(item)} data-action="plan" data-package={item.name}>
+                        {t('package_manager.btn_plan')}
                       </button>
-                      <button class="btn-action btn-install" onclick={() => triggerInstall(item)}>
-                        安装
+                      <button class="btn-action btn-install" onclick={() => triggerInstall(item)} data-action="install" data-package={item.name}>
+                        {t('package_manager.btn_install')}
                       </button>
                     </div>
                   {/if}
@@ -322,32 +350,36 @@
         <div class="plan-submodal">
           <div class="plan-card">
             <div class="plan-header">
-              <h3>安装计划预演: {activePlanItem.name}</h3>
-              <button class="btn-close-sm" onclick={() => { activePlanItem = null; activePlan = null; }}>✕</button>
+              <h3>{t('package_manager.plan_title', { name: activePlanItem.name })}</h3>
+              <button class="btn-close-sm" onclick={() => { activePlanItem = null; activePlan = null; }} aria-label="Close" data-action="cancel-plan">✕</button>
             </div>
             {#if planLoading}
               <div class="plan-loading">
                 <span class="spinner"></span>
-                <span>正在向引擎询问安装依赖与真算体积 (planOnly)...</span>
+                <span>{t('package_manager.plan_loading')}</span>
               </div>
             {:else if activePlan}
               <div class="plan-content">
                 <div class="plan-metric">
-                  <span class="metric-label">总传输预算:</span>
+                  <span class="metric-label">{t('package_manager.plan_budget')}</span>
                   <span class="metric-value">{formatBytes(activePlan.bytes)}</span>
                 </div>
                 {#if activePlan.layers && activePlan.layers.length > 0}
                   <div class="plan-metric">
-                    <span class="metric-label">包含能力层:</span>
+                    <span class="metric-label">{t('package_manager.plan_layers')}</span>
                     <span class="metric-value">{activePlan.layers.join(', ')}</span>
                   </div>
                 {/if}
                 <p class="plan-note">
-                  真算出口由宿主 <code>install(..., &#123;planOnly: true&#125;)</code> 权威测定，零网络请求预演完成。
+                  {t('package_manager.plan_note')}
                 </p>
                 <div class="plan-actions">
-                  <button class="btn-cancel" onclick={() => { activePlanItem = null; activePlan = null; }}>取消</button>
-                  <button class="btn-confirm-install" onclick={() => triggerInstall(activePlanItem!)}>确认安装</button>
+                  <button class="btn-cancel" onclick={() => { activePlanItem = null; activePlan = null; }} data-action="cancel-plan">
+                    {t('package_manager.plan_btn_cancel')}
+                  </button>
+                  <button class="btn-confirm-install" onclick={() => triggerInstall(activePlanItem!)} data-action="confirm-install" data-package={activePlanItem.name}>
+                    {t('package_manager.plan_btn_confirm')}
+                  </button>
                 </div>
               </div>
             {/if}
@@ -362,7 +394,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--bg-overlay);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -371,16 +403,16 @@
   }
 
   .modal-card {
-    background: var(--bg-primary, #ffffff);
-    color: var(--text-primary, #1e293b);
-    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-surface);
+    color: var(--text-main);
+    border: 1px solid var(--border-subtle);
     border-radius: 12px;
     width: 90vw;
     max-width: 960px;
     height: 85vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-3);
     overflow: hidden;
     position: relative;
   }
@@ -390,7 +422,7 @@
     align-items: flex-start;
     justify-content: space-between;
     padding: 16px 20px;
-    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .title-group {
@@ -403,11 +435,12 @@
     margin: 0;
     font-size: 1.15rem;
     font-weight: 600;
+    color: var(--text-main);
   }
 
   .subtitle {
     font-size: 0.75rem;
-    color: var(--text-secondary, #64748b);
+    color: var(--text-muted);
   }
 
   .btn-close {
@@ -415,19 +448,20 @@
     border: none;
     font-size: 1.1rem;
     cursor: pointer;
-    color: var(--text-secondary, #64748b);
+    color: var(--text-muted);
     padding: 4px;
     border-radius: 4px;
+    transition: background 0.15s ease, color 0.15s ease;
   }
   .btn-close:hover {
-    color: var(--text-primary, #0f172a);
-    background: var(--bg-secondary, #f1f5f9);
+    color: var(--text-main);
+    background: var(--bg-surface-hover);
   }
 
   .toolbar {
     padding: 12px 20px;
-    border-bottom: 1px solid var(--border-color, #e2e8f0);
-    background: var(--bg-secondary, #f8fafc);
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-canvas);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -443,14 +477,15 @@
     padding: 8px 12px;
     font-size: 0.85rem;
     border-radius: 6px;
-    border: 1px solid var(--border-color, #cbd5e1);
-    background: var(--bg-primary, #ffffff);
-    color: var(--text-primary, #1e293b);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-main);
     outline: none;
     box-sizing: border-box;
+    transition: border-color 0.15s ease;
   }
   .input-search:focus {
-    border-color: var(--accent-color, #0284c7);
+    border-color: var(--accent-primary);
   }
 
   .btn-clear {
@@ -460,7 +495,7 @@
     transform: translateY(-50%);
     background: none;
     border: none;
-    color: var(--text-secondary, #94a3b8);
+    color: var(--text-dim);
     cursor: pointer;
     font-size: 0.85rem;
   }
@@ -480,27 +515,27 @@
   }
 
   .filter-label {
-    color: var(--text-secondary, #64748b);
+    color: var(--text-muted);
     font-weight: 500;
   }
 
   .filter-pill {
     padding: 3px 10px;
     border-radius: 12px;
-    border: 1px solid var(--border-color, #cbd5e1);
-    background: var(--bg-primary, #ffffff);
-    color: var(--text-primary, #334155);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-main);
     font-size: 0.75rem;
     cursor: pointer;
     transition: all 0.15s ease;
   }
   .filter-pill:hover {
-    border-color: var(--accent-color, #0284c7);
+    border-color: var(--accent-primary);
   }
   .filter-pill.active {
-    background: var(--accent-color, #0284c7);
-    color: #ffffff;
-    border-color: var(--accent-color, #0284c7);
+    background: var(--accent-primary);
+    color: var(--accent-primary-text);
+    border-color: var(--accent-primary);
   }
 
   .checkbox-label {
@@ -508,15 +543,15 @@
     align-items: center;
     gap: 5px;
     cursor: pointer;
-    color: var(--text-secondary, #475569);
+    color: var(--text-muted);
     user-select: none;
     margin-left: auto;
   }
 
   .error-banner {
-    background: #fef2f2;
-    color: #b91c1c;
-    border-bottom: 1px solid #fecaca;
+    background: var(--bg-surface);
+    color: var(--accent-danger);
+    border-bottom: 1px solid var(--accent-danger);
     padding: 8px 20px;
     font-size: 0.8rem;
     display: flex;
@@ -526,7 +561,7 @@
   .btn-dismiss {
     background: none;
     border: none;
-    color: #b91c1c;
+    color: var(--accent-danger);
     cursor: pointer;
   }
 
@@ -542,7 +577,7 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: var(--text-secondary, #64748b);
+    color: var(--text-muted);
     gap: 12px;
     font-size: 0.9rem;
   }
@@ -550,8 +585,8 @@
   .spinner {
     width: 24px;
     height: 24px;
-    border: 3px solid rgba(0, 0, 0, 0.1);
-    border-top-color: var(--accent-color, #0284c7);
+    border: 3px solid var(--border-subtle);
+    border-top-color: var(--accent-primary);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -563,21 +598,22 @@
   }
 
   .package-card {
-    background: var(--bg-card, #ffffff);
-    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
     padding: 14px;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: var(--shadow-1);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
   .package-card:hover {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-2);
+    border-color: var(--accent-primary);
   }
   .package-card.installed {
-    border-left: 4px solid #10b981;
+    border-left: 4px solid var(--accent-success);
   }
 
   .title-row {
@@ -590,13 +626,13 @@
   .package-name {
     font-weight: 600;
     font-size: 0.95rem;
-    color: var(--text-primary, #0f172a);
+    color: var(--text-main);
   }
 
   .package-version {
     font-size: 0.75rem;
     font-family: monospace;
-    color: var(--text-secondary, #64748b);
+    color: var(--text-muted);
   }
 
   .badge-row {
@@ -614,44 +650,51 @@
   }
 
   .consumer-badge {
-    background: #e0f2fe;
-    color: #0369a1;
+    background: var(--bg-surface-hover);
+    color: var(--accent-primary);
+    border: 1px solid var(--border-subtle);
   }
   .consumer-badge.omc {
-    background: #f3e8ff;
-    color: #7e22ce;
+    background: var(--bg-surface-hover);
+    color: var(--md-sys-color-tertiary);
+    border: 1px solid var(--border-subtle);
   }
 
   .form-badge {
-    background: #f1f5f9;
-    color: #475569;
+    background: var(--bg-surface-hover);
+    color: var(--text-muted);
+    border: 1px solid var(--border-subtle);
   }
   .form-badge.tree {
-    background: #ecfdf5;
-    color: #047857;
+    background: var(--bg-surface-hover);
+    color: var(--accent-success);
+    border: 1px solid var(--border-subtle);
   }
 
   .runtime-badge {
-    background: #dcfce7;
-    color: #15803d;
+    background: var(--bg-surface-hover);
+    color: var(--accent-success);
+    border: 1px solid var(--border-subtle);
   }
 
+  .content-badge {
+    background: var(--bg-surface-hover);
+    color: var(--text-muted);
+    border: 1px solid var(--border-subtle);
+  }
   .content-badge.content-m {
-    background: #e0e7ff;
-    color: #4338ca;
+    color: var(--accent-primary);
   }
   .content-badge.content-src {
-    background: #fef3c7;
-    color: #b45309;
+    color: var(--accent-warning);
   }
   .content-badge.content-oct {
-    background: #fee2e2;
-    color: #b91c1c;
+    color: var(--accent-danger);
   }
 
   .package-desc {
     font-size: 0.8rem;
-    color: var(--text-secondary, #475569);
+    color: var(--text-muted);
     margin: 0;
     line-height: 1.4;
     display: -webkit-box;
@@ -668,14 +711,15 @@
     font-size: 0.7rem;
   }
   .deps-label {
-    color: var(--text-secondary, #64748b);
+    color: var(--text-dim);
   }
   .dep-pill {
-    background: var(--bg-secondary, #f1f5f9);
-    color: var(--text-secondary, #475569);
+    background: var(--bg-canvas);
+    color: var(--text-muted);
     padding: 1px 5px;
     border-radius: 3px;
     font-family: monospace;
+    border: 1px solid var(--border-subtle);
   }
 
   .version-select-row {
@@ -685,33 +729,34 @@
     font-size: 0.75rem;
     margin-top: auto;
     padding-top: 6px;
-    border-top: 1px dashed var(--border-color, #f1f5f9);
+    border-top: 1px dashed var(--border-subtle);
   }
 
   .select-label {
     display: flex;
     align-items: center;
     gap: 4px;
+    color: var(--text-muted);
   }
 
   .version-select {
     padding: 2px 6px;
     font-size: 0.75rem;
     border-radius: 4px;
-    border: 1px solid var(--border-color, #cbd5e1);
-    background: var(--bg-primary, #ffffff);
-    color: var(--text-primary, #1e293b);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-main);
   }
 
   .size-info {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    color: var(--text-secondary, #64748b);
+    color: var(--text-dim);
     font-size: 0.7rem;
   }
   .extra-size {
-    color: #d97706;
+    color: var(--accent-warning);
     font-size: 0.65rem;
   }
 
@@ -738,40 +783,40 @@
   }
 
   .btn-install {
-    background: var(--accent-color, #0284c7);
-    color: #ffffff;
+    background: var(--accent-primary);
+    color: var(--accent-primary-text);
   }
   .btn-install:hover {
-    background: #0369a1;
+    background: var(--accent-primary-hover);
   }
 
   .btn-plan {
-    background: var(--bg-secondary, #f1f5f9);
-    color: var(--text-primary, #334155);
-    border: 1px solid var(--border-color, #cbd5e1);
+    background: var(--bg-surface-hover);
+    color: var(--text-main);
+    border: 1px solid var(--border-subtle);
   }
   .btn-plan:hover {
-    background: #e2e8f0;
+    background: var(--border-subtle);
   }
 
   .btn-installed {
-    background: #ecfdf5;
-    color: #047857;
-    border: 1px solid #a7f3d0;
+    background: var(--bg-surface-hover);
+    color: var(--accent-success);
+    border: 1px solid var(--accent-success);
     cursor: default;
   }
 
   .btn-incompatible {
-    background: #f1f5f9;
-    color: #94a3b8;
-    border: 1px solid #e2e8f0;
+    background: var(--bg-canvas);
+    color: var(--text-dim);
+    border: 1px solid var(--border-subtle);
     cursor: not-allowed;
   }
 
   .btn-installing {
-    background: #f8fafc;
-    color: var(--accent-color, #0284c7);
-    border: 1px solid var(--accent-color, #0284c7);
+    background: var(--bg-surface-hover);
+    color: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
     cursor: wait;
     display: flex;
     align-items: center;
@@ -781,8 +826,8 @@
   .btn-spinner {
     width: 10px;
     height: 10px;
-    border: 2px solid rgba(2, 132, 199, 0.2);
-    border-top-color: #0284c7;
+    border: 2px solid var(--border-subtle);
+    border-top-color: var(--accent-primary);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -791,7 +836,7 @@
   .plan-submodal {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--bg-overlay);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -799,33 +844,39 @@
   }
 
   .plan-card {
-    background: var(--bg-primary, #ffffff);
-    color: var(--text-primary, #1e293b);
-    border: 1px solid var(--border-color, #cbd5e1);
+    background: var(--bg-surface);
+    color: var(--text-main);
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
     width: 420px;
     max-width: 90%;
     padding: 20px;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-3);
   }
 
   .plan-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    border-bottom: 1px solid var(--border-subtle);
     padding-bottom: 10px;
     margin-bottom: 14px;
   }
   .plan-header h3 {
     margin: 0;
     font-size: 0.95rem;
+    color: var(--text-main);
   }
   .btn-close-sm {
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--text-secondary, #64748b);
+    color: var(--text-muted);
+    font-size: 1rem;
+    transition: color 0.15s ease;
+  }
+  .btn-close-sm:hover {
+    color: var(--text-main);
   }
 
   .plan-metric {
@@ -835,17 +886,19 @@
     font-size: 0.85rem;
   }
   .metric-label {
-    color: var(--text-secondary, #64748b);
+    color: var(--text-muted);
   }
   .metric-value {
     font-weight: 600;
+    color: var(--text-main);
   }
 
   .plan-note {
     font-size: 0.75rem;
-    color: var(--text-secondary, #64748b);
+    color: var(--text-muted);
     line-height: 1.4;
-    background: var(--bg-secondary, #f8fafc);
+    background: var(--bg-canvas);
+    border: 1px solid var(--border-subtle);
     padding: 8px;
     border-radius: 4px;
     margin: 12px 0;
@@ -860,20 +913,29 @@
   .btn-cancel {
     padding: 6px 12px;
     border-radius: 6px;
-    border: 1px solid var(--border-color, #cbd5e1);
-    background: none;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-main);
     cursor: pointer;
     font-size: 0.8rem;
+    transition: background 0.15s ease;
+  }
+  .btn-cancel:hover {
+    background: var(--bg-surface-hover);
   }
   .btn-confirm-install {
     padding: 6px 14px;
     border-radius: 6px;
-    background: var(--accent-color, #0284c7);
-    color: #ffffff;
+    background: var(--accent-primary);
+    color: var(--accent-primary-text);
     border: none;
     cursor: pointer;
     font-size: 0.8rem;
     font-weight: 500;
+    transition: background 0.15s ease;
+  }
+  .btn-confirm-install:hover {
+    background: var(--accent-primary-hover);
   }
 
   @keyframes spin {

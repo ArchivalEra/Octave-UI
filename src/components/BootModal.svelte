@@ -302,7 +302,7 @@
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: #eab308;
+    color: var(--accent-warning);
   }
 
   .warning-text {
@@ -320,7 +320,7 @@
     padding: 4px 10px;
     font-size: 11px;
     cursor: pointer;
-    color: var(--text-primary);
+    color: var(--text-main);
     transition: all 0.15s;
     display: inline-flex;
     align-items: center;
@@ -329,7 +329,7 @@
   }
 
   .btn-switch-lane:hover {
-    background: var(--bg-hover);
+    background: var(--bg-surface-hover);
     border-color: var(--border-muted);
   }
 
@@ -367,7 +367,7 @@
 
   .btn-primary {
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--accent-primary-text);
     border-color: var(--accent-primary);
   }
 </style>

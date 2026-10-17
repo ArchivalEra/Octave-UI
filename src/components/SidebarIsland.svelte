@@ -146,7 +146,7 @@
             await workspaceStorage.syncToEngine(supervisor);
           }
         } catch (e: any) {
-          alert('ZIP 导入失败: ' + (e?.message || e));
+          alert(t('sidebar.err_import_zip', { error: e?.message || String(e) }));
         }
       }
       if (input.parentNode) {
@@ -161,7 +161,7 @@
     try {
       await workspaceStorage.exportAsZip('octave-workspace.zip');
     } catch (err: any) {
-      alert('导出失败: ' + (err?.message || err));
+      alert(t('sidebar.err_export_zip', { error: err?.message || String(err) }));
     }
   }
 
@@ -184,29 +184,29 @@
       }
       await workspaceStorage.syncToEngine(supervisor);
     } catch (err: any) {
-      alert('拖拽导入失败: ' + (err?.message || err));
+      alert(t('sidebar.err_drag_drop', { error: err?.message || String(err) }));
     }
   }
 
   async function handleNewScript() {
-    const name = prompt('请输入新脚本文件名 (例如: script.m):', 'script.m');
+    const name = prompt(t('sidebar.prompt_new_script'), 'script.m');
     if (name && name.trim()) {
       const filename = name.trim().endsWith('.m') ? name.trim() : `${name.trim()}.m`;
-      await workspaceStorage.writeFile(filename, `%% 主小节\n% 脚本: ${filename}\ndisp("正在运行 ${filename}");\n`);
+      await workspaceStorage.writeFile(filename, t('sidebar.default_script_content', { filename }));
       await projectWorkspace.openFile(filename);
       await workspaceStorage.syncToEngine(supervisor);
     }
   }
 
   async function handleNewFolder() {
-    const name = prompt('请输入新目录名 (例如: utils 或 data/sub):', 'utils');
+    const name = prompt(t('sidebar.prompt_new_folder'), 'utils');
     if (name && name.trim()) {
       await workspaceStorage.createDirectory(name.trim());
     }
   }
 
   async function handleClearStorage() {
-    if (confirm('确定要清空当前工作区中所有的文件和目录吗？')) {
+    if (confirm(t('sidebar.confirm_clear_storage'))) {
       await workspaceStorage.clearWorkspace();
     }
   }
@@ -228,12 +228,12 @@
       const { name } = splitPath(path);
       downloadFile(data, name, 'application/octet-stream');
     } catch (err: any) {
-      alert('下载文件失败: ' + (err?.message || err));
+      alert(t('sidebar.err_download_file', { error: err?.message || String(err) }));
     }
   }
 
   async function handleDeleteEntry(path: string) {
-    if (confirm(`确定要删除 ${path} 吗？`)) {
+    if (confirm(t('sidebar.confirm_delete_path', { path }))) {
       await workspaceStorage.deleteEntry(path);
     }
   }
@@ -267,7 +267,7 @@
     const target = e.currentTarget as HTMLSelectElement;
     const selectedId = target.value;
     if (selectedId === '__new__') {
-      snapshotNameInput = `工作区 ${new Date().toLocaleTimeString()}`;
+      snapshotNameInput = t('sidebar.default_snapshot_prefix', { time: new Date().toLocaleTimeString() });
       snapshotDescInput = '';
       showSaveModal = true;
       target.value = activeWorkspaceId;
@@ -433,9 +433,10 @@
             <button
               class="btn-delete-snap"
               onclick={() => handleDeleteSnapshot(activeWorkspaceId)}
-              title="删除此快照"
+              title={t('sidebar.delete_snapshot_title')}
+              data-action="delete-snapshot"
             >
-              删除快照
+              {t('sidebar.delete_snapshot')}
             </button>
           {/if}
         </div>
@@ -481,56 +482,56 @@
         <div class="storage-card">
           <div class="storage-header">
             <span class="storage-title">
-              {storageType === 'opfs' ? '📁 OPFS 持久沙箱' : '💾 纯内存工作区'}
+              {storageType === 'opfs' ? t('sidebar.storage_opfs') : t('sidebar.storage_memory')}
             </span>
             <span class="storage-badge" class:badge-opfs={storageType === 'opfs'} class:badge-memory={storageType === 'memory'}>
-              {storageType === 'opfs' ? '持久化' : '无持久化'}
+              {storageType === 'opfs' ? t('sidebar.storage_persisted') : t('sidebar.storage_ephemeral')}
             </span>
           </div>
 
           <div class="storage-meta">
-            <span>文件: {storageStats.filesCount} 个</span>
+            <span>{t('sidebar.storage_files_stat', { count: storageStats.filesCount })}</span>
             {#if storageStats.totalBytes > 0}
-              <span>· 大小: {formatBytes(storageStats.totalBytes)}</span>
+              <span>{t('sidebar.storage_size_stat', { size: formatBytes(storageStats.totalBytes) })}</span>
             {/if}
           </div>
 
           <!-- 通道操作栏 -->
           <div class="storage-actions">
-            <button class="btn btn-xs btn-primary" onclick={handlePickFolder} title="通过文件夹选择器导入目录">
-              📁 导入目录
+            <button class="btn btn-xs btn-primary" onclick={handlePickFolder} title={t('sidebar.btn_import_folder_tooltip')} data-action="import-folder">
+              {t('sidebar.btn_import_folder')}
             </button>
-            <button class="btn btn-xs btn-outline" onclick={handlePickZip} title="导入 .zip 压缩包为项目">
-              📦 导入 ZIP
+            <button class="btn btn-xs btn-outline" onclick={handlePickZip} title={t('sidebar.btn_import_zip_tooltip')} data-action="import-zip">
+              {t('sidebar.btn_import_zip')}
             </button>
-            <button class="btn btn-xs btn-outline" onclick={handleExportZip} title="将整个工作区导出下载为 .zip">
-              💾 导出 ZIP
+            <button class="btn btn-xs btn-outline" onclick={handleExportZip} title={t('sidebar.btn_export_zip_tooltip')} data-action="export-zip">
+              {t('sidebar.btn_export_zip')}
             </button>
           </div>
 
           <div class="storage-sub-actions">
-            <button class="btn btn-xs" onclick={handleNewScript} title="新建 .m 脚本文件">
-              + 脚本
+            <button class="btn btn-xs" onclick={handleNewScript} title={t('sidebar.btn_new_script_tooltip')} data-action="new-script">
+              {t('sidebar.btn_new_script')}
             </button>
-            <button class="btn btn-xs" onclick={handleNewFolder} title="新建子文件夹">
-              + 目录
+            <button class="btn btn-xs" onclick={handleNewFolder} title={t('sidebar.btn_new_folder_tooltip')} data-action="new-folder">
+              {t('sidebar.btn_new_folder')}
             </button>
-            <button class="btn btn-xs btn-danger-outline" onclick={handleClearStorage} title="清空工作区中所有文件">
-              清空
+            <button class="btn btn-xs btn-danger-outline" onclick={handleClearStorage} title={t('sidebar.btn_clear_storage_tooltip')} data-action="clear-storage">
+              {t('sidebar.btn_clear_storage')}
             </button>
           </div>
         </div>
 
         {#if isDragging}
           <div class="drag-overlay">
-            <span>松开鼠标立即导入文件或 ZIP 压缩包</span>
+            <span>{t('sidebar.drag_overlay')}</span>
           </div>
         {/if}
 
         <!-- 层级文件树 -->
         <div class="panel-toolbar" style="margin-top: 8px;">
-          <span class="panel-title">工作区文件 ({storageStats.filesCount})</span>
-          <button class="btn btn-xs" onclick={() => workspaceStorage.refresh()} title="刷新文件列表">
+          <span class="panel-title">{t('sidebar.workspace_files_title', { count: storageStats.filesCount })}</span>
+          <button class="btn btn-xs" onclick={() => workspaceStorage.refresh()} title={t('sidebar.workspace_files_refresh')} data-action="refresh-files">
             🔄
           </button>
         </div>
@@ -538,8 +539,8 @@
         <div class="files-list">
           {#if tree.length === 0}
             <div class="empty-state">
-              工作区为空<br />
-              <span class="empty-sub">支持点击上方导入按钮，或直接拖拽文件夹/ZIP 压缩包至此处</span>
+              {t('sidebar.workspace_empty_title')}<br />
+              <span class="empty-sub">{t('sidebar.workspace_empty_sub')}</span>
             </div>
           {:else}
             {#snippet renderTree(nodes: FileTreeNode[], depth: number)}
@@ -558,8 +559,10 @@
                     <div class="file-actions">
                       <button
                         class="btn-icon-xs"
-                        title="删除目录"
+                        title={t('sidebar.delete_folder_title')}
                         onclick={(e) => { e.stopPropagation(); handleDeleteEntry(node.path); }}
+                        data-action="delete-folder"
+                        data-path={node.path}
                       >×</button>
                     </div>
                   </div>
@@ -572,7 +575,8 @@
                     class:active-file={activeFile === node.path}
                     style="padding-left: {depth * 14 + 8}px;"
                     onclick={() => handleFileClick(node)}
-                    title={node.name.endsWith('.m') ? '点击在编辑器中打开 .m 脚本' : node.name}
+                    title={node.name.endsWith('.m') ? t('sidebar.open_script_tooltip') : node.name}
+                    data-file={node.path}
                   >
                     <span class="dir-toggle spacer"></span>
                     <span class="file-icon">
@@ -585,13 +589,17 @@
                     <div class="file-actions">
                       <button
                         class="btn-icon-xs"
-                        title="下载"
+                        title={t('sidebar.download_file_title')}
                         onclick={(e) => { e.stopPropagation(); handleDownloadFile(node.path); }}
+                        data-action="download-file"
+                        data-path={node.path}
                       >⬇</button>
                       <button
                         class="btn-icon-xs"
-                        title="删除"
+                        title={t('sidebar.delete_file_title')}
                         onclick={(e) => { e.stopPropagation(); handleDeleteEntry(node.path); }}
+                        data-action="delete-file"
+                        data-path={node.path}
                       >×</button>
                     </div>
                   </div>
@@ -605,7 +613,7 @@
 
         <!-- 底层虚拟环境查看 (可折叠调试视图) -->
         <details class="memfs-details">
-          <summary class="memfs-summary">Octave MEMFS 镜像 (调试: {currentDir})</summary>
+          <summary class="memfs-summary">{t('sidebar.memfs_debug_title', { dir: currentDir })}</summary>
           <div class="panel-toolbar" style="margin-top: 6px;">
             <button class="btn btn-xs" onclick={refreshFiles}>{t('files.refresh')}</button>
           </div>
@@ -1055,13 +1063,13 @@
 
   .badge-opfs {
     background: rgba(16, 185, 129, 0.15);
-    color: #10b981;
+    color: var(--accent-success);
     border: 1px solid rgba(16, 185, 129, 0.3);
   }
 
   .badge-memory {
     background: rgba(245, 158, 11, 0.15);
-    color: #f59e0b;
+    color: var(--accent-warning);
     border: 1px solid rgba(245, 158, 11, 0.3);
   }
 

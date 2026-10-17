@@ -7,6 +7,8 @@ import { GallerySearchPlugin } from './search/GallerySearchPlugin';
 import { P5FigureOverlayPlugin } from './figure/P5FigureOverlayPlugin';
 import { PackageManagerPlugin } from './package/PackageManagerPlugin';
 
+import { WebMcpPlugin } from './webmcp/WebMcpPlugin';
+
 export * from './types';
 export { PluginRegistry } from './PluginRegistry';
 export {
@@ -36,18 +38,25 @@ export {
 } from './package/PackageManagerPlugin';
 export * from './package/types';
 export * from './package/AssetsPort';
+export { WebMcpPlugin } from './webmcp/WebMcpPlugin';
+export * from './webmcp/types';
 
 export const pluginRegistry = new PluginRegistry();
 export const pretextPlugin = new PretextLayoutPlugin();
 export const searchPlugin = new GallerySearchPlugin();
 export const p5FigureOverlayPlugin = new P5FigureOverlayPlugin();
 export const packageManagerPlugin = new PackageManagerPlugin();
+export const webMcpPlugin = new WebMcpPlugin();
 
 // 自动注册核心开箱即用插件
 pluginRegistry.register(pretextPlugin);
 pluginRegistry.register(searchPlugin);
 pluginRegistry.register(p5FigureOverlayPlugin);
 pluginRegistry.register(packageManagerPlugin);
+pluginRegistry.register(webMcpPlugin);
+
 p5FigureOverlayPlugin.init();
+webMcpPlugin.init();
+
 
 

@@ -35,7 +35,7 @@ export { i18n, t, SafePlotSinkPolyfill };
 export const capabilityPolicy = new CapabilityPolicy();
 export const graphicsSink = new GraphicsSink();
 
-export { pluginRegistry, pretextPlugin, searchPlugin, p5FigureOverlayPlugin, packageManagerPlugin } from './plugins';
+export { pluginRegistry, pretextPlugin, searchPlugin, p5FigureOverlayPlugin, packageManagerPlugin, webMcpPlugin } from './plugins';
 
 // 启用图形外挂补丁策略：允许绘图指令出队交由原生 WebGL toolkit 处理
 capabilityPolicy.setSafePolyfillActive(true);
