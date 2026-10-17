@@ -66,7 +66,7 @@ pnpm build:lanes
 - Agent 纪律与硬规矩见 [AGENTS.md](AGENTS.md)
 - 开发方向与地图见 [maintaince.md](maintaince.md)
 - 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)
-- 跨 Agent 往来信箱见 [mail/README.md](mail/README.md)
+- 跨 Agent 往来信箱见 [mail/README.md](mail/README.md)（已投递 028 致内容仓：探讨错误标准化、描述接口与预编译/源码双模式）
 - 事实台账见 [FACTS.json](FACTS.json)
 - 安装 git hooks 守卫：`sh reflect-hooks/install.sh`
 - 闸门自证请运行：`sh gates-selftest.sh`
