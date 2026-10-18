@@ -22,12 +22,13 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from gate import GATE_REPO, main_selftest_or, repo, selftest  # noqa: E402
+from gate import module_meta, GATE_REPO, main_selftest_or, repo, selftest  # noqa: E402
 from ledger import age_days, fact, facts_of, load, value_of  # noqa: E402
 from render import BLOCK_BEGIN, BLOCK_END, body_of, prose_of, render_block  # noqa: E402
 import guard                                             # noqa: E402
 import registry                                          # noqa: E402
 
+REPO_REAL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LEDGER_NAME = os.environ.get("REFLECT_FACTS", "FACTS.json")
 OUT = repo(LEDGER_NAME)
 DOC = os.environ.get("REFLECT_DOC", "STATE.md")
@@ -89,12 +90,13 @@ def _machine_blocks(ledger):
         （手写的「N 道闸门」清单漂过：ab/locks/pins 并入当天清单就少了
         三道 —— 叙述从声明行派生，手写退役）。
 
-    返回 (blocks, 错误句)。名录收不齐（某道闸门没落声明行）⇒ 拒绝渲染。
+    返回 (blocks, 错误句)。名录对账不过（缺声明 / 孤儿 / 旗标错）⇒ 拒绝渲染
+    —— 判据只有一份产地：`registry.problems()`。
     """
     gs, missing = registry.gates()
-    if missing:
-        return None, ("以下闸门没有 GATE = gate.meta(…) 声明行 —— 名录不收"
-                      "无名之辈：%s" % ", ".join(missing))
+    probs = registry.problems(gs, missing)
+    if probs:
+        return None, "名录对账不过，拒绝渲染：\n  · " + "\n  · ".join(probs)
     return ((BLOCK_BEGIN, BLOCK_END, render_block(ledger)),
             (registry.GATES_BEGIN, registry.GATES_END,
              registry.render_gates(gs))), None
@@ -176,6 +178,25 @@ def _age_human(entry):
     return "%d 天前测的" % int(d)
 
 
+def _measure():
+    """采集入口（issue #15 A1/C3）：`REFLECT_MEASURE_MODULE` 旋钮分派。
+
+    · 旋钮已配且导入成功且 GATE_REPO 是真仓 ⇒ 用旋钮指定的 measure()。
+    · 否则使用本仓 measure_example()。
+    """
+    mod_name = os.environ.get("REFLECT_MEASURE_MODULE", "").strip()
+    if mod_name:
+        try:
+            _m = __import__(mod_name)
+            fn = getattr(_m, "measure")
+            if os.path.abspath(GATE_REPO) == os.path.abspath(REPO_REAL):
+                return fn()
+        except Exception as e:                            # noqa: BLE001
+            print("⚠ REFLECT_MEASURE_MODULE=%s 不可用（%r）⇒ 回落 measure_example()"
+                  % (mod_name, e), file=sys.stderr)
+    return measure_example()
+
+
 def measure(argv):
     """量一遍并写台账。**必须接 `argv`** —— 两道守卫都要读它。
 
@@ -185,7 +206,7 @@ def measure(argv):
     那不叫守卫，那叫故障。所以本文件把 argv 显式传进来；守卫的**决策**在
     `zreflect/guard.py`（decide()，接线有自证），本函数只执行它。
     """
-    facts = measure_example()
+    facts = _measure()
 
     old = facts_of(load(OUT)) if os.path.exists(OUT) else {}
 
@@ -210,6 +231,15 @@ def measure(argv):
         if fs and value_of(o) == value_of(entry):
             entry["first_seen"] = fs
 
+    # 盲写守卫（issue #20 ②）：写盘前查目标 —— 被 gitignore 覆盖 ⇒ FATAL；
+    # 仓里有 Einfacht.env 而本次没设旋钮 ⇒ warn（两个产地此刻分叉）。
+    fatal_w, warn_w = guard.write_target_problems(
+        OUT, knob_set=bool(os.environ.get("REFLECT_FACTS", "").strip()))
+    if warn_w:
+        print("⚠ %s" % warn_w, file=sys.stderr)
+    if fatal_w:
+        print("FATAL: %s" % fatal_w, file=sys.stderr)
+        return 2
     import json                                         # noqa: PLC0415
     import time                                         # noqa: PLC0415
     doc = {"schema": 1, "generated": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
@@ -247,9 +277,16 @@ def _load_or_die():
     FileNotFoundError —— 那是"为本仓写死"的味道（我们那边永远有 FACTS.json）。
     语义仍是 fail-loud（空台账照样拒绝渲染），只是**把下一步写在错误里**。"""
     if not os.path.exists(OUT):
-        print("FATAL: 还没有台账 %s\n"
-              "       先在仓库根跑一遍量测：python3 zreflect/facts.py\n"
-              "       然后再 --render-doc 把机器块写进文档。" % os.path.basename(OUT),
+        # issue #20 ② 补充 2：旧提示「先在仓库根跑一遍量测」正是写出野文件
+        # 的那个动作 —— 提示文本本身也是「默认值产地」的一部分，不许教人
+        # 踩坑。改说「先确认 REFLECT_FACTS 指向哪里」。
+        print("FATAL: 还没有台账 %s（路径 = REFLECT_FACTS，当前解析为 %s）\n"
+              "       先确认本仓的台账路径：检查 Einfacht.env / facts 壳脚本里"
+              " REFLECT_FACTS 设了什么，\n"
+              "       再带着同样的环境跑一遍量测：python3 zreflect/facts.py"
+              "（裸跑会用代码默认值 —— 目标可能与钩子语境不同）\n"
+              "       然后再 --render-doc 把机器块写进文档。"
+              % (os.path.basename(OUT), os.path.relpath(OUT, GATE_REPO)),
               file=sys.stderr)
         raise SystemExit(2)
     return load(OUT)
@@ -328,6 +365,9 @@ CASES = [
     ("★ --get：键不存在 ⇒ (False, 错误句)（空输入不是通过）",
      lambda: get_value({"facts": {"n": 1}}, "zzz")[0] is False),
 ]
+
+
+MODULE = module_meta("台账 CLI", "量一遍 / 渲染 / --get / 两道守卫", selftest=True)
 
 
 if __name__ == "__main__":

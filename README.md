@@ -66,9 +66,9 @@ pnpm build:lanes
 - Agent 纪律与硬规矩见 [AGENTS.md](AGENTS.md)
 - 开发方向与地图见 [maintaince.md](maintaince.md)
 - 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)
-- 跨 Agent 往来信箱见 [mail/README.md](mail/README.md)（已投递 028 致内容仓：探讨错误标准化、描述接口与预编译/源码双模式）
+- 跨 Agent 往来信箱见 [mail/README.md](mail/README.md)（与内容仓 Octave-Extra-Content 定稿纯下载模块规格）
 - 事实台账见 [FACTS.json](FACTS.json)
 - 安装 git hooks 守卫：`sh reflect-hooks/install.sh`
 - 闸门自证请运行：`sh gates-selftest.sh`
-- 15 道闸门全跑：`. Einfacht.env && for g in zreflect/check_*.py; do python3 "$g" || exit 1; done`
+- 16 道闸门运行：`. reflect-hooks/einfacht-env.sh && python3 zreflect/registry.py --run commit`
 
