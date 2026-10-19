@@ -77,3 +77,23 @@ export interface PackageFilter {
   form?: 'all' | 'pkg' | 'tree';
   installedOnly?: boolean;
 }
+
+export type CompileState = 'compiled' | 'm-only' | 'failed';
+
+export interface CompileResult {
+  state: CompileState;
+  name: string;
+  octPath?: string;
+  bytes?: number;
+  symbolGap?: any;
+  diagnostics: string[];
+  why?: string;
+}
+
+export type DiagnosticCallback = (text: string) => void;
+
+export interface CompileOptions {
+  onProgress?: (received: number, total: number | null) => void;
+  onDiagnostic?: DiagnosticCallback;
+}
+

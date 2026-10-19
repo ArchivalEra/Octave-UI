@@ -138,8 +138,8 @@ export class EngineSupervisor {
       }
 
       // 仅多线程档位 (master / IllegalPerformance) 强制要求 COI 与 SharedArrayBuffer
-      // wasm32-final 属于 32 位单线程通用兼容档，在无 COI (静态网页托管 / GitHub Pages) 环境下可直接运行
-      const requiresMultiThreading = lane !== 'wasm32-final';
+      // wasm32-final 与 omc 属于 32 位单线程通用兼容档，在无 COI (静态网页托管 / GitHub Pages) 环境下可直接运行
+      const requiresMultiThreading = lane === 'master' || lane === 'IllegalPerformance';
       if (requiresMultiThreading) {
         if (!window.crossOriginIsolated) {
           return {

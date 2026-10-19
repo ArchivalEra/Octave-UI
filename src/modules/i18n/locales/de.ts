@@ -389,6 +389,42 @@ const _de = {
   'package_manager.err_compute_plan': 'Installationsplan konnte nicht berechnet werden: {error}',
   'package_manager.err_install_failed': 'Installation fehlgeschlagen: {error}',
   'package_manager.err_install_generic': 'Bei der Installation ist ein Fehler aufgetreten: {error}',
+
+  // 7 错误码封闭集 (Closed error codes from host-007 & mail/012)
+  'errors.NOT_DOWNLOADED': 'Asset nicht in den lokalen Speicher heruntergeladen',
+  'errors.VERSION_WITHHELD': 'Diese Paketversion ist zurückgehalten und nicht verfügbar',
+  'errors.FLAVOR_UNAVAILABLE': 'Angeforderte Variante oder Architektur ist nicht verfügbar',
+  'errors.STORAGE_WRITE_FAILED': 'Fehler beim Schreiben des Assets in den lokalen Speicher: {error}',
+  'errors.DOWNLOAD_ABORTED': 'Download-Vorgang wurde abgebrochen',
+  'errors.INDEX_UNREADABLE': 'Speichermanifest fehlt oder ist unlesbar',
+  'errors.STORAGE_QUOTA_EXHAUSTED': 'Speicherkontingent erschöpft. Bitte geben Sie Speicherplatz im Dateibaum frei',
+
+  // Package Manager & Download additions
+  'package_manager.btn_download': 'Herunterladen',
+  'package_manager.btn_downloading': 'Wird heruntergeladen...',
+  'package_manager.btn_downloaded': '✓ Heruntergeladen',
+  'package_manager.btn_load': 'Laden',
+  'package_manager.btn_loading': 'Wird geladen...',
+  'package_manager.btn_compile': 'Aus Quellcode bauen',
+  'package_manager.btn_compiling': 'Wird kompiliert...',
+  'package_manager.compile_success': 'Erfolgreich kompiliert',
+  'package_manager.relink_pending_note': 'Binärmodul erkannt (exist=3). Speicherübergreifende Aufrufe warten auf Upstream-Relink.',
+  'package_manager.other_arch': 'Andere Arch',
+  'package_manager.other_arch_tip': 'Dieses Paket wurde für {arch} vorkompiliert und kann auf der aktuellen {currentArch}-Spur nicht geladen werden.',
+  'package_manager.llvm_required_title': 'LLVM-Toolchain erforderlich',
+  'package_manager.llvm_required_desc': 'Dieses Paket enthält C++-Quellcode (src), der lokal kompiliert werden muss. Bitte laden Sie zuerst die LLVM-Toolchain (~35 MB) herunter.',
+  'package_manager.btn_download_llvm': 'LLVM herunterladen (~35 MB)',
+  'package_manager.diagnostics_title': 'Kompilierungsdiagnose',
+  'package_manager.copy_diagnostics': 'Protokoll kopieren',
+  'package_manager.copied_diagnostics': 'Kopiert',
+  'package_manager.confirm_download_title': 'Download bestätigen: {name}',
+  'package_manager.quota_available': 'Verfügbares Kontingent: {quota}',
+  'package_manager.file_breakdown': 'Dateiaufschlüsselung:',
+  'package_manager.omc_engine_title': 'OpenModelica Physik-Engine',
+  'package_manager.omc_engine_desc': 'Zweite Engine-Stufe für native Modelica-Physikmodellierung und Simulation.',
+  'header.lane_omc': 'OpenModelica',
+  'header.lane_omc_badge': 'Physik',
+  'header.lane_omc_desc': 'Modelica-Physikmodellierungs- und Simulations-Engine · 71MB',
 } as const;
 
 export const de: EnsureParity<typeof _de> & LocaleDictionary = _de;

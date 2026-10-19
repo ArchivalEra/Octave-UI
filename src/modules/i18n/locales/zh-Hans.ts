@@ -390,6 +390,42 @@ const _zhHans = {
   'package_manager.err_compute_plan': '无法计算安装计划: {error}',
   'package_manager.err_install_failed': '安装失败: {error}',
   'package_manager.err_install_generic': '安装发生异常: {error}',
+
+  // 7 错误码封闭集 (Closed error codes from host-007 & mail/012)
+  'errors.NOT_DOWNLOADED': '资产尚未下载至本地存储',
+  'errors.VERSION_WITHHELD': '该版本未上架或已下架',
+  'errors.FLAVOR_UNAVAILABLE': '请求的构建变体或架构不可用',
+  'errors.STORAGE_WRITE_FAILED': '本地存储写入失败: {error}',
+  'errors.DOWNLOAD_ABORTED': '下载操作已取消',
+  'errors.INDEX_UNREADABLE': '本地存储清单丢失或损坏',
+  'errors.STORAGE_QUOTA_EXHAUSTED': '存储配额不足，请先在文件树中清理旧引擎或临时文件',
+
+  // Package Manager & Download additions
+  'package_manager.btn_download': '下载',
+  'package_manager.btn_downloading': '正在下载...',
+  'package_manager.btn_downloaded': '✓ 已下载',
+  'package_manager.btn_load': '装载',
+  'package_manager.btn_loading': '装载中...',
+  'package_manager.btn_compile': '从源码构建',
+  'package_manager.btn_compiling': '正在编译...',
+  'package_manager.compile_success': '编译成功',
+  'package_manager.relink_pending_note': '动态库已识别 (exist=3)。内存跨边界调用待宿主工单 65 重链批次生效。',
+  'package_manager.other_arch': '其他架构',
+  'package_manager.other_arch_tip': '此包为 {arch} 架构预编译产物，当前 {currentArch} 车道不可直接装载。',
+  'package_manager.llvm_required_title': '需要 LLVM 编译工具链',
+  'package_manager.llvm_required_desc': '该源码包含 C++ 加速件（src），需要现场编译——请先下载 LLVM 工具链（约 35 MB）。',
+  'package_manager.btn_download_llvm': '下载 LLVM (约 35 MB)',
+  'package_manager.diagnostics_title': '编译诊断日志',
+  'package_manager.copy_diagnostics': '复制日志',
+  'package_manager.copied_diagnostics': '已复制',
+  'package_manager.confirm_download_title': '确认下载资产: {name}',
+  'package_manager.quota_available': '可用存储配额: {quota}',
+  'package_manager.file_breakdown': '文件分块清单:',
+  'package_manager.omc_engine_title': 'OpenModelica 物理建模引擎',
+  'package_manager.omc_engine_desc': '第二引擎档：提供原生 Modelica 物理建模与多领域系统仿真能力。',
+  'header.lane_omc': 'OpenModelica',
+  'header.lane_omc_badge': '物理仿真',
+  'header.lane_omc_desc': 'Modelica 物理建模与仿真第二引擎档 · 71MB',
 } as const;
 
 export const zhHans: EnsureParity<typeof _zhHans> & LocaleDictionary = _zhHans;

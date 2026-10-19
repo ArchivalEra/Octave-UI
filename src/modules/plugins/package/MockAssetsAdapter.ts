@@ -99,4 +99,20 @@ export class MockAssetsAdapter implements IAssetsPort {
   getHostArch(): string {
     return this.hostArch;
   }
+
+  async compileExtension(name: string, options?: any): Promise<any> {
+    const diag = [
+      `[compile] Resolving source files for ${name}`,
+      `[compile] Invoking llvm-wasm toolchain`,
+      `[compile] Emitted ${name}.oct`,
+    ];
+    for (const d of diag) {
+      options?.onDiagnostic?.(d);
+    }
+    return {
+      state: 'ok',
+      name,
+      diagnostics: diag,
+    };
+  }
 }

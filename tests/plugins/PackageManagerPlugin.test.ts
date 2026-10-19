@@ -281,4 +281,45 @@ describe('PackageManagerPlugin Deep Module', () => {
     expect(searchDep.map((p) => p.name)).toContain('symbolic');
     expect(searchDep.map((p) => p.name)).toContain('pyodide');
   });
+
+  it('enforces Ruling ⑤: blocks compiling source package if LLVM is missing, succeeds when LLVM is present', async () => {
+    await plugin.loadCatalog();
+
+    // signal 包含 'src'，属于源码加速包
+    expect(await plugin.hasLLVM()).toBe(false);
+
+    // 未下载 LLVM 时，请求编译/构建 signal 必须被裁决⑤拦截
+    const blockedRes = await plugin.compilePackage('signal');
+    expect(blockedRes.state).toBe('failed');
+    expect(blockedRes.why).toBe('llvm_required');
+    expect(blockedRes.diagnostics[0]).toContain('[ruling-5]');
+
+    // 模拟将 llvm-wasm 记录写入 DownloadStore
+    const downloadStore = plugin.getDownloadStore();
+    await downloadStore.init();
+    // 注入 llvm 资产
+    (downloadStore as any).manifest.items['llvm-wasm@19.1.0'] = {
+      ref: { name: 'llvm-wasm', version: '19.1.0', kind: 'runtime' },
+      sha256: 'sha-llvm-wasm',
+      bytes: 36700160,
+      files: [{ path: 'downloads/runtime/llvm-wasm/19.1.0/llvm-wasm.tar.gz', bytes: 36700160, sha256: 'sha-llvm' }],
+      downloadedAt: new Date().toISOString(),
+      provenanceUrl: 'https://octave.test/assets/runtimes/llvm-wasm.tar.gz',
+    };
+
+    expect(await plugin.hasLLVM()).toBe(true);
+
+    // LLVM 就绪后，编译 signal 应通过并产生实时诊断日志流
+    const diagnosticsStream: string[] = [];
+    const compileRes = await plugin.compilePackage('signal', {
+      onDiagnostic: (line) => {
+        diagnosticsStream.push(line);
+      },
+    });
+
+    expect(compileRes.state).toBe('ok');
+    expect(compileRes.diagnostics.length).toBeGreaterThanOrEqual(3);
+    expect(diagnosticsStream.length).toBeGreaterThanOrEqual(3);
+    expect(diagnosticsStream).toContain('[compile] Emitted signal.oct');
+  });
 });

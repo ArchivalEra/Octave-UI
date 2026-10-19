@@ -1,8 +1,9 @@
 <!-- src/components/PackageManagerModal.svelte -->
 <script lang="ts">
-  import { packageManagerPlugin, i18n, t } from '../modules/appContext';
+  import { packageManagerPlugin, downloadStore, projectWorkspace, i18n, t } from '../modules/appContext';
   import type { ForgePackageItem, InstallPlan } from '../modules/plugins/package/types';
   import type { Locale } from '../modules/i18n/types';
+  import type { DownloadRef } from '../modules/storage/downloadTypes';
 
   let { isOpen, onClose } = $props<{
     isOpen: boolean;
@@ -17,14 +18,35 @@
 
   let selectedVersions = $state<Record<string, string>>({});
   let packageStatuses = $state<Record<string, { compatible: boolean; fromSource: boolean; installed: boolean; detail?: any }>>({});
+  let downloadedRecords = $state<Record<string, boolean>>({});
   let installingMap = $state<Record<string, boolean>>({});
+  let downloadingState = $state<Record<string, { receivedBytes: number; totalBytes: number; phase?: string }>>({});
+  let compilingMap = $state<Record<string, boolean>>({});
+
   let activePlan = $state<InstallPlan | null>(null);
   let activePlanItem = $state<ForgePackageItem | null>(null);
   let planLoading = $state(false);
   let errorMsg = $state<string | null>(null);
   let catalogLoaded = $state(false);
+  let hasLLVM = $state(false);
 
-  function refreshStatuses() {
+  // A4 / A5 下载体量预演与配额确认
+  let confirmDownloadItem = $state<ForgePackageItem | null>(null);
+  let confirmDownloadBreakdown = $state<Array<{ name: string; size: number }>>([]);
+  let confirmDownloadQuota = $state<{ available: number; remaining: number } | null>(null);
+  let confirmDownloadError = $state<string | null>(null);
+
+  // 裁决⑤ 前置拦截
+  let llvmPromptOpen = $state(false);
+
+  // 编译诊断实时抽屉
+  let diagnosticsDrawerOpen = $state(false);
+  let diagnosticsItemName = $state('');
+  let diagnosticsLogs = $state<string[]>([]);
+  let diagnosticsStatus = $state<'idle' | 'compiling' | 'success' | 'failed'>('idle');
+  let copiedLogs = $state(false);
+
+  async function refreshStatuses() {
     const packs = packageManagerPlugin.getAllPackages();
     const map: Record<string, any> = {};
     const instMap: Record<string, boolean> = {};
@@ -34,6 +56,16 @@
     }
     packageStatuses = map;
     installingMap = instMap;
+
+    try {
+      const snap = await downloadStore.index();
+      const dlMap: Record<string, boolean> = {};
+      for (const rec of Object.values(snap.manifest.items)) {
+        dlMap[rec.ref.name] = true;
+      }
+      downloadedRecords = dlMap;
+      hasLLVM = await packageManagerPlugin.hasLLVM();
+    } catch {}
   }
 
   $effect(() => {
@@ -62,7 +94,13 @@
 
       function handleKeyDown(e: KeyboardEvent) {
         if (e.key === 'Escape') {
-          if (activePlan) {
+          if (confirmDownloadItem) {
+            confirmDownloadItem = null;
+          } else if (llvmPromptOpen) {
+            llvmPromptOpen = false;
+          } else if (diagnosticsDrawerOpen) {
+            diagnosticsDrawerOpen = false;
+          } else if (activePlan) {
             activePlan = null;
             activePlanItem = null;
           } else {
@@ -101,6 +139,98 @@
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  async function openDownloadConfirm(item: ForgePackageItem) {
+    confirmDownloadItem = item;
+    confirmDownloadError = null;
+    const ver = selectedVersions[item.name] || item.version;
+    const extra = packageManagerPlugin.estimateExtraDownload(item.name);
+    const breakdown = [
+      { name: `${item.name}-${ver}.tar.gz`, size: item.size || 0 },
+    ];
+    if (extra > 0) {
+      breakdown.push({ name: 'Runtime dependency', size: extra });
+    }
+    confirmDownloadBreakdown = breakdown;
+    const totalBytes = breakdown.reduce((acc, f) => acc + f.size, 0);
+    try {
+      const quotaCheck = await downloadStore.checkQuota(totalBytes);
+      confirmDownloadQuota = { available: quotaCheck.available, remaining: quotaCheck.remaining };
+      if (!quotaCheck.ok) {
+        confirmDownloadError = t('errors.STORAGE_QUOTA_EXHAUSTED');
+      }
+    } catch {
+      confirmDownloadQuota = null;
+    }
+  }
+
+  async function executeDownload(item: ForgePackageItem) {
+    if (confirmDownloadError) return;
+    const ver = selectedVersions[item.name] || item.version;
+    const isTree = item.form === 'tree';
+    const ref: DownloadRef = {
+      name: item.name,
+      version: ver,
+      kind: isTree ? 'runtime' : 'src',
+    };
+    confirmDownloadItem = null;
+    downloadingState = {
+      ...downloadingState,
+      [item.name]: { receivedBytes: 0, totalBytes: item.size || 0, phase: 'Downloading' },
+    };
+
+    try {
+      await packageManagerPlugin.downloadPackage(ref, {
+        onProgress: (p) => {
+          downloadingState = {
+            ...downloadingState,
+            [item.name]: p,
+          };
+        },
+      });
+      const nextDl = { ...downloadingState };
+      delete nextDl[item.name];
+      downloadingState = nextDl;
+      await refreshStatuses();
+    } catch (err: any) {
+      const nextDl = { ...downloadingState };
+      delete nextDl[item.name];
+      downloadingState = nextDl;
+      errorMsg = err.message || String(err);
+    }
+  }
+
+  async function downloadLLVM() {
+    llvmPromptOpen = false;
+    const ref: DownloadRef = {
+      name: 'llvm-wasm',
+      version: '19.1.0',
+      kind: 'runtime',
+    };
+    downloadingState = {
+      ...downloadingState,
+      'llvm-wasm': { receivedBytes: 0, totalBytes: 36700160, phase: 'Downloading LLVM' },
+    };
+    try {
+      await packageManagerPlugin.downloadPackage(ref, {
+        onProgress: (p) => {
+          downloadingState = {
+            ...downloadingState,
+            'llvm-wasm': p,
+          };
+        },
+      });
+      const nextDl = { ...downloadingState };
+      delete nextDl['llvm-wasm'];
+      downloadingState = nextDl;
+      await refreshStatuses();
+    } catch (err: any) {
+      const nextDl = { ...downloadingState };
+      delete nextDl['llvm-wasm'];
+      downloadingState = nextDl;
+      errorMsg = err.message || String(err);
+    }
+  }
+
   async function openPlanPreview(item: ForgePackageItem) {
     activePlanItem = item;
     planLoading = true;
@@ -125,10 +255,56 @@
       } else {
         activePlan = null;
         activePlanItem = null;
-        refreshStatuses();
+        await refreshStatuses();
       }
     } catch (err: any) {
       errorMsg = t('package_manager.err_install_generic', { error: err.message || String(err) });
+    }
+  }
+
+  async function handleLoadOrCompile(item: ForgePackageItem) {
+    const hasSrc = item.content && item.content.includes('src');
+    if (hasSrc) {
+      const llvmReady = await packageManagerPlugin.hasLLVM();
+      if (!llvmReady) {
+        llvmPromptOpen = true;
+        return;
+      }
+      diagnosticsItemName = item.name;
+      diagnosticsLogs = [];
+      diagnosticsStatus = 'compiling';
+      diagnosticsDrawerOpen = true;
+      compilingMap = { ...compilingMap, [item.name]: true };
+      try {
+        const res = await packageManagerPlugin.compilePackage(item.name, {
+          onDiagnostic: (line) => {
+            diagnosticsLogs = [...diagnosticsLogs, line];
+          },
+        });
+        compilingMap = { ...compilingMap, [item.name]: false };
+        if (res.state === 'ok') {
+          diagnosticsStatus = 'success';
+          await refreshStatuses();
+        } else {
+          diagnosticsStatus = 'failed';
+        }
+      } catch (err: any) {
+        compilingMap = { ...compilingMap, [item.name]: false };
+        diagnosticsStatus = 'failed';
+        diagnosticsLogs = [...diagnosticsLogs, `[error] ${err.message || String(err)}`];
+      }
+    } else {
+      await triggerInstall(item);
+    }
+  }
+
+  function copyDiagnostics() {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(diagnosticsLogs.join('\n'));
+      copiedLogs = true;
+      setTimeout(() => {
+        copiedLogs = false;
+      }, 2000);
     }
   }
 </script>
@@ -269,6 +445,23 @@
                         </span>
                       {/each}
                     {/if}
+
+                    <!-- 已下载徽章 -->
+                    {#if downloadedRecords[item.name]}
+                      <span class="badge downloaded-badge">{t('package_manager.btn_downloaded')}</span>
+                    {/if}
+
+                    <!-- 活跃会话徽章 -->
+                    {#if status.installed}
+                      <span class="badge active-badge">● Active</span>
+                    {/if}
+
+                    <!-- 其他架构徽章 (A3) -->
+                    {#if item.arch && item.arch !== projectWorkspace.activeLane}
+                      <span class="badge arch-badge" title={t('package_manager.other_arch_tip', { arch: item.arch, currentArch: projectWorkspace.activeLane })}>
+                        {t('package_manager.other_arch')}
+                      </span>
+                    {/if}
                   </div>
                 </div>
 
@@ -316,26 +509,64 @@
 
                 <!-- 底部操作按钮栏 -->
                 <div class="card-footer">
-                  {#if status.installed}
-                    <button class="btn-action btn-installed" disabled data-action="installed" data-package={item.name}>
-                      {t('package_manager.btn_installed')}
-                    </button>
-                  {:else if !status.compatible}
-                    <button class="btn-action btn-incompatible" disabled title={t('package_manager.btn_incompatible_tooltip')} data-action="incompatible" data-package={item.name}>
-                      {t('package_manager.btn_incompatible')}
-                    </button>
-                  {:else if isInst}
-                    <button class="btn-action btn-installing" disabled data-action="installing" data-package={item.name}>
-                      <span class="btn-spinner"></span> {t('package_manager.btn_installing')}
-                    </button>
+                  {#if downloadingState[item.name]}
+                    {@const dl = downloadingState[item.name]}
+                    {@const pct = dl.totalBytes > 0 ? Math.min(100, Math.round((dl.receivedBytes / dl.totalBytes) * 100)) : 0}
+                    <div class="download-progress-wrap" title={dl.phase || t('package_manager.btn_downloading')}>
+                      <div class="progress-bar-track">
+                        {#if dl.totalBytes > 0}
+                          <div class="progress-bar-fill" style="width: {pct}%"></div>
+                        {:else}
+                          <div class="progress-bar-wave"></div>
+                        {/if}
+                      </div>
+                      <span class="progress-label">
+                        {#if dl.totalBytes > 0}
+                          {pct}%
+                        {:else}
+                          {t('package_manager.btn_downloading')}
+                        {/if}
+                      </span>
+                    </div>
                   {:else}
                     <div class="btn-action-group">
-                      <button class="btn-action btn-plan" onclick={() => openPlanPreview(item)} data-action="plan" data-package={item.name}>
-                        {t('package_manager.btn_plan')}
-                      </button>
-                      <button class="btn-action btn-install" onclick={() => triggerInstall(item)} data-action="install" data-package={item.name}>
-                        {t('package_manager.btn_install')}
-                      </button>
+                      <!-- 双动作一：下载 (未下载提供下载，已下载展示对勾状态) -->
+                      {#if downloadedRecords[item.name]}
+                        <button class="btn-action btn-downloaded" disabled title={t('package_manager.btn_downloaded')}>
+                          {t('package_manager.btn_downloaded')}
+                        </button>
+                      {:else}
+                        <button class="btn-action btn-download" onclick={() => openDownloadConfirm(item)} data-action="download" data-package={item.name}>
+                          {t('package_manager.btn_download')}
+                        </button>
+                      {/if}
+
+                      <!-- 双动作二：装载 / 编译 / 活跃状态 -->
+                      {#if status.installed}
+                        <button class="btn-action btn-installed" disabled data-action="installed" data-package={item.name}>
+                          {t('package_manager.btn_installed')}
+                        </button>
+                      {:else if !status.compatible}
+                        <button class="btn-action btn-incompatible" disabled title={t('package_manager.btn_incompatible_tooltip')} data-action="incompatible" data-package={item.name}>
+                          {t('package_manager.btn_incompatible')}
+                        </button>
+                      {:else if compilingMap[item.name]}
+                        <button class="btn-action btn-installing" disabled data-action="compiling" data-package={item.name}>
+                          <span class="btn-spinner"></span> {t('package_manager.btn_compiling')}
+                        </button>
+                      {:else if isInst}
+                        <button class="btn-action btn-installing" disabled data-action="installing" data-package={item.name}>
+                          <span class="btn-spinner"></span> {t('package_manager.btn_loading')}
+                        </button>
+                      {:else if item.content && item.content.includes('src')}
+                        <button class="btn-action btn-compile" onclick={() => handleLoadOrCompile(item)} data-action="compile" data-package={item.name}>
+                          {t('package_manager.btn_compile')}
+                        </button>
+                      {:else}
+                        <button class="btn-action btn-install" onclick={() => handleLoadOrCompile(item)} data-action="install" data-package={item.name}>
+                          {t('package_manager.btn_load')}
+                        </button>
+                      {/if}
                     </div>
                   {/if}
                 </div>
@@ -383,6 +614,124 @@
                 </div>
               </div>
             {/if}
+          </div>
+        </div>
+      {/if}
+
+      <!-- 体量预演弹窗 (A4) 与存储配额预检 (A5) -->
+      {#if confirmDownloadItem}
+        <div class="plan-submodal">
+          <div class="plan-card">
+            <div class="plan-header">
+              <h3>{t('package_manager.confirm_download_title', { name: confirmDownloadItem.name })}</h3>
+              <button class="btn-close-sm" onclick={() => { confirmDownloadItem = null; }} aria-label="Close" data-action="cancel-download">✕</button>
+            </div>
+            <div class="plan-content">
+              <div class="plan-metric">
+                <span class="metric-label">{t('package_manager.file_breakdown')}</span>
+              </div>
+              <div class="breakdown-list">
+                {#each confirmDownloadBreakdown as f}
+                  <div class="breakdown-item">
+                    <span class="breakdown-name">{f.name}</span>
+                    <span class="breakdown-size">{formatBytes(f.size)}</span>
+                  </div>
+                {/each}
+              </div>
+              {#if confirmDownloadQuota}
+                <div class="plan-metric quota-metric">
+                  <span class="metric-label">{t('package_manager.quota_available', { quota: formatBytes(confirmDownloadQuota.remaining) })}</span>
+                </div>
+              {/if}
+              {#if confirmDownloadError}
+                <div class="error-banner in-card">
+                  <span>⚠️ {confirmDownloadError}</span>
+                </div>
+              {/if}
+              <div class="plan-actions">
+                <button class="btn-cancel" onclick={() => { confirmDownloadItem = null; }} data-action="cancel-download">
+                  {t('package_manager.plan_btn_cancel')}
+                </button>
+                <button
+                  class="btn-confirm-install"
+                  disabled={!!confirmDownloadError}
+                  onclick={() => executeDownload(confirmDownloadItem!)}
+                  data-action="confirm-download"
+                  data-package={confirmDownloadItem.name}
+                >
+                  {t('package_manager.btn_download')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- 裁决⑤ 前置依赖拦截弹窗 -->
+      {#if llvmPromptOpen}
+        <div class="plan-submodal">
+          <div class="plan-card">
+            <div class="plan-header">
+              <h3>{t('package_manager.llvm_required_title')}</h3>
+              <button class="btn-close-sm" onclick={() => { llvmPromptOpen = false; }} aria-label="Close" data-action="cancel-llvm">✕</button>
+            </div>
+            <div class="plan-content">
+              <p class="plan-note">
+                {t('package_manager.llvm_required_desc')}
+              </p>
+              <div class="plan-actions">
+                <button class="btn-cancel" onclick={() => { llvmPromptOpen = false; }} data-action="cancel-llvm">
+                  {t('package_manager.plan_btn_cancel')}
+                </button>
+                <button class="btn-confirm-install" onclick={downloadLLVM} data-action="confirm-llvm">
+                  {t('package_manager.btn_download_llvm')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- 编译诊断实时抽屉 (host-008 & 契约) -->
+      {#if diagnosticsDrawerOpen}
+        <div class="diagnostics-drawer">
+          <div class="drawer-header">
+            <div class="drawer-title-group">
+              <h4>{t('package_manager.diagnostics_title')} — {diagnosticsItemName}</h4>
+              {#if diagnosticsStatus === 'success'}
+                <span class="compile-badge success">✓ {t('package_manager.compile_success')}</span>
+              {:else if diagnosticsStatus === 'failed'}
+                <span class="compile-badge failed">✕ Failed</span>
+              {:else if diagnosticsStatus === 'compiling'}
+                <span class="compile-badge running"><span class="btn-spinner"></span> {t('package_manager.btn_compiling')}</span>
+              {/if}
+            </div>
+            <button class="btn-close-sm" onclick={() => { diagnosticsDrawerOpen = false; }} aria-label="Close">✕</button>
+          </div>
+
+          {#if diagnosticsStatus === 'success'}
+            <div class="relink-banner">
+              <span>ℹ️ {t('package_manager.relink_pending_note')}</span>
+            </div>
+          {/if}
+
+          <div class="diagnostics-console">
+            {#if diagnosticsLogs.length === 0}
+              <span class="console-empty">Waiting for compilation diagnostics...</span>
+            {:else}
+              {#each diagnosticsLogs as log}
+                <div class="console-line">{log}</div>
+              {/each}
+            {/if}
+          </div>
+
+          <div class="drawer-footer">
+            <button class="btn-cancel" onclick={copyDiagnostics} data-action="copy-diagnostics">
+              {copiedLogs ? t('package_manager.copied_diagnostics') : t('package_manager.copy_diagnostics')}
+            </button>
+            <button class="btn-cancel" onclick={() => { diagnosticsDrawerOpen = false; }}>
+              {t('package_manager.plan_btn_cancel')}
+            </button>
           </div>
         </div>
       {/if}
@@ -936,6 +1285,236 @@
   }
   .btn-confirm-install:hover {
     background: var(--accent-primary-hover);
+  }
+
+  /* Dual-action download and compile buttons */
+  .btn-download {
+    background: var(--bg-surface-hover);
+    color: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
+  }
+  .btn-download:hover {
+    background: var(--border-subtle);
+  }
+
+  .btn-downloaded {
+    background: var(--bg-canvas);
+    color: var(--accent-success);
+    border: 1px solid var(--accent-success);
+    cursor: default;
+  }
+
+  .btn-compile {
+    background: var(--accent-warning);
+    color: var(--text-main);
+    border: 1px solid transparent;
+  }
+  .btn-compile:hover {
+    filter: brightness(1.08);
+  }
+
+  .downloaded-badge {
+    background: var(--bg-surface-hover);
+    color: var(--accent-success);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .active-badge {
+    background: var(--bg-surface-hover);
+    color: var(--accent-success);
+    border: 1px solid var(--accent-success);
+    font-weight: 600;
+  }
+
+  .arch-badge {
+    background: var(--bg-canvas);
+    color: var(--text-dim);
+    border: 1px dashed var(--border-subtle);
+  }
+
+  /* Download progress bar & wave */
+  .download-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 120px;
+  }
+
+  .progress-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-canvas);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent-primary);
+    transition: width 0.2s ease;
+  }
+
+  .progress-bar-wave {
+    height: 100%;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+    animation: waveShimmer 1.5s infinite ease-in-out;
+  }
+
+  .progress-label {
+    font-size: 0.7rem;
+    font-family: monospace;
+    color: var(--text-muted);
+  }
+
+  @keyframes waveShimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(250%); }
+  }
+
+  /* File breakdown & quota */
+  .breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 8px 0 12px;
+  }
+
+  .breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    background: var(--bg-canvas);
+    padding: 5px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .breakdown-name {
+    font-family: monospace;
+  }
+
+  .breakdown-size {
+    font-weight: 500;
+    color: var(--text-main);
+  }
+
+  .quota-metric {
+    margin-top: 6px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .error-banner.in-card {
+    margin: 10px 0;
+    border-radius: 4px;
+    border: 1px solid var(--accent-danger);
+  }
+
+  /* Diagnostics Drawer */
+  .diagnostics-drawer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 50vh;
+    background: var(--bg-surface);
+    border-top: 2px solid var(--accent-primary);
+    display: flex;
+    flex-direction: column;
+    z-index: 20;
+    box-shadow: var(--shadow-3);
+  }
+
+  .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .drawer-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .drawer-title-group h4 {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-main);
+  }
+
+  .compile-badge {
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .compile-badge.success {
+    background: var(--bg-surface-hover);
+    color: var(--accent-success);
+    border: 1px solid var(--accent-success);
+  }
+
+  .compile-badge.failed {
+    background: var(--bg-surface-hover);
+    color: var(--accent-danger);
+    border: 1px solid var(--accent-danger);
+  }
+
+  .compile-badge.running {
+    background: var(--bg-surface-hover);
+    color: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .relink-banner {
+    background: var(--bg-canvas);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    padding: 6px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .diagnostics-console {
+    flex: 1;
+    min-height: 120px;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--bg-canvas);
+    color: var(--text-main);
+    font-family: monospace;
+    font-size: 0.75rem;
+    padding: 10px 16px;
+    line-height: 1.4;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .console-empty {
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  .console-line {
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .drawer-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 16px;
   }
 
   @keyframes spin {

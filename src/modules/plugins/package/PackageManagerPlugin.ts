@@ -12,7 +12,12 @@ import type {
   InstallResult,
   InstallPlan,
   PackageFilter,
+  CompileOptions,
+  CompileResult,
 } from './types';
+import { DownloadStore } from '../../storage/DownloadStore';
+import type { DownloadRef, DownloadRecord, DownloadProgressCallback } from '../../storage/downloadTypes';
+import { refToKey } from '../../storage/downloadTypes';
 
 export class PackageManagerPlugin implements OctavePlugin {
   readonly id = 'package-manager';
@@ -22,19 +27,34 @@ export class PackageManagerPlugin implements OctavePlugin {
   enabled = true;
 
   private port: IAssetsPort;
+  private downloadStore: DownloadStore;
   private catalog: ForgeCatalog | null = null;
   private byName = new Map<string, ForgePackageItem>();
   private installingPackages = new Set<string>();
+  private downloadingKeys = new Set<string>();
   private listeners = new Set<() => void>();
   private loading = false;
   private error: string | null = null;
 
-  constructor(port?: IAssetsPort) {
+  constructor(port?: IAssetsPort, downloadStore?: DownloadStore) {
     this.port = port || new BrowserAssetsAdapter();
+    this.downloadStore =
+      downloadStore ||
+      new DownloadStore({
+        catalogProvider: () => this.catalog || { packs: [] },
+      });
   }
 
   setPort(port: IAssetsPort): void {
     this.port = port;
+  }
+
+  setDownloadStore(store: DownloadStore): void {
+    this.downloadStore = store;
+  }
+
+  getDownloadStore(): DownloadStore {
+    return this.downloadStore;
   }
 
   async init(context?: PluginContext): Promise<void> {
@@ -242,6 +262,90 @@ export class PackageManagerPlugin implements OctavePlugin {
         message: err?.message || 'Installation failed',
       };
     }
+  }
+
+  /**
+   * 检查是否正在下载
+   */
+  isDownloading(refOrKey: DownloadRef | string): boolean {
+    const key = typeof refOrKey === 'string' ? refOrKey : refToKey(refOrKey);
+    return this.downloadingKeys.has(key);
+  }
+
+  /**
+   * 获取指定引用的下载记录
+   */
+  getDownloadRecord(ref: DownloadRef): DownloadRecord | null {
+    return this.downloadStore.getRecord(ref);
+  }
+
+  /**
+   * 触发资产下载（OPFS downloads/ 写入）
+   */
+  async downloadPackage(
+    ref: DownloadRef,
+    options?: { onProgress?: DownloadProgressCallback; signal?: AbortSignal }
+  ): Promise<DownloadRecord> {
+    const key = refToKey(ref);
+    this.downloadingKeys.add(key);
+    this.notify();
+
+    try {
+      const rec = await this.downloadStore.download(ref, options);
+      this.downloadingKeys.delete(key);
+      this.notify();
+      return rec;
+    } catch (err) {
+      this.downloadingKeys.delete(key);
+      this.notify();
+      throw err;
+    }
+  }
+
+  /**
+   * 检查 LLVM 编译工具链是否已下载就绪（裁决⑤ 必要条件）
+   */
+  async hasLLVM(): Promise<boolean> {
+    const snap = await this.downloadStore.index();
+    for (const rec of Object.values(snap.manifest.items)) {
+      if (rec.ref.name === 'llvm-wasm' || rec.ref.name === 'llvm') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 编译或从源码构建扩展包（host-008 compileExtension + 裁决⑤ 前置拦截）
+   */
+  async compilePackage(name: string, options?: CompileOptions): Promise<CompileResult> {
+    const pkg = this.byName.get(name);
+    // 裁决⑤：含 'src' 的源码包，装载/编译的必要条件是 LLVM 工具链已下载
+    const hasSrc = pkg && Array.isArray(pkg.content) && pkg.content.includes('src');
+    if (hasSrc) {
+      const llvmReady = await this.hasLLVM();
+      if (!llvmReady) {
+        return {
+          state: 'failed',
+          name,
+          why: 'llvm_required',
+          diagnostics: [
+            '[ruling-5] 该源码包含 C++ 加速件 (src)，需要现场编译——请先下载 LLVM 工具链 (约 35 MB)。',
+          ],
+        };
+      }
+    }
+
+    if (this.port.compileExtension) {
+      return this.port.compileExtension(name, options);
+    }
+
+    return {
+      state: 'failed',
+      name,
+      diagnostics: ['[compile] Host compileExtension port is not available.'],
+      why: 'Host compileExtension port is not available.',
+    };
   }
 
   /**

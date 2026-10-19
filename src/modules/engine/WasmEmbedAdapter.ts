@@ -37,16 +37,17 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     const lane = opts.lane || 'wasm32-final';
     const globalBase = (typeof document !== 'undefined' && (document.querySelector('meta[name="site-base"]')?.getAttribute('content') || (window as any).__siteBase)) || '/';
     const normalizedBase = globalBase.endsWith('/') ? globalBase : `${globalBase}/`;
-    const base = opts.base || `${normalizedBase}lanes/${lane}/`;
+    const laneFolder = lane === 'omc' ? 'wasm32-final' : lane;
+    const base = opts.base || `${normalizedBase}lanes/${laneFolder}/`;
 
     // 确保按需加载对应车道的 Emscripten 胶水脚本
     if (typeof document !== 'undefined') {
       const scriptUrl = `${base}octave.js`;
-      if (!document.querySelector(`script[data-lane="${lane}"]`)) {
+      if (!document.querySelector(`script[data-lane="${laneFolder}"]`)) {
         await new Promise<void>((resolve, reject) => {
           const s = document.createElement('script');
           s.src = scriptUrl;
-          s.setAttribute('data-lane', lane);
+          s.setAttribute('data-lane', laneFolder);
           s.onload = () => resolve();
           s.onerror = () => reject(new Error(`Failed to load engine runtime script from ${scriptUrl}`));
           document.head.appendChild(s);
@@ -56,7 +57,7 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
 
     // 构造符合 octave-core.js 契约的具象车道计划
     const lanePlan = {
-      lane: lane === 'wasm32-final' ? 'base' : 'w64',
+      lane: lane === 'wasm32-final' || lane === 'omc' ? 'base' : 'w64',
       dir: '',
       js: 'octave.js',
       wasm: 'octave.wasm',
@@ -80,7 +81,28 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     const embed = await Promise.race([bootPromise, timeoutPromise]);
     window.octave = embed;
     WasmEmbedAdapter.alignDocstringsPaths(embed);
+    if (lane === 'omc') {
+      WasmEmbedAdapter.setupOmcBridge(embed);
+    }
     return new WasmEmbedAdapter(embed);
+  }
+
+  /**
+   * 初始化 OpenModelica 桥接环境与 MEMFS 路径
+   */
+  static setupOmcBridge(embed: any): void {
+    try {
+      const FS =
+        embed?.mod?.FS ||
+        (typeof window !== 'undefined'
+          ? (window as any).__octaveHosts?.[0]?.mod?.FS || (window as any).Module?.FS
+          : null);
+      if (!FS) return;
+      try { FS.mkdir('/tmp'); } catch {}
+      if (embed?.eval) {
+        try { embed.eval("addpath('/tmp');"); } catch {}
+      }
+    } catch {}
   }
 
   /**

@@ -98,4 +98,40 @@ export class BrowserAssetsAdapter implements IAssetsPort {
     }
     return 'wasm64';
   }
+
+  async compileExtension(name: string, options?: import('./types').CompileOptions): Promise<import('./types').CompileResult> {
+    if (typeof window === 'undefined' || !(window as any).OctaveAssets?.compileExtension) {
+      return {
+        state: 'failed',
+        name,
+        diagnostics: ['[compile] OctaveAssets.compileExtension is not available in current environment.'],
+        why: 'OctaveAssets.compileExtension is not available in current environment.',
+      };
+    }
+
+    try {
+      const res = await (window as any).OctaveAssets.compileExtension(name, {
+        onProgress: options?.onProgress,
+        onDiagnostic: (line: string) => {
+          options?.onDiagnostic?.(line);
+        },
+      });
+      return {
+        state: res?.state || 'compiled',
+        name,
+        octPath: res?.octPath,
+        bytes: res?.bytes,
+        symbolGap: res?.symbolGap,
+        diagnostics: res?.diagnostics || [],
+        why: res?.why,
+      };
+    } catch (err: any) {
+      return {
+        state: 'failed',
+        name,
+        diagnostics: [err?.message || String(err)],
+        why: err?.message || 'Compilation failed',
+      };
+    }
+  }
 }

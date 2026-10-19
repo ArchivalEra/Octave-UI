@@ -16,6 +16,7 @@ import { VariableInspectorStore } from './inspector/VariableInspectorStore';
 import { SafePlotSinkPolyfill } from './semantic/SafePlotSinkPolyfill';
 
 import { WorkspaceStorageManager } from './storage/WorkspaceStorageManager';
+import { DownloadStore } from './storage/DownloadStore';
 
 export const historyStore = new HistoryStore();
 export const supervisor = new EngineSupervisor();
@@ -23,6 +24,9 @@ export const supervisor = new EngineSupervisor();
 export const engineSession = supervisor as any;
 
 export const workspaceStorage = new WorkspaceStorageManager();
+export const downloadStore = new DownloadStore({
+  storage: workspaceStorage.store,
+});
 export const projectWorkspace = new ProjectWorkspace(supervisor, undefined, workspaceStorage);
 export const terminalController = new TerminalController(historyStore, supervisor as any);
 export const workspaceStore = new WorkspaceStore(supervisor as any);
@@ -36,6 +40,9 @@ export const capabilityPolicy = new CapabilityPolicy();
 export const graphicsSink = new GraphicsSink();
 
 export { pluginRegistry, pretextPlugin, searchPlugin, p5FigureOverlayPlugin, packageManagerPlugin, webMcpPlugin } from './plugins';
+import { packageManagerPlugin } from './plugins';
+
+packageManagerPlugin.setDownloadStore(downloadStore);
 
 // 启用图形外挂补丁策略：允许绘图指令出队交由原生 WebGL toolkit 处理
 capabilityPolicy.setSafePolyfillActive(true);

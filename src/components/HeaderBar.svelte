@@ -462,6 +462,25 @@
                   <span class="check-mark">✓</span>
                 {/if}
               </button>
+
+              <button
+                type="button"
+                class="menu-item-choice"
+                class:selected={currentLane === 'omc'}
+                disabled={state !== 'unloaded'}
+                onclick={() => handleSwitchLane('omc')}
+              >
+                <div class="choice-text">
+                  <span class="choice-title">
+                    {t('header.lane_omc')}
+                    <span class="coi-pill omc-pill">{t('header.lane_omc_badge')}</span>
+                  </span>
+                  <span class="choice-desc">{t('header.lane_omc_desc')}</span>
+                </div>
+                {#if currentLane === 'omc'}
+                  <span class="check-mark">✓</span>
+                {/if}
+              </button>
             </div>
           </div>
 
@@ -886,6 +905,11 @@
     border: 1px solid var(--accent-danger);
     font-weight: 600;
     line-height: 1.2;
+  }
+
+  .coi-pill.omc-pill {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
   }
 
   .choice-desc {

@@ -61,7 +61,7 @@ export interface EvalJSONResult<T = any> {
   rc?: number;
 }
 
-export type EngineLane = 'wasm32-final' | 'master' | 'IllegalPerformance';
+export type EngineLane = 'wasm32-final' | 'master' | 'IllegalPerformance' | 'omc';
 
 export interface BootOptions {
   base?: string;

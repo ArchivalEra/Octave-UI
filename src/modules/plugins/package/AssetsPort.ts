@@ -1,7 +1,7 @@
 // src/modules/plugins/package/AssetsPort.ts
 // 资产加载与引擎交互端口（Seam 契约）：解耦实际 window.OctaveAssets 与测试适配器
 
-import type { ForgeCatalog, PackageStatusResult, InstallResult } from './types';
+import type { ForgeCatalog, PackageStatusResult, InstallResult, CompileOptions, CompileResult } from './types';
 
 export interface InstallOptions {
   version?: string;
@@ -34,4 +34,9 @@ export interface IAssetsPort {
    * 获取当前宿主架构（wasm64 或 wasm32）
    */
   getHostArch(): string;
+
+  /**
+   * 委托宿主编译扩展包 (host-008 OctaveAssets.compileExtension)
+   */
+  compileExtension?(name: string, options?: CompileOptions): Promise<CompileResult>;
 }
