@@ -210,4 +210,38 @@ describe('ProjectWorkspace Deep Module', () => {
     expect(workspace.cells[0].description).toContain('纯客户端');
     expect(workspace.cells[0].code).toContain('x = A / b');
   });
+
+  it('manages OpenModelica companion engine state independently from Octave lanes', async () => {
+    expect(workspace.isOmcEnabled).toBe(false);
+    expect(workspace.activeLane).toBe('wasm32-final');
+
+    // 独立开启 OpenModelica 伴随引擎（两边不干涉，各可打勾）
+    workspace.toggleOmc();
+    expect(workspace.isOmcEnabled).toBe(true);
+    expect(workspace.activeLane).toBe('wasm32-final');
+
+    // 切换 Octave 档位不影响 OMC 状态
+    await workspace.switchLane('master');
+    expect(workspace.activeLane).toBe('master');
+    expect(workspace.isOmcEnabled).toBe(true);
+
+    // 再次切换 OMC
+    workspace.toggleOmc();
+    expect(workspace.isOmcEnabled).toBe(false);
+    expect(workspace.activeLane).toBe('master');
+  });
+
+  it('passes enableOmc and activeLane during execution boot', async () => {
+    const bootSpy = vi.spyOn(supervisor, 'boot');
+    workspace.setOmcEnabled(true);
+    await workspace.switchLane('IllegalPerformance');
+
+    // 执行单元格自动按当前勾选的 Octave 档位与 OMC 状态启动
+    await workspace.executeCell(workspace.cells[0].id);
+
+    expect(bootSpy).toHaveBeenCalledWith({
+      lane: 'IllegalPerformance',
+      enableOmc: true,
+    });
+  });
 });

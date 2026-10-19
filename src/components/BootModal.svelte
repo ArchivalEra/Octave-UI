@@ -13,11 +13,13 @@
   let errorMsg = $state<string | null>(null);
 
   let activeLane = $state(projectWorkspace.activeLane);
+  let isOmcEnabled = $state(projectWorkspace.isOmcEnabled);
   let isCoiAvailable = $state(true);
 
   $effect(() => {
     const unsub = projectWorkspace.subscribe(() => {
       activeLane = projectWorkspace.activeLane;
+      isOmcEnabled = projectWorkspace.isOmcEnabled;
     });
     if (typeof window !== 'undefined') {
       isCoiAvailable = window.crossOriginIsolated === true;
@@ -61,7 +63,7 @@
 
     try {
       bootStep = 'starting';
-      await supervisor.boot({ lane: activeLane });
+      await supervisor.boot({ lane: activeLane, enableOmc: isOmcEnabled });
 
       bootStep = 'success';
       setTimeout(() => {
@@ -95,6 +97,12 @@
             <span class="label">{t('boot.engine_version_label')}</span>
             <span class="val">GNU Octave 11.3.0</span>
           </div>
+          {#if isOmcEnabled}
+            <div class="info-item">
+              <span class="label">{t('boot.omc_engine_label')}</span>
+              <span class="val">{t('boot.omc_engine_val')}</span>
+            </div>
+          {/if}
           <div class="info-item">
             <span class="label">{t('boot.runtime_mode_label')}</span>
             <span class="val">{laneInfo.mode}</span>

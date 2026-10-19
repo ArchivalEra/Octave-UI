@@ -425,6 +425,14 @@ const _de = {
   'header.lane_omc': 'OpenModelica',
   'header.lane_omc_badge': 'Physik',
   'header.lane_omc_desc': 'Modelica-Physikmodellierungs- und Simulations-Engine · 71MB',
+  'header.engine_octave_badge': 'Numerik',
+  'header.download_btn': 'Herunterladen',
+  'header.downloaded_badge': 'Heruntergeladen',
+  'header.downloading_badge': 'Wird geladen',
+  'header.delete_download': 'Download löschen',
+  'header.omc_dual_boot_tip': 'Startet Octave und OpenModelica gleichzeitig auf derselben Seite',
+  'boot.omc_engine_label': 'Physik-Engine',
+  'boot.omc_engine_val': 'OpenModelica wasm32 (~71.1 MB)',
 } as const;
 
 export const de: EnsureParity<typeof _de> & LocaleDictionary = _de;

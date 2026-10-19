@@ -424,4 +424,12 @@ export const en = {
   'header.lane_omc': 'OpenModelica',
   'header.lane_omc_badge': 'Physics',
   'header.lane_omc_desc': 'Modelica physical system modeling & simulation · 71MB',
+  'header.engine_octave_badge': 'Numeric',
+  'header.download_btn': 'Download',
+  'header.downloaded_badge': 'Downloaded',
+  'header.downloading_badge': 'Downloading',
+  'header.delete_download': 'Delete download',
+  'header.omc_dual_boot_tip': 'Will boot both Octave and OpenModelica simultaneously (co-simulation)',
+  'boot.omc_engine_label': 'Physics Engine',
+  'boot.omc_engine_val': 'OpenModelica wasm32 (~71.1 MB)',
 } as const;

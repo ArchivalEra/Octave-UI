@@ -270,4 +270,38 @@ describe('DownloadStore Deep Module', () => {
     const quotaCheck = await store.checkQuota(200 * 1024 * 1024); // 200MB > 100MB
     expect(quotaCheck.ok).toBe(false);
   });
+
+  it('supports decoupled engine download and multi-engine coexistence in OPFS', async () => {
+    // 1. 下载 Octave 引擎档 (master)
+    mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', 'sha-js');
+    mockFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', 'sha-wasm');
+
+    expect(store.isEngineDownloaded('master')).toBe(false);
+    const recOctave = await store.downloadEngine('master');
+    expect(recOctave.ref.kind).toBe('engine');
+    expect(recOctave.ref.name).toBe('octave');
+    expect(recOctave.ref.arch).toBe('master');
+    expect(store.isEngineDownloaded('master')).toBe(true);
+
+    // 2. 同时下载 OpenModelica 第二引擎档 (omc)
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler_bg.wasm', 'omc-wasm', 'omc-lane-sha');
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler.js', 'omc-js', 'omc-lane-sha');
+
+    expect(store.isEngineDownloaded('omc')).toBe(false);
+    const recOmc = await store.downloadEngine('omc');
+    expect(recOmc.ref.kind).toBe('engine');
+    expect(recOmc.ref.name).toBe('omc');
+    expect(store.isEngineDownloaded('omc')).toBe(true);
+
+    // 3. 两档引擎独立保存在 OPFS 清单中
+    const snap = await store.index();
+    expect(snap.count).toBe(2);
+    expect(store.getEngineRecord('master')).not.toBeNull();
+    expect(store.getEngineRecord('omc')).not.toBeNull();
+
+    // 4. 手动移除单个引擎不影响另一档
+    await store.removeEngine('omc');
+    expect(store.isEngineDownloaded('omc')).toBe(false);
+    expect(store.isEngineDownloaded('master')).toBe(true);
+  });
 });

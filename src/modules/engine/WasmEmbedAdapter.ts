@@ -81,8 +81,8 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     const embed = await Promise.race([bootPromise, timeoutPromise]);
     window.octave = embed;
     WasmEmbedAdapter.alignDocstringsPaths(embed);
-    if (lane === 'omc') {
-      WasmEmbedAdapter.setupOmcBridge(embed);
+    if (lane === 'omc' || opts.enableOmc) {
+      await WasmEmbedAdapter.setupOmcBridge(embed);
     }
     return new WasmEmbedAdapter(embed);
   }
@@ -90,7 +90,7 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
   /**
    * 初始化 OpenModelica 桥接环境与 MEMFS 路径
    */
-  static setupOmcBridge(embed: any): void {
+  static async setupOmcBridge(embed: any): Promise<void> {
     try {
       const FS =
         embed?.mod?.FS ||
@@ -100,7 +100,33 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
       if (!FS) return;
       try { FS.mkdir('/tmp'); } catch {}
       if (embed?.eval) {
-        try { embed.eval("addpath('/tmp');"); } catch {}
+        try { await embed.eval("addpath('/tmp');"); } catch {}
+      }
+
+      if (typeof window !== 'undefined' && !(window as any).__omc) {
+        try {
+          const globalBase = (document.querySelector('meta[name="site-base"]')?.getAttribute('content') || (window as any).__siteBase) || '/';
+          const normalizedBase = globalBase.endsWith('/') ? globalBase : `${globalBase}/`;
+          const omcScriptUrl = `${normalizedBase}omc/OpenModelicaCompiler.js`;
+          const omcMod = await (import(/* @vite-ignore */ omcScriptUrl).catch(() => null));
+          if (omcMod) {
+            if (typeof omcMod.default === 'function') {
+              await omcMod.default();
+            }
+            if (typeof omcMod.omc_set_env === 'function') {
+              omcMod.omc_set_env('OPENMODELICAHOME', '/usr');
+            }
+            if (typeof omcMod.omc_init === 'function') {
+              omcMod.omc_init();
+            }
+            if (typeof omcMod.omc_set_inwasm_driver === 'function') {
+              omcMod.omc_set_inwasm_driver(1);
+            }
+            (window as any).__omc = omcMod;
+          }
+        } catch {
+          // 静默降级，不阻断 Octave 主运行
+        }
       }
     } catch {}
   }

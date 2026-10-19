@@ -44,6 +44,7 @@ export class DownloadStore {
   private manifest: DownloadManifest = { schema: 1, items: {} };
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+  private activeDownloads: Set<string> = new Set();
 
   constructor(options?: DownloadStoreOptions) {
     if (options?.storage) {
@@ -67,6 +68,49 @@ export class DownloadStore {
   has(ref: DownloadRef): boolean {
     const key = refToKey(ref);
     return !!this.manifest.items[key];
+  }
+
+  isDownloading(ref: DownloadRef): boolean {
+    const key = refToKey(ref);
+    return this.activeDownloads.has(key);
+  }
+
+  getEngineRecord(lane: string): DownloadRecord | null {
+    const ref: DownloadRef = lane === 'omc'
+      ? { kind: 'engine', name: 'omc', arch: 'wasm32' }
+      : { kind: 'engine', name: 'octave', arch: lane };
+    return this.getRecord(ref);
+  }
+
+  isEngineDownloaded(lane: string): boolean {
+    const ref: DownloadRef = lane === 'omc'
+      ? { kind: 'engine', name: 'omc', arch: 'wasm32' }
+      : { kind: 'engine', name: 'octave', arch: lane };
+    return this.has(ref);
+  }
+
+  isEngineDownloading(lane: string): boolean {
+    const ref: DownloadRef = lane === 'omc'
+      ? { kind: 'engine', name: 'omc', arch: 'wasm32' }
+      : { kind: 'engine', name: 'octave', arch: lane };
+    return this.isDownloading(ref);
+  }
+
+  async downloadEngine(
+    lane: string,
+    options?: { onProgress?: DownloadProgressCallback; signal?: AbortSignal }
+  ): Promise<DownloadRecord> {
+    const ref: DownloadRef = lane === 'omc'
+      ? { kind: 'engine', name: 'omc', arch: 'wasm32' }
+      : { kind: 'engine', name: 'octave', arch: lane };
+    return this.download(ref, options);
+  }
+
+  async removeEngine(lane: string): Promise<void> {
+    const ref: DownloadRef = lane === 'omc'
+      ? { kind: 'engine', name: 'omc', arch: 'wasm32' }
+      : { kind: 'engine', name: 'octave', arch: lane };
+    await this.remove(ref);
   }
 
   async init(): Promise<void> {
@@ -255,8 +299,13 @@ export class DownloadStore {
   ): Promise<DownloadRecord> {
     await this.init();
 
-    // 1. 根据 ref 解析权威源下载目标、文件列表与预期哈希 (I1)
-    const resolved = await this.resolveTarget(ref);
+    const downloadKey = refToKey(ref);
+    this.activeDownloads.add(downloadKey);
+    this.broadcastChange(ref, null);
+
+    try {
+      // 1. 根据 ref 解析权威源下载目标、文件列表与预期哈希 (I1)
+      const resolved = await this.resolveTarget(ref);
 
     // 2. 检查当日对账与幂等性 (I3)
     const existing = await this.stat(ref);
@@ -344,6 +393,10 @@ export class DownloadStore {
     this.broadcastChange(ref, record);
 
     return record;
+    } finally {
+      this.activeDownloads.delete(downloadKey);
+      this.broadcastChange(ref, this.manifest.items[downloadKey] || null);
+    }
   }
 
   /**
@@ -549,12 +602,13 @@ export class DownloadStore {
       };
     }
 
-    // Octave 引擎档：从 <site>/<lane>/octave.build.json 的 measured.files 拿取权威 sha (host-007 §①)
+    // Octave 引擎档：从 <site>/lanes/<lane>/octave.build.json 的 measured.files 拿取权威 sha (host-007 §①)
+    const lanePath = lane.startsWith('lanes/') ? lane : `lanes/${lane}`;
     let buildManifest: any = null;
     if (this.engineBuildProvider) {
       buildManifest = await this.engineBuildProvider(lane);
     } else {
-      const manifestUrl = `${this.baseUrl}/${lane}/octave.build.json`;
+      const manifestUrl = `${this.baseUrl}/${lanePath}/octave.build.json`.replace(/([^:]\/)\/+/g, '$1');
       buildManifest = await this.fetchPort.fetchJSON(manifestUrl);
     }
 
@@ -568,7 +622,7 @@ export class DownloadStore {
     let combinedSha = '';
 
     for (const [filename, meta] of Object.entries(files)) {
-      const url = `${this.baseUrl}/${lane}/${filename}`;
+      const url = `${this.baseUrl}/${lanePath}/${filename}`.replace(/([^:]\/)\/+/g, '$1');
       const destPath = `downloads/engine/${lane}/${filename}`;
       items.push({ filename, url, destPath, sha256: meta.sha256 });
       totalBytes += meta.bytes;
@@ -578,7 +632,7 @@ export class DownloadStore {
     return {
       sha256: combinedSha,
       bytes: totalBytes,
-      provenanceUrl: `${this.baseUrl}/${lane}/octave.build.json`,
+      provenanceUrl: `${this.baseUrl}/${lanePath}/octave.build.json`.replace(/([^:]\/)\/+/g, '$1'),
       items,
     };
   }

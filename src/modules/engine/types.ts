@@ -69,6 +69,7 @@ export interface BootOptions {
   home?: string;
   id?: string;
   lane?: EngineLane;
+  enableOmc?: boolean;
 }
 
 

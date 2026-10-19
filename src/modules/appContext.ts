@@ -27,7 +27,7 @@ export const workspaceStorage = new WorkspaceStorageManager();
 export const downloadStore = new DownloadStore({
   storage: workspaceStorage.store,
 });
-export const projectWorkspace = new ProjectWorkspace(supervisor, undefined, workspaceStorage);
+export const projectWorkspace = new ProjectWorkspace(supervisor, undefined, workspaceStorage, downloadStore);
 export const terminalController = new TerminalController(historyStore, supervisor as any);
 export const workspaceStore = new WorkspaceStore(supervisor as any);
 export const filesystemStore = new FilesystemStore(supervisor as any);

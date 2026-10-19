@@ -26,6 +26,7 @@
   let currentFontSize = $state<number>(themeManager.fontSize);
   let currentMode = $state<WorkbenchMode>(projectWorkspace.mode);
   let currentLane = $state<EngineLane>(projectWorkspace.activeLane);
+  let isOmcEnabled = $state<boolean>(projectWorkspace.isOmcEnabled);
   let currentLocale = $state<Locale>(i18n.currentLocale);
   let isDirectoryMounted = $state<boolean>(projectWorkspace.isDirectoryMounted);
   let directoryName = $state<string | null>(projectWorkspace.directoryName);
@@ -57,6 +58,7 @@
     const unsubPw = projectWorkspace.subscribe(() => {
       currentMode = projectWorkspace.mode;
       currentLane = projectWorkspace.activeLane;
+      isOmcEnabled = projectWorkspace.isOmcEnabled;
       isDirectoryMounted = projectWorkspace.isDirectoryMounted;
       directoryName = projectWorkspace.directoryName;
     });
@@ -92,6 +94,29 @@
     if (state !== 'unloaded') return;
     if (currentLane === targetLane) return;
     projectWorkspace.selectLane(targetLane);
+  }
+
+  function handleToggleOmc() {
+    if (state !== 'unloaded') return;
+    projectWorkspace.toggleOmc();
+  }
+
+  async function handleDownloadEngine(lane: string, e: MouseEvent) {
+    e.stopPropagation();
+    try {
+      await projectWorkspace.downloadEngine(lane);
+    } catch (err: any) {
+      alert(err?.message || String(err));
+    }
+  }
+
+  async function handleRemoveEngine(lane: string, e: MouseEvent) {
+    e.stopPropagation();
+    try {
+      await projectWorkspace.removeEngine(lane);
+    } catch (err: any) {
+      alert(err?.message || String(err));
+    }
   }
 
   function handleInterrupt() {
@@ -401,86 +426,130 @@
 
       {#if menuOpen}
         <div class="m3-popover menu-popover" onclick={(e) => e.stopPropagation()}>
-          <!-- 引擎车道切换区 -->
+          <!-- 引擎架构选择区：双列布局 (Octave 三档 + OpenModelica 一档) -->
           <div class="menu-section">
             <span class="menu-section-title">⚙️ {t('header.engine_arch_title', { status: state !== 'unloaded' ? t('header.arch_locked') : t('header.arch_switchable') })}</span>
-            <div class="lane-choice-group">
-              <button
-                type="button"
-                class="menu-item-choice"
-                class:selected={currentLane === 'wasm32-final'}
-                disabled={state !== 'unloaded'}
-                onclick={() => handleSwitchLane('wasm32-final')}
-              >
-                <div class="choice-text">
-                  <span class="choice-title">wasm32-final</span>
-                  <span class="choice-desc">{t('header.lane_wasm32_desc')}</span>
+            
+            <div class="engine-dual-columns">
+              <!-- 左列：Octave 单选档位 -->
+              <div class="engine-column">
+                <div class="column-header">
+                  <span class="column-title">GNU Octave</span>
+                  <span class="column-badge">{t('header.engine_octave_badge')}</span>
                 </div>
-                {#if currentLane === 'wasm32-final'}
-                  <span class="check-mark">✓</span>
-                {/if}
-              </button>
+                <div class="lane-choice-group">
+                  {#each [
+                    { id: 'wasm32-final', title: 'wasm32-final', desc: t('header.lane_wasm32_desc'), size: '~39.3MB', coi: false },
+                    { id: 'master', title: 'master', desc: t('header.lane_master_desc'), size: '~40.7MB', coi: true },
+                    { id: 'IllegalPerformance', title: 'IllegalPerformance', desc: t('header.lane_illegal_desc'), size: '~40.7MB', coi: true }
+                  ] as laneItem}
+                    <div
+                      class="menu-item-choice"
+                      class:selected={currentLane === laneItem.id}
+                      class:disabled={state !== 'unloaded'}
+                      role="button"
+                      tabindex="0"
+                      onclick={() => handleSwitchLane(laneItem.id as any)}
+                      onkeydown={(e) => e.key === 'Enter' && handleSwitchLane(laneItem.id as any)}
+                    >
+                      <div class="choice-text">
+                        <span class="choice-title">
+                          <span class="radio-circle" class:checked={currentLane === laneItem.id}>
+                            {#if currentLane === laneItem.id}●{/if}
+                          </span>
+                          {laneItem.title}
+                          {#if laneItem.coi && !isCoiAvailable}
+                            <span class="coi-pill" title={t('header.coi_tooltip')}>{t('header.coi_tag')}</span>
+                          {/if}
+                        </span>
+                        <span class="choice-desc">{laneItem.desc}</span>
+                        <div class="lane-meta-row">
+                          <span class="size-hint">{laneItem.size}</span>
+                          {#if projectWorkspace.isEngineDownloaded(laneItem.id)}
+                            <span class="dl-status downloaded">✓ {t('header.downloaded_badge')}</span>
+                            <button
+                              type="button"
+                              class="btn-dl-action remove"
+                              title={t('header.delete_download')}
+                              onclick={(e) => handleRemoveEngine(laneItem.id, e)}
+                            >✕</button>
+                          {:else if projectWorkspace.isEngineDownloading(laneItem.id)}
+                            <span class="dl-status downloading">⏳ {t('header.downloading_badge')}</span>
+                          {:else}
+                            <button
+                              type="button"
+                              class="btn-dl-action download"
+                              title={t('header.download_btn')}
+                              onclick={(e) => handleDownloadEngine(laneItem.id, e)}
+                            >⬇ {t('header.download_btn')}</button>
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              </div>
 
-              <button
-                type="button"
-                class="menu-item-choice"
-                class:selected={currentLane === 'master'}
-                disabled={state !== 'unloaded'}
-                onclick={() => handleSwitchLane('master')}
-              >
-                <div class="choice-text">
-                  <span class="choice-title">
-                    master
-                    {#if !isCoiAvailable}
-                      <span class="coi-pill" title={t('header.coi_tooltip')}>{t('header.coi_tag')}</span>
-                    {/if}
-                  </span>
-                  <span class="choice-desc">{t('header.lane_master_desc')}</span>
-                </div>
-                {#if currentLane === 'master'}
-                  <span class="check-mark">✓</span>
-                {/if}
-              </button>
+              <!-- 分隔线 -->
+              <div class="columns-divider"></div>
 
-              <button
-                type="button"
-                class="menu-item-choice"
-                class:selected={currentLane === 'IllegalPerformance'}
-                disabled={state !== 'unloaded'}
-                onclick={() => handleSwitchLane('IllegalPerformance')}
-              >
-                <div class="choice-text">
-                  <span class="choice-title">
-                    IllegalPerformance
-                    {#if !isCoiAvailable}
-                      <span class="coi-pill" title={t('header.coi_tooltip')}>{t('header.coi_tag')}</span>
-                    {/if}
-                  </span>
-                  <span class="choice-desc">{t('header.lane_illegal_desc')}</span>
+              <!-- 右列：OpenModelica 独立勾选档位 -->
+              <div class="engine-column">
+                <div class="column-header">
+                  <span class="column-title">OpenModelica</span>
+                  <span class="column-badge omc">{t('header.lane_omc_badge')}</span>
                 </div>
-                {#if currentLane === 'IllegalPerformance'}
-                  <span class="check-mark">✓</span>
-                {/if}
-              </button>
+                <div class="lane-choice-group">
+                  <div
+                    class="menu-item-choice"
+                    class:selected={isOmcEnabled}
+                    class:disabled={state !== 'unloaded'}
+                    role="button"
+                    tabindex="0"
+                    onclick={handleToggleOmc}
+                    onkeydown={(e) => e.key === 'Enter' && handleToggleOmc()}
+                  >
+                    <div class="choice-text">
+                      <span class="choice-title">
+                        <span class="checkbox-box" class:checked={isOmcEnabled}>
+                          {#if isOmcEnabled}✓{/if}
+                        </span>
+                        {t('header.lane_omc')}
+                        <span class="coi-pill omc-pill">wasm32</span>
+                      </span>
+                      <span class="choice-desc">{t('header.lane_omc_desc')}</span>
+                      <div class="lane-meta-row">
+                        <span class="size-hint">~71.1MB</span>
+                        {#if projectWorkspace.isEngineDownloaded('omc')}
+                          <span class="dl-status downloaded">✓ {t('header.downloaded_badge')}</span>
+                          <button
+                            type="button"
+                            class="btn-dl-action remove"
+                            title={t('header.delete_download')}
+                            onclick={(e) => handleRemoveEngine('omc', e)}
+                          >✕</button>
+                        {:else if projectWorkspace.isEngineDownloading('omc')}
+                          <span class="dl-status downloading">⏳ {t('header.downloading_badge')}</span>
+                        {:else}
+                          <button
+                            type="button"
+                            class="btn-dl-action download"
+                            title={t('header.download_btn')}
+                            onclick={(e) => handleDownloadEngine('omc', e)}
+                          >⬇ {t('header.download_btn')}</button>
+                        {/if}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-              <button
-                type="button"
-                class="menu-item-choice"
-                class:selected={currentLane === 'omc'}
-                disabled={state !== 'unloaded'}
-                onclick={() => handleSwitchLane('omc')}
-              >
-                <div class="choice-text">
-                  <span class="choice-title">
-                    {t('header.lane_omc')}
-                    <span class="coi-pill omc-pill">{t('header.lane_omc_badge')}</span>
-                  </span>
-                  <span class="choice-desc">{t('header.lane_omc_desc')}</span>
-                </div>
-                {#if currentLane === 'omc'}
-                  <span class="check-mark">✓</span>
+                {#if isOmcEnabled}
+                  <div class="omc-companion-callout">
+                    <span class="callout-icon">🚀</span>
+                    <span class="callout-text">{t('header.omc_dual_boot_tip')}</span>
+                  </div>
                 {/if}
-              </button>
+              </div>
             </div>
           </div>
 
@@ -827,11 +896,153 @@
 
   /* Menu Popover */
   .menu-popover {
-    width: 280px;
-    padding: 0.75rem;
+    width: 480px;
+    max-width: calc(100vw - 20px);
+    padding: 0.85rem;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.65rem;
+  }
+
+  .engine-dual-columns {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .engine-column {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 4px;
+    margin-bottom: 2px;
+  }
+
+  .column-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--md-sys-color-on-surface);
+  }
+
+  .column-badge {
+    font-size: 0.65rem;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    background: var(--bg-surface-hover);
+    color: var(--md-sys-color-on-surface-variant);
+    font-weight: 600;
+  }
+
+  .column-badge.omc {
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+  }
+
+  .columns-divider {
+    width: 1px;
+    background-color: var(--border-subtle);
+    align-self: stretch;
+  }
+
+  .radio-circle,
+  .checkbox-box {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1.5px solid var(--md-sys-color-outline-variant);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--accent-primary);
+    flex-shrink: 0;
+  }
+
+  .checkbox-box {
+    border-radius: 4px;
+    font-weight: 700;
+  }
+
+  .radio-circle.checked,
+  .checkbox-box.checked {
+    border-color: var(--accent-primary);
+    background-color: var(--md-sys-color-primary-container);
+  }
+
+  .lane-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-top: 5px;
+    font-size: 0.7rem;
+  }
+
+  .size-hint {
+    color: var(--text-dim);
+    font-size: 0.68rem;
+    font-family: var(--font-mono, monospace);
+  }
+
+  .dl-status {
+    font-size: 0.68rem;
+    font-weight: 600;
+  }
+
+  .dl-status.downloaded {
+    color: var(--accent-success);
+  }
+
+  .dl-status.downloading {
+    color: var(--accent-warning);
+  }
+
+  .btn-dl-action {
+    border: 1px solid var(--border-subtle);
+    background: transparent;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.68rem;
+    cursor: pointer;
+    color: var(--md-sys-color-on-surface-variant);
+    transition: all 0.15s;
+  }
+
+  .btn-dl-action:hover {
+    background: var(--bg-surface-hover);
+    color: var(--md-sys-color-on-surface);
+  }
+
+  .btn-dl-action.download {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+  }
+
+  .btn-dl-action.remove {
+    border-color: var(--accent-danger);
+    color: var(--accent-danger);
+  }
+
+  .omc-companion-callout {
+    background: var(--bg-surface-hover);
+    border: 1px solid var(--accent-primary);
+    border-radius: 8px;
+    padding: 6px 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 0.72rem;
+    color: var(--md-sys-color-on-surface);
+    line-height: 1.35;
+    margin-top: 6px;
   }
 
   .menu-section {
@@ -866,9 +1077,10 @@
     text-align: left;
     cursor: pointer;
     transition: all 0.15s;
+    user-select: none;
   }
 
-  .menu-item-choice:hover:not(:disabled) {
+  .menu-item-choice:hover:not(.disabled) {
     background-color: var(--md-sys-color-surface-container, rgba(0,0,0,0.05));
   }
 
@@ -877,7 +1089,7 @@
     border-color: var(--accent-primary);
   }
 
-  .menu-item-choice:disabled {
+  .menu-item-choice.disabled {
     opacity: 0.55;
     cursor: not-allowed;
   }
@@ -885,6 +1097,7 @@
   .choice-text {
     display: flex;
     flex-direction: column;
+    width: 100%;
   }
 
   .choice-title {

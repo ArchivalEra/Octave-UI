@@ -9,6 +9,8 @@ import { OctaveCellParser, type ParsedCell } from './OctaveCellParser';
 import { SemanticResultRenderer, type SemanticResult } from '../semantic/SemanticResultRenderer';
 import { SafePlotSinkPolyfill } from '../semantic/SafePlotSinkPolyfill';
 import type { WorkspaceStorageManager } from '../storage/WorkspaceStorageManager';
+import type { DownloadStore } from '../storage/DownloadStore';
+import type { DownloadRecord, DownloadProgressCallback } from '../storage/downloadTypes';
 import { p5FigureOverlayPlugin } from '../plugins';
 
 export type WorkbenchMode = 'notebook' | 'terminal';
@@ -82,19 +84,29 @@ export class ProjectWorkspace {
   private _supervisor: EngineSupervisor;
   private _dirAdapter: DirectoryAdapter;
   private _storageManager?: WorkspaceStorageManager;
+  private _downloadStore?: DownloadStore;
+  private _omcEnabled: boolean = false;
 
   constructor(
     supervisor: EngineSupervisor,
     dirAdapter?: DirectoryAdapter,
-    storageManager?: WorkspaceStorageManager
+    storageManager?: WorkspaceStorageManager,
+    downloadStore?: DownloadStore
   ) {
     this._supervisor = supervisor;
     this._storageManager = storageManager;
+    this._downloadStore = downloadStore;
     this._dirAdapter = dirAdapter ?? (
       typeof window !== 'undefined'
         ? new FSAccessDirectoryAdapter()
         : new VirtualMemoryDirectoryAdapter()
     );
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('octave:download-changed', () => {
+        this._notify();
+      });
+    }
 
     if (this._storageManager) {
       this._storageManager.subscribe(() => {
@@ -218,6 +230,56 @@ export class ProjectWorkspace {
     }
     this._supervisor.setLane(lane);
     this._activeLane = lane;
+    this._notify();
+  }
+
+  get isOmcEnabled(): boolean {
+    return this._omcEnabled;
+  }
+
+  setOmcEnabled(val: boolean): void {
+    if (this._supervisor.state !== 'unloaded') {
+      console.warn(`[ProjectWorkspace] 计算已启动 (状态: ${this._supervisor.state})，禁止切换引擎状态`);
+      return;
+    }
+    this._omcEnabled = val;
+    this._notify();
+  }
+
+  toggleOmc(): void {
+    this.setOmcEnabled(!this._omcEnabled);
+  }
+
+  setDownloadStore(ds: DownloadStore): void {
+    this._downloadStore = ds;
+  }
+
+  get downloadStore(): DownloadStore | undefined {
+    return this._downloadStore;
+  }
+
+  isEngineDownloaded(lane: string): boolean {
+    return this._downloadStore ? this._downloadStore.isEngineDownloaded(lane) : false;
+  }
+
+  isEngineDownloading(lane: string): boolean {
+    return this._downloadStore ? this._downloadStore.isEngineDownloading(lane) : false;
+  }
+
+  getEngineRecord(lane: string): DownloadRecord | null {
+    return this._downloadStore ? this._downloadStore.getEngineRecord(lane) : null;
+  }
+
+  async downloadEngine(lane: string, onProgress?: DownloadProgressCallback): Promise<DownloadRecord | null> {
+    if (!this._downloadStore) return null;
+    const rec = await this._downloadStore.downloadEngine(lane, { onProgress });
+    this._notify();
+    return rec;
+  }
+
+  async removeEngine(lane: string): Promise<void> {
+    if (!this._downloadStore) return;
+    await this._downloadStore.removeEngine(lane);
     this._notify();
   }
 
@@ -578,7 +640,7 @@ export class ProjectWorkspace {
     // 引擎未就绪则启动
     if (this._supervisor.state === 'unloaded') {
       try {
-        await this._supervisor.boot();
+        await this._supervisor.boot({ lane: this.activeLane, enableOmc: this._omcEnabled });
         await this.syncFilesToEngine();
       } catch (err: any) {
         cell.status = 'error';
@@ -677,7 +739,7 @@ export class ProjectWorkspace {
 
   async executeCommand(cmd: string): Promise<EvalResult> {
     if (this._supervisor.state === 'unloaded') {
-      await this._supervisor.boot();
+      await this._supervisor.boot({ lane: this.activeLane, enableOmc: this._omcEnabled });
     }
     const res = await this._supervisor.eval(cmd);
     await this.syncVariables();

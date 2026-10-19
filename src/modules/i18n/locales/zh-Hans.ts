@@ -426,6 +426,14 @@ const _zhHans = {
   'header.lane_omc': 'OpenModelica',
   'header.lane_omc_badge': '物理仿真',
   'header.lane_omc_desc': 'Modelica 物理建模与仿真第二引擎档 · 71MB',
+  'header.engine_octave_badge': '数值计算',
+  'header.download_btn': '下载',
+  'header.downloaded_badge': '已下载',
+  'header.downloading_badge': '下载中',
+  'header.delete_download': '删除本地缓存',
+  'header.omc_dual_boot_tip': '启动时将同时装载 Octave 与 OpenModelica 双引擎 (同页协同计算)',
+  'boot.omc_engine_label': '物理建模引擎',
+  'boot.omc_engine_val': 'OpenModelica wasm32 (~71.1 MB)',
 } as const;
 
 export const zhHans: EnsureParity<typeof _zhHans> & LocaleDictionary = _zhHans;
