@@ -27,6 +27,11 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 网页端用户界面与交�
   - **纯下载深模块与 OPFS 资产持久化**（`DownloadStore`）：贯彻 I1-I6 不变量体系（权威来源哈希解析、原子发布与无半包回滚、当日目录哈希防漂移、零 `Module.FS` 纯净依赖、多架构独立隔离与真实存储对账自动降级），采用 7 个封闭错误码（`NOT_DOWNLOADED`、`VERSION_WITHHELD`、`FLAVOR_UNAVAILABLE`、`STORAGE_WRITE_FAILED`、`DOWNLOAD_ABORTED`、`INDEX_UNREADABLE`、`STORAGE_QUOTA_EXHAUSTED`）和 3 语 100% 字典平权守护离线存储；支持 `octave:download-changed` 跨模块事件总线。
   - **包管理双动作与现场编译诊断流**（`PackageManagerModal`）：支持“下载（落盘 OPFS 沙箱）”与“装载/从源码构建（入 Octave 引擎）”双动作彻底解耦；落实裁决⑤前置依赖拦截（含 `src` 的 C++ 源码扩展包强制拦截并提示前置下载 `llvm-wasm` 编译器）；集成展开式实时编译诊断抽屉，输出结构化构建日志流并清晰区分“编译成功 ✓”与“跨边界调用待宿主工单 65 重链”；支持 A4 体量预演分件清单弹窗与 A5 存储配额（`STORAGE_QUOTA_EXHAUSTED`）强校验阻断。
   - **下载与装载解耦与双列多引擎协同架构**：支持将下载（写入 OPFS 沙箱）与装载（载入 WebAssembly 实例）彻底解耦，用户可同时将多档引擎（Octave 三档 + OpenModelica 一档）自由预下载至本地；界面重构为正交双列设计（左列 Octave 三档单选，右列 OpenModelica 独立打勾），两边不干涉，支持一键双引擎同页并发实例化（`Promise.all`）与 MEMFS 桥接，100% 纯客户端静态托管。
+  - **可拖拽多引擎工作台架构**（`DockWorkspace` & `DockLayoutStore`）：
+    - 采用深模块 2D 二叉分屏与标签树布局引擎，支持自由标签拖拽停靠（Docking）、独立浮动窗口（Floating Window）及 5 区域精准落点预览（上下左右中），状态透明持久化至 `localStorage`。
+    - **OPFS 工业沙箱一级解耦面板**（`OpfsFilesPanel`）：将 OPFS 资源仓解耦为可自由停靠、浮动的独立工作区面板，完整保留目录导入导出、ZIP 解包及与 MEMFS 双向二进制同步能力。
+    - **OpenModelica 交互控制台面板**（`OmcShellPanel`）：深度贯彻内容仓 016/017 规范，内置状态感知指示灯、经典物理系统配方演示（如 `BouncingBall`、`ChuaCircuit`）及与 Octave 宿主桥的高性能双向通信通道。
+    - **4 套专业布局预设一键切换**：🚀 双引擎全能工作台（Studio）、📓 Octave 专注（Octave Focus）、⚙️ OpenModelica 建模（OMC Focus）、💻 双终端并排（Twin Consoles），支持 "+ 添加面板" 动态装配。
   - **全站 Design Tokens 严格约束与明暗模式自适应**：全面根除历史残留的幽灵 CSS 变量（`--bg-primary`、`--text-primary`、`--border-color` 等）与 `<style>` 块硬编码颜色，所有组件界面颜色均受控于 `src/styles/theme.css` 的语义化 Design Tokens，并配备自动化质量闸门 `check_theme_tokens.py` 阻止任何变量泄漏回归。
   - **三语完整平权国际化（i18n）**：提供英语（`en`）、简体中文（`zh-Hans`）与德语（`de`）全量键位字典对齐（100% 字典平权），全站所有组件模板及交互逻辑彻底移除硬编码中文，由专属质量闸门 `check_i18n.py` 实施静态正则扫描与反向断言防护。
   - **AI / WebMCP 代理原生桥接插件**（`WebMcpPlugin`）：面向未来 AI Agent 操作与 WebMCP 协议，内置开箱即用的 DOM-free 机器控制接口（双层协议暴露于 `document.modelContext` 与 `navigator.modelContext`，并支持标准 `webmcp:ready` 与 `webmcp:call` 事件广播），提供 `octave_eval`、`octave_run_cell`、`octave_get_workspace`、`octave_list_packages`、`octave_install_package` 与 `octave_get_system_state` 等原生高维计算与系统状态工具；全站交互元素配齐 `data-action`、`data-testid` 等机器识别锚点，支持按需卸载（`pluginRegistry.unregister('webmcp')`）。

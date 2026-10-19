@@ -10,7 +10,8 @@
   import DiagnosticsModal from './DiagnosticsModal.svelte';
   import VariableInspectorModal from './VariableInspectorModal.svelte';
   import PackageManagerModal from './PackageManagerModal.svelte';
-  import { projectWorkspace, i18n, t } from '../modules/appContext';
+  import { projectWorkspace, dockLayoutStore, i18n, t } from '../modules/appContext';
+  import DockWorkspace from './dock/DockWorkspace.svelte';
   import type { WorkbenchMode } from '../modules/workspace/ProjectWorkspace';
   import type { Locale } from '../modules/i18n/types';
 
@@ -34,7 +35,10 @@
 
   $effect(() => {
     const unsub = projectWorkspace.subscribe(() => {
-      currentMode = projectWorkspace.mode;
+      if (projectWorkspace.mode !== currentMode) {
+        currentMode = projectWorkspace.mode;
+        dockLayoutStore.openPanel(currentMode === 'notebook' ? 'octave-notebook' : 'octave-terminal');
+      }
     });
     const unsubI18n = i18n.subscribe((loc) => {
       currentLocale = loc;
@@ -111,7 +115,13 @@
 <div class="app-container" class:sidebar-resizing={isResizing}>
   <HeaderBar
     onOpenBootModal={() => (bootModalOpen = true)}
-    onToggleSidebar={() => (sidebarOpen = !sidebarOpen)}
+    onToggleSidebar={() => {
+      if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+        sidebarOpen = !sidebarOpen;
+      } else {
+        dockLayoutStore.openPanel('opfs-files');
+      }
+    }}
     onOpenExamples={() => (examplesOpen = true)}
     onOpenDiagnostics={() => (diagnosticsOpen = true)}
     onOpenPackages={() => (packagesOpen = true)}
@@ -120,11 +130,10 @@
 
   <main class="workspace-area">
     <div class="view-pane">
-      {#if currentMode === 'notebook'}
-        <NotebookView onOpenExamples={() => (examplesOpen = true)} />
-      {:else}
-        <TerminalIsland onInterceptPlot={handleInterceptPlot} />
-      {/if}
+      <DockWorkspace
+        onOpenExamples={() => (examplesOpen = true)}
+        onInterceptPlot={handleInterceptPlot}
+      />
     </div>
 
     <!-- 侧栏拖拽与遮罩 -->

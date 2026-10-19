@@ -17,11 +17,16 @@ import { SafePlotSinkPolyfill } from './semantic/SafePlotSinkPolyfill';
 
 import { WorkspaceStorageManager } from './storage/WorkspaceStorageManager';
 import { DownloadStore } from './storage/DownloadStore';
+import { DockLayoutStore } from './dock/DockLayoutStore';
+import { PanelRegistry, panelRegistryInstance } from './dock/PanelRegistry';
 
 export const historyStore = new HistoryStore();
 export const supervisor = new EngineSupervisor();
 // 兼容性别名：支持已有引用
 export const engineSession = supervisor as any;
+
+export const dockLayoutStore = new DockLayoutStore();
+export const panelRegistry = panelRegistryInstance;
 
 export const workspaceStorage = new WorkspaceStorageManager();
 export const downloadStore = new DownloadStore({

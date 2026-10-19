@@ -238,6 +238,26 @@
     }
   }
 
+  async function handleMountLocalDir() {
+    try {
+      await projectWorkspace.mountLocalDirectory();
+    } catch (err: any) {
+      alert(t('workbench.mount_error', { error: err?.message || err }));
+    }
+  }
+
+  async function handleReselectDir() {
+    try {
+      await projectWorkspace.reselectDirectory();
+    } catch (err: any) {
+      alert(t('workbench.mount_error', { error: err?.message || err }));
+    }
+  }
+
+  function handleDisconnectDir() {
+    projectWorkspace.disconnectDirectory();
+  }
+
   function refreshWorkspace() {
     projectWorkspace.syncVariables();
   }
