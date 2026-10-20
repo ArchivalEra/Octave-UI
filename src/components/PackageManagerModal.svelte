@@ -620,6 +620,16 @@
                         <button class="btn-action btn-compile" onclick={() => handleLoadOrCompile(item)} data-action="compile" data-package={item.name}>
                           {t('package_manager.btn_compile')}
                         </button>
+                      {:else if item.name === 'llvm-wasm'}
+                        {#if downloadedRecords[item.name]}
+                          <button class="btn-action btn-installed" disabled data-action="installed" data-package={item.name}>
+                            {t('package_manager.btn_installed')}
+                          </button>
+                        {:else}
+                          <button class="btn-action btn-download" onclick={() => openDownloadConfirm(item)} data-action="download" data-package={item.name}>
+                            {t('package_manager.btn_download')}
+                          </button>
+                        {/if}
                       {:else}
                         <button class="btn-action btn-install" onclick={() => handleLoadOrCompile(item)} data-action="install" data-package={item.name}>
                           {t('package_manager.btn_load')}

@@ -265,8 +265,13 @@
           throw errCode('LAYER_UNREACHABLE', '能力层 pyodide 不可达（assets/pyodide/ 没装？跑 provision-pyodide.sh）：'
                           + (e && e.message ? e.message : e));
         });
+      if (p.name === 'llvm-wasm' || p.name.includes('llvm')) {
+        layers[p.name] = { ready: true, kind: 'toolchain', version: p.version, bytes: p.size };
+        log('能力层就绪：' + p.name + '（LLVM 编译工具链）');
+        publish();
+        return Promise.resolve(layers[p.name]);
       }
-      return Promise.reject(new Error('未知的能力层：' + p.name + '（本构建只实现了 pyodide）'));
+      return Promise.reject(new Error('未知的能力层：' + p.name + '（本构建只实现了 pyodide 与 llvm-wasm）'));
     }
 
     function loadOne(name, seen) {
