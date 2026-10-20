@@ -20,6 +20,12 @@ export interface PackageVersionCandidate {
   upstream_url?: string;
 }
 
+export interface PackageLinkItem {
+  label: string;
+  url: string;
+  icon?: string;
+}
+
 export interface ForgePackageItem {
   name: string;
   version: string;
@@ -31,7 +37,7 @@ export interface ForgePackageItem {
   url?: string;
   upstream_url?: string;
   description?: string;
-  links?: Record<string, string>;
+  links?: Record<string, string> | PackageLinkItem[];
   versions?: PackageVersionCandidate[];
 }
 

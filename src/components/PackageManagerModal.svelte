@@ -139,13 +139,31 @@
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  function getPackageLinks(item: ForgePackageItem): Array<{ label: string; url: string; icon?: string }> {
+    if (!item) return [];
+    if (Array.isArray(item.links)) {
+      return item.links.filter((l) => l && l.url && l.label);
+    }
+    if (item.links && typeof item.links === 'object') {
+      return Object.entries(item.links).map(([label, url]) => ({
+        label,
+        url: typeof url === 'string' ? url : (url as any)?.url || String(url),
+      }));
+    }
+    if (item.upstream_url) {
+      return [{ label: 'Upstream', url: item.upstream_url }];
+    }
+    return [];
+  }
+
   async function openDownloadConfirm(item: ForgePackageItem) {
     confirmDownloadItem = item;
     confirmDownloadError = null;
     const ver = selectedVersions[item.name] || item.version;
     const extra = packageManagerPlugin.estimateExtraDownload(item.name);
+    const fileName = item.url ? item.url.split('/').pop()! : `${item.name}-${ver}.tar.gz`;
     const breakdown = [
-      { name: `${item.name}-${ver}.tar.gz`, size: item.size || 0 },
+      { name: fileName, size: item.size || 0 },
     ];
     if (extra > 0) {
       breakdown.push({ name: 'Runtime dependency', size: extra });
@@ -201,14 +219,17 @@
 
   async function downloadLLVM() {
     llvmPromptOpen = false;
+    const llvmPkg = packageManagerPlugin.getPackage('llvm-wasm');
+    const ver = llvmPkg?.version || '6.0.12';
+    const totalBytes = llvmPkg?.size || 122922700;
     const ref: DownloadRef = {
       name: 'llvm-wasm',
-      version: '19.1.0',
+      version: ver,
       kind: 'runtime',
     };
     downloadingState = {
       ...downloadingState,
-      'llvm-wasm': { receivedBytes: 0, totalBytes: 36700160, phase: 'Downloading LLVM' },
+      'llvm-wasm': { receivedBytes: 0, totalBytes, phase: 'Downloading LLVM' },
     };
     try {
       await packageManagerPlugin.downloadPackage(ref, {
@@ -432,6 +453,7 @@
               {@const versions = packageManagerPlugin.getVersions(item.name)}
               {@const currentVer = selectedVersions[item.name] || item.version}
               {@const extraSize = packageManagerPlugin.estimateExtraDownload(item.name)}
+              {@const links = getPackageLinks(item)}
 
               <div class="package-card" class:installed={status.installed} data-package={item.name}>
                 <div class="card-header">
@@ -480,19 +502,13 @@
 
                 <p class="package-desc">{item.description || t('package_manager.no_desc')}</p>
 
-                {#if item.links && Object.keys(item.links).length > 0}
+                {#if links.length > 0}
                   <div class="package-links-row">
-                    {#each Object.entries(item.links) as [label, url]}
-                      <a href={url} target="_blank" rel="noopener noreferrer" class="package-link-pill">
-                        {label} ↗
+                    {#each links as link}
+                      <a href={link.url} target="_blank" rel="noopener noreferrer" class="package-link-pill">
+                        {link.label} ↗
                       </a>
                     {/each}
-                  </div>
-                {:else if item.upstream_url}
-                  <div class="package-links-row">
-                    <a href={item.upstream_url} target="_blank" rel="noopener noreferrer" class="package-link-pill">
-                      Upstream ↗
-                    </a>
                   </div>
                 {/if}
 

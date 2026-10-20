@@ -461,7 +461,7 @@ export class DownloadStore {
   }
 
   private async resolveRuntimeTarget(ref: DownloadRef) {
-    const filename = `${ref.name}-${ref.version}.tar.gz`;
+    let filename = `${ref.name}-${ref.version}.tar.gz`;
     if (this.catalogProvider) {
       try {
         const cat = await this.catalogProvider();
@@ -469,9 +469,16 @@ export class DownloadStore {
         if (pkg) {
           const sha256 = (pkg as any).sha256 || `${ref.name}-${ref.version}-sha`;
           const bytes = pkg.size || 22000000;
-          const url = (pkg as any).tarballUrl
-            ? this.resolveUrl((pkg as any).tarballUrl)
-            : this.resolveUrl(`assets/runtimes/${filename}`);
+          let url: string;
+          if ((pkg as any).url) {
+            url = this.resolveUrl((pkg as any).url);
+            filename = (pkg as any).url.split('/').pop() || filename;
+          } else if ((pkg as any).tarballUrl) {
+            url = this.resolveUrl((pkg as any).tarballUrl);
+            filename = (pkg as any).tarballUrl.split('/').pop() || filename;
+          } else {
+            url = this.resolveUrl(`assets/runtimes/${filename}`);
+          }
           const destPath = `downloads/runtime/${ref.name}/${ref.version}/${filename}`;
           return {
             sha256,

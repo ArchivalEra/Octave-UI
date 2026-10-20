@@ -87,6 +87,15 @@ describe('DownloadStore Deep Module', () => {
         form: 'tree',
         content: [],
       },
+      {
+        name: 'pyodide',
+        version: '314.0.7',
+        size: 22013349,
+        form: 'tree',
+        content: [],
+        url: 'assets/pyodide/pyodide/pyodide.asm.wasm',
+        sha256: 'cc36e3cab04fdfc9a63ff13eb52eae2b911bf46c025cc7b281f394bd3de1d5e6',
+      },
     ],
   };
 
@@ -349,5 +358,18 @@ describe('DownloadStore Deep Module', () => {
     await expect(htmlStore.downloadEngine('wasm32-final')).rejects.toMatchObject({
       code: 'INDEX_UNREADABLE',
     });
+  });
+
+  it('resolves runtime target with direct url and wasm filename when specified in catalog', async () => {
+    const ref: DownloadRef = { name: 'pyodide', version: '314.0.7', kind: 'runtime' };
+    const url = 'https://octave.test/assets/pyodide/pyodide/pyodide.asm.wasm';
+    const sha = 'cc36e3cab04fdfc9a63ff13eb52eae2b911bf46c025cc7b281f394bd3de1d5e6';
+    mockFetch.setFile(url, 'wasm-data-pyodide', sha);
+
+    const rec = await store.download(ref);
+    expect(rec.ref.name).toBe('pyodide');
+    expect(rec.sha256).toBe(sha);
+    expect(rec.files[0].path).toBe('downloads/runtime/pyodide/314.0.7/pyodide.asm.wasm');
+    expect(store.has(ref)).toBe(true);
   });
 });
