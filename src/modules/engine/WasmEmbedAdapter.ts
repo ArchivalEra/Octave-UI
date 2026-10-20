@@ -40,14 +40,23 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     const laneFolder = lane === 'omc' ? 'wasm32-final' : lane;
     const base = opts.base || `${normalizedBase}lanes/${laneFolder}/`;
 
+    const isW64 = lane === 'master' || lane === 'IllegalPerformance';
+    const scriptPath = isW64 ? 'w64/octave.js' : 'octave.js';
+    const scriptUrl = `${base}${scriptPath}`;
+    const scriptKey = `${laneFolder}-${isW64 ? 'w64' : 'base'}`;
+
     // 确保按需加载对应车道的 Emscripten 胶水脚本
     if (typeof document !== 'undefined') {
-      const scriptUrl = `${base}octave.js`;
-      if (!document.querySelector(`script[data-lane="${laneFolder}"]`)) {
+      const existing = document.querySelector(`script[data-lane]`);
+      const currentActive = existing?.getAttribute('data-lane');
+      if (currentActive !== scriptKey) {
+        if (existing) {
+          existing.remove();
+        }
         await new Promise<void>((resolve, reject) => {
           const s = document.createElement('script');
           s.src = scriptUrl;
-          s.setAttribute('data-lane', laneFolder);
+          s.setAttribute('data-lane', scriptKey);
           s.onload = () => resolve();
           s.onerror = () => reject(new Error(`Failed to load engine runtime script from ${scriptUrl}`));
           document.head.appendChild(s);
@@ -56,13 +65,13 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     }
 
     // 构造符合 octave-core.js 契约的具象车道计划
-    const isW64 = lane === 'master' || lane === 'IllegalPerformance';
     const lanePlan = {
-      lane: lane === 'wasm32-final' || lane === 'omc' ? 'base' : 'w64',
+      lane: isW64 ? 'w64' : 'base',
       dir: isW64 ? 'w64/' : '',
-      js: 'octave.js',
-      wasm: 'octave.wasm',
-      data: 'octave.data',
+      js: isW64 ? 'w64/octave.js' : 'octave.js',
+      wasm: isW64 ? 'w64/octave.wasm' : 'octave.wasm',
+      data: isW64 ? 'w64/octave.data' : 'octave.data',
+      manifest: isW64 ? 'assets/manifest.w64.json' : 'assets/manifest.json',
     };
 
     const bootPromise = window.OctaveEmbed.create({
