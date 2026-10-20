@@ -461,15 +461,17 @@ export class DownloadStore {
   }
 
   private async resolveRuntimeTarget(ref: DownloadRef) {
+    const filename = `${ref.name}-${ref.version}.tar.gz`;
     if (this.catalogProvider) {
       try {
         const cat = await this.catalogProvider();
         const pkg = (cat.packs || []).find((p) => p.name === ref.name);
         if (pkg) {
-          const sha256 = (pkg as any).sha256 || 'runtime-sha';
+          const sha256 = (pkg as any).sha256 || `${ref.name}-${ref.version}-sha`;
           const bytes = pkg.size || 22000000;
-          const filename = `${ref.name}-${ref.version}.tar.gz`;
-          const url = (pkg as any).url ? `${this.baseUrl}/${(pkg as any).url}` : `${this.baseUrl}/assets/runtimes/${filename}`;
+          const url = (pkg as any).tarballUrl
+            ? this.resolveUrl((pkg as any).tarballUrl)
+            : this.resolveUrl(`assets/runtimes/${filename}`);
           const destPath = `downloads/runtime/${ref.name}/${ref.version}/${filename}`;
           return {
             sha256,
@@ -478,12 +480,13 @@ export class DownloadStore {
             items: [{ filename, url, destPath, sha256 }],
           };
         }
-      } catch {}
+      } catch (err) {
+        console.warn('[DownloadStore] resolveRuntimeTarget catalog error:', err);
+      }
     }
 
     // 默认工具链运行时（如 llvm-wasm）
-    const filename = `${ref.name}-${ref.version}.tar.gz`;
-    const url = `${this.baseUrl}/assets/runtimes/${filename}`;
+    const url = this.resolveUrl(`assets/runtimes/${filename}`);
     const destPath = `downloads/runtime/${ref.name}/${ref.version}/${filename}`;
     const bytes = ref.name.includes('llvm') ? 36700160 : 20000000;
     return {

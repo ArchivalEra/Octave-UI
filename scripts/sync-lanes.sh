@@ -69,6 +69,18 @@ if [ -f "${BUILD_DIR}/site/assets/forge-catalog.json" ]; then
   fi
 fi
 
+# 同步 pyodide 与 runtimes 能力层资产
+if [ -d "${BUILD_DIR}/site/assets/pyodide" ]; then
+  echo "    --> 同步 pyodide 能力层资产"
+  mkdir -p "${REPO_ROOT}/public/assets/pyodide"
+  cp -rf "${BUILD_DIR}/site/assets/pyodide/"* "${REPO_ROOT}/public/assets/pyodide/"
+fi
+if [ -d "${BUILD_DIR}/site/assets/llvm" ]; then
+  echo "    --> 同步 llvm 编译器能力层资产"
+  mkdir -p "${REPO_ROOT}/public/assets/llvm"
+  cp -rf "${BUILD_DIR}/site/assets/llvm/"* "${REPO_ROOT}/public/assets/llvm/"
+fi
+
 echo "=========================================================="
 echo "==> [3/4] 编译前端单页面应用至 dist/..."
 echo "=========================================================="

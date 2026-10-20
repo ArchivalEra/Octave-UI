@@ -48,7 +48,13 @@ export const workspaceStorage = new WorkspaceStorageManager();
 export const downloadStore = new DownloadStore({
   storage: workspaceStorage.store,
   baseUrl: getSiteBase(),
-  catalogProvider: () => packageManagerPlugin.getAssetsPort().fetchCatalog(),
+  catalogProvider: async () => {
+    const cached = packageManagerPlugin.getCatalog();
+    if (cached && Array.isArray(cached.packs) && cached.packs.length > 0) {
+      return cached;
+    }
+    return packageManagerPlugin.getAssetsPort().fetchCatalog();
+  },
 });
 export const projectWorkspace = new ProjectWorkspace(supervisor, undefined, workspaceStorage, downloadStore);
 export const terminalController = new TerminalController(historyStore, supervisor as any);
