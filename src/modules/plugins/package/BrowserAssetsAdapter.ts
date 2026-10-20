@@ -157,11 +157,14 @@ export class BrowserAssetsAdapter implements IAssetsPort {
         why: res?.why,
       };
     } catch (err: any) {
+      const diags = (Array.isArray(err?.diagnostics) && err.diagnostics.length > 0)
+        ? err.diagnostics
+        : [err?.message || String(err)];
       return {
         state: 'failed',
         name,
-        diagnostics: [err?.message || String(err)],
-        why: err?.message || 'Compilation failed',
+        diagnostics: diags,
+        why: err?.why || err?.message || 'Compilation failed',
       };
     }
   }

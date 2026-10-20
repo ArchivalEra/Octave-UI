@@ -37,7 +37,7 @@
   'use strict';
 
   // ⚠️ 清单 URL 的注入点**已经存在**（下面的 `init(url)`，实现见 `fetchJSON(url || MANIFEST_URL)`）
-  //    —— B6 双档复用它（线程档传 `assets/manifest.threads.json`）：**别再加法子**，
+  //    —— B6 多档复用它（w64 传 `assets/manifest.w64.json`）：**别再加法子**，
   //    两套机制必然分叉（本仓的老教训）。
   var MANIFEST_URL = 'assets/manifest.json';
   var OCTAVE_M = '/usr/src/octave/m';
@@ -62,6 +62,8 @@
     //   读它的：build/pkgfix/__webassets_info__.m 与 build/pkgfix/__websource_of__.m。
     var installError = {};      // name → 失败原因（成功时删）
     var catalogMiss = {};       // name → 1（货架**读成功**但确实没这个包）
+    var _compiled = {};         // B 线：name → {octPath, diagnostics}（compileExtension 幂等缓存）
+    var _tcWorkers = {};        // target → Promise<Worker>（工具链 Worker 池：重活离主线程，一次起复用）
     var catalogState = 'unread'; // unread | ok | fail —— miss 是不是终态取决于它
     var byName = {};
     var loaded = {};       // name -> {files: n, addpath: [...]}
@@ -69,6 +71,18 @@
     var listeners = [];
 
     function log(msg) { if (global.console) console.log('[assets] ' + msg); }
+
+    // ── 结构化错误码（UI mail/028 Q1，2026-10-17）───────────────────────────────
+    // 为什么：报错的 `message` 是给人读的中文（本仓工作语言）；但 UI 的国际化层需要
+    // **机器可读的稳定代码**来选语言文案（`t('errors.' + err.code)`），AI/WebMCP Agent
+    // 也靠它做确定性决策——**正则匹配中文消息是脆弱契约**（消息改一个字，分类就错）。
+    // ⇒ 每个 throw 都带 `err.code`（稳定、闭集、与 `__verdict__.cause` 同词表扩展）；
+    // `message` 保持中文（人读不变）。⚠️ code 是**追加**字段：旧消费者读 message 照旧。
+    function errCode(code, message) {
+      var e = new Error(message);
+      e.code = code;                       // 机器可读（UI/AiM/Agent 契约）
+      return e;
+    }
 
     // ── 宿主架构（单一产地；install 的架构界与 statusOf 的 compatible 都用它）────────
     // 判据 = **选档结果**（`octaveLaneState.lane`，`w64*` ⇒ wasm64），与 `bridge/lane.js` 同源
@@ -81,19 +95,19 @@
         if (st && st.lane) lane = st.lane;
         if (!lane && opts && opts.lane && opts.lane.lane) lane = opts.lane.lane;
         if (/^w64/.test(lane)) return 'wasm64';   // w64 / w64-base / w64-threads
-        if (lane) return 'wasm32';                // base / threads
+        if (lane) return 'wasm32';                // base（wasm32 线 = 单线程）
         return '';
       } catch (e) { return ''; }
     }
 
     function fs() {
       var M = module || global.Module;
-      if (!M || !M.FS) throw new Error('Module.FS 尚未就绪（Octave 还没起来？）');
+      if (!M || !M.FS) throw errCode('FS_NOT_READY', 'Module.FS 尚未就绪（Octave 还没起来？）');
       return M.FS;
     }
     function M() {
       var m = module || global.Module;
-      if (!m) throw new Error('Module 尚未就绪');
+      if (!m) throw errCode('MODULE_NOT_READY', 'Module 尚未就绪');
       return m;
     }
     function withBase(u) { return base + u; }
@@ -118,14 +132,14 @@
 
     function fetchBinary(url) {
       return fetch(withBase(url)).then(function (r) {
-        if (!r.ok) throw new Error('取资产失败 ' + withBase(url) + ' → HTTP ' + r.status);
+        if (!r.ok) throw errCode('ASSET_FETCH_FAILED', '取资产失败 ' + withBase(url) + ' → HTTP ' + r.status);
         return r.arrayBuffer();
       });
     }
 
     function fetchJSON(url) {
       return fetch(withBase(url)).then(function (r) {
-        if (!r.ok) throw new Error('取清单失败 ' + withBase(url) + ' → HTTP ' + r.status);
+        if (!r.ok) throw errCode('MANIFEST_FETCH_FAILED', '取清单失败 ' + withBase(url) + ' → HTTP ' + r.status);
         return r.json();
       });
     }
@@ -248,7 +262,7 @@
             return layers.pyodide;
           });
         }, function (e) {
-          throw new Error('能力层 pyodide 不可达（assets/pyodide/ 没装？跑 provision-pyodide.sh）：'
+          throw errCode('LAYER_UNREACHABLE', '能力层 pyodide 不可达（assets/pyodide/ 没装？跑 provision-pyodide.sh）：'
                           + (e && e.message ? e.message : e));
         });
       }
@@ -275,7 +289,7 @@
           return fetchBinary(a.url).then(function (buf) {
             return sha256Hex(buf).then(function (hex) {
               if (a.sha256 && hex && hex !== a.sha256) {
-                throw new Error('资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
+                throw errCode('SHA_MISMATCH', '资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
               }
               var mount = a.mount || (OCTAVE_M + '/oct/' + name + '.oct');
               mkdirp(mount.replace(/\/[^/]*$/, ''));
@@ -340,10 +354,10 @@
           return fetchBinary(a.url).then(function (buf) {
             return sha256Hex(buf).then(function (hex) {
               if (a.sha256 && hex && hex !== a.sha256) {
-                throw new Error('资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
+                throw errCode('SHA_MISMATCH', '资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
               }
               var mount = a.mount;
-              if (!mount) throw new Error('资产 ' + name + ' 缺少 mount 路径');
+              if (!mount) throw errCode('ASSET_NO_MOUNT', '资产 ' + name + ' 缺少 mount 路径');
               mkdirp(mount.replace(/\/[^/]*$/, ''));
               fs().writeFile(mount, new Uint8Array(buf));
               loaded[name] = { files: 1, mount: mount };
@@ -356,7 +370,7 @@
         if (a.kind === 'js') {
           return loadScript(a.url).then(function () {
             var bundle = (global.__OCT_ASSETS__ || {})[name];
-            if (!bundle) throw new Error('JS 包 ' + a.url + ' 没声明 __OCT_ASSETS__["' + name + '"]');
+            if (!bundle) throw errCode('JS_BUNDLE_NO_META', 'JS 包 ' + a.url + ' 没声明 __OCT_ASSETS__["' + name + '"]');
             var n = writeFiles(bundle.files || {});
             addPaths(bundle.addpath || []);
             // 注意：**不要**在这里手动 run PKG_ADD —— Octave 在 addpath 时会自己执行
@@ -368,7 +382,7 @@
             return loaded[name];
           });
         }
-        throw new Error('未知资产类型: ' + a.kind);
+        throw errCode('UNKNOWN_ASSET_KIND', '未知资产类型: ' + a.kind);
       });
 
       inflight[name] = p.then(function (r) {
@@ -435,10 +449,258 @@
       } catch (e) { /* 记账失败不影响任何东西 */ }
     }
 
+    // ── B 线的四个内部缝（§4.3：不暴露给调用方；每个可单独测）───────────────────
+
+    // ① toolchainWorker(target)：起/复用编译 Worker（浏览器适配器 = 站点 assets/llvm/browser/worker.mjs，
+    //    协议：init{clangWasmUrl,lldWasmUrl,sysrootTarUrl,sysrootSha256} → ready；compile → result）。
+    //    ★ sysroot 按 target 选档（两档 sysroot 都发是 v0.1.1 修的 issue #1：错档产物缺
+    //    _emscripten_tls_init ⇒ 线程宿主拒载）。sysroot sha 从工具链 manifest 读（fail-closed，
+    //    不硬编码）。
+    function toolchainWorker(target, log) {
+      if (_tcWorkers[target]) return _tcWorkers[target];
+      _tcWorkers[target] = Promise.all([fetchJSON('assets/llvm/manifest.json'),
+                                        fetchJSON('assets/llvm/config.h.json').catch(function () { return null; })])
+      .then(function (both) {
+        var man = both[0], _configMacros = both[1];
+        var byName = {};
+        (man.assets || []).forEach(function (a) { byName[a.name] = a; });
+        var sysroot = (target === 'wasm64') ? 'sysroot-headers.wasm64.tar' : 'sysroot-headers.tar';
+        if (!byName[sysroot]) throw errCode('FLAVOR_UNAVAILABLE', '工具链缺 ' + sysroot + '（站点供给不全？跑 provision-llvm-wasm.sh）');
+        var B = 'assets/llvm/';
+        // ★ 用**本仓的分片 worker**（bridge/compile-worker.mjs，随页面资产上站）：
+        //   首编只拉 clang + 本档 sysroot（两件、各自核 sha）；lld 31.8 MB 推迟到
+        //   **首次链接**才拿。用户点令 2026-10-18：「需要保证能分次懒加载」。
+        //   编排逻辑仍是生产者 driver/compile-core.mjs（worker 里 import，不复制）。
+        var w = new Worker('compile-worker.mjs', { type: 'module' });
+        return new Promise(function (resolve, reject) {
+          w.onerror = function (e) { reject(errCode('MODULE_NOT_READY', 'Worker 起不来：' + (e.message || e.filename || '?') + (e.lineno ? ':' + e.lineno : ''))); };
+          w.onmessage = function (ev) {
+            var m = ev.data || {};
+            if (m.type === 'log') { log(m.text); return; }
+            if (m.type === 'phase') { log('[phase] ' + (m.phase || '?')); return; }
+            if (m.type === 'ready') {
+              w.onmessage = null;
+              if (m.bytes) log('[lazy] 首编已拉：clang ' + (m.bytes.clang / 1048576).toFixed(1)
+                               + ' MB + sysroot ' + (m.bytes.sysroot / 1048576).toFixed(1)
+                               + ' MB（lld 推迟到首链）');
+              resolve(w);
+            }
+          };
+          w.postMessage({ type: 'init',
+            clangWasmUrl: B + 'clang.wasm', clangGlueUrl: B + 'clang.js',
+            lldWasmUrl: B + 'lld-wasm-only.wasm', lldGlueUrl: B + 'lld-wasm-only.js',
+            sysrootTarUrl: B + sysroot, sysrootSha256: byName[sysroot].sha256,
+            // ★ Octave 头**按目标档**选（2026-10-19 C2c 真根因）：wasm32 与 wasm64 树的
+            //   octave/mxtypes.h 分叉（mwSize/mwIndex int32 vs int64）—— 用错档头编出的
+            //   .oct 在宿主上索引宽度错位 ⇒ "Invalid resizing operation"。
+            //   缺 wasm64 那份（旧站点）⇒ 回退 wasm32 版并让 worker 打警告（不静默）。
+            octincTarUrl: (target === 'wasm64')
+              ? 'assets/octinc/octave-headers.wasm64.tar.gz'
+              : 'assets/octinc/octave-headers.tar.gz',
+            configMacros: _configMacros });
+        });
+      });
+      return _tcWorkers[target];
+    }
+
+    // ②b cfgReady()：config.h 宏数（诊断用；真正的 config.h 由 worker 写进 /src）
+    function cfgReady() {
+      return fetchJSON('assets/llvm/config.h.json').then(function (c) {
+        return Object.keys(c || {}).length;
+      }, function () { return 0; });
+    }
+
+    // ② headersInto(M, target)：Octave 头进**引擎 FS**（assets/octinc/ 一次拉；
+    //    tar 解包委托引擎 gunzip+untar）+ 合成 config.h（25 宏跟 catalog 走：build-pkg-oct.sh
+    //    emit_config_h 的同款产物，站点 assets/llvm/config.h.json 由供给脚本从容器取出）。
+    var _headersDone = false;
+    function headersInto(M, target) {
+      if (_headersDone) return Promise.resolve(_headersDone);
+      var inc = '/src/octinc';
+      return fetchBinary('assets/octinc/octave-headers.tar.gz').then(function (buf) {
+        M.FS.writeFile('/tmp/octinc.tar.gz', new Uint8Array(buf));
+        var rc = M.eval_string("__forge_src_list__('/tmp/octinc.tar.gz', '" + inc + "', true)");
+        if (rc !== 0) throw errCode('UNPACK_FAILED', 'Octave 头解包失败（rc=' + rc + '）');
+        return fetchJSON('assets/llvm/config.h.json');
+      }).then(function (cfg) {
+        // config.h：25 宏逐条写（数据跟 catalog 走，不硬编码 —— §10 判据 2）
+        var lines = ['#pragma once'];
+        Object.keys(cfg || {}).forEach(function (k) { lines.push('#define ' + k + ' ' + cfg[k]); });
+        M.FS.writeFile(inc + '/config.h', lines.join('\n'));
+        _headersDone = (cfg && Object.keys(cfg).length) || 0;
+        return _headersDone;
+      });
+    }
+
+    // ②c 模块表（站点资产 `assets/pkg-module-table.json`，由 build/pkg-module-table.json
+    //     上站）：包名 ⇒ [{name, sources:[…]}]。缺失 ⇒ 走 DEFUN 扫描兜底（不阻断编译）。
+    var _moduleTables = null;
+    function loadModuleTables() {
+      if (_moduleTables) return Promise.resolve(_moduleTables);
+      return fetchJSON('assets/pkg-module-table.json')
+        .then(function (d) {
+          _moduleTables = (d && d.module_table) || {};
+          return _moduleTables;
+        })
+        .catch(function () { _moduleTables = {}; return _moduleTables; });
+    }
+
+    // ③ workerCompile(worker, files, target, log)：发 compile 请求。
+    //    ★ v2（2026-10-18 多 TU 批）：模块表**优先来自数据**，扫 DEFUN 只作兜底。
+    //    为什么数据优先（实测）：`miscellaneous` 的 `sample.cc` 在 11.3.0 头下编不过
+    //    （`OCTAVE__RAND_UNIFORM()` 零参调用 vs 11.3.0 的 `rand_uniform(n, p)`），
+    //    而容器 `build-pkg-oct.sh` 的模块表**本来就没列它**（现役站点只有
+    //    cell2cell.oct + partint.oct）。靠扫 DEFUN 全编会造出"编译失败"，让人误判工具链坏。
+    //    数据的产地 = `build/pkg-module-table.json`（容器表的对账副本，闸门
+    //    `check-pkg-module-table.py` 盯着）；站点侧随 `assets/manifest*` 或 catalog 走。
+    //    ⚠️ 产物名 = **源 basename**（不是 DEFUN 名）：现役
+    //    `assets/octdir/miscellaneous/partint.oct` 的导出表同时有 `Gpartcnt` 与
+    //    `Gpartint` ⇒ 一个源里的多个 DEFUN 共用一个以**源名**命名的模块。
+    function moduleTable(files, log, pkgName) {
+      var mods = [];
+      // ① 数据表（站点资产；已由 loadModuleTables 预取到 _moduleTables）
+      var tbl = (pkgName && _moduleTables && _moduleTables[pkgName]) || null;
+      if (tbl && tbl.length) {
+        mods = tbl.map(function (m) { return { name: m.name, sources: m.sources.slice() }; });
+        log('[tu] 模块表来自数据（' + mods.length + '）：' + mods.map(function (m) { return m.name; }).join(', '));
+        return mods;
+      }
+      // ② 兜底：扫 DEFUN，按**源 basename** 建模块（多 DEFUN 共用一个模块）
+      var cc = Object.keys(files).filter(function (n) { return /\.(cc|cpp|c)$/.test(n); });
+      cc.forEach(function (rel) {
+        var text = String(files[rel] || '');
+        var names = [];
+        var re = /DEFUN_DLD\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)/g, m;
+        while ((m = re.exec(text)) !== null) names.push(m[1]);
+        if (!names.length) return;
+        var base = String(rel).replace(/^\.\//, '').split('/').pop().replace(/\.[^.]+$/, '');
+        mods.push({ name: base + '.oct', sources: [rel], defuns: names });
+      });
+      if (!mods.length) return null;
+      var withDefun = {};
+      mods.forEach(function (m) { withDefun[m.sources[0]] = 1; });
+      var helpers = cc.filter(function (rel) { return !withDefun[rel]; });
+      if (helpers.length) {
+        mods[0].sources = mods[0].sources.concat(helpers);
+        log('[tu] 辅助源并进 ' + mods[0].name + '：' + helpers.join(', '));
+      }
+      log('[tu] 模块表来自 DEFUN 扫描（兜底，' + mods.length + '）：'
+          + mods.map(function (m) {
+              return m.name + (m.defuns.length > 1 ? '[' + m.defuns.join('+') + ']' : '');
+            }).join(', '));
+      return mods;
+    }
+
+    function workerCompile(w, files, target, log, pkgName) {
+      var names = Object.keys(files).sort(function (a, b) {
+        var score = function (n) { return /__/.test(n) ? 0 : (/^[^/]+\.cc$/.test(n) ? 1 : 2); };
+        return score(a) - score(b);
+      });
+      var main = names[0];
+      var mods = moduleTable(files, log, pkgName);
+      var req = { type: 'compile', source: files[main], target: target,
+                  abi: { exceptions: 'wasm-legacy', pthread: true, memory64: target === 'wasm64' },
+                  // ★ 两个 include 根（与容器同口径）：`octinc` 解 <octave/oct.h>，
+                  //   `octinc/octave` 解 <randmtzig.h> 这类扁平内部头（sample.cc 实测缺它）
+                  define: ['HAVE_CONFIG_H=1'],
+                  include: ['/src/octinc', '/src/octinc/octave'], flags: ['-std=c++17'],
+                  // lld 两件（worker 首链时才拉；不从 init 提前取）
+                  lld: { wasmUrl: 'assets/llvm/lld-wasm-only.wasm',
+                         glueUrl: 'assets/llvm/lld-wasm-only.js' } };
+      if (mods) { req.modules = mods; req.files = files; }
+      else if (names.length > 1) log('[v1] 无 DEFUN 可识别 ⇒ 只编主 TU：' + main);
+      return new Promise(function (resolve, reject) {
+        w.onmessage = function (ev) {
+          var m = ev.data || {};
+          if (m.type === 'log') { log(m.text); return; }
+          if (m.type === 'result') { w.onmessage = null; resolve(m); }
+        };
+        w.onerror = function (e) { reject(errCode('MODULE_NOT_READY', '编译 Worker 崩了：' + (e.message || '?'))); };
+        w.postMessage(req);
+      });
+    }
+
+    // ④ guessOctName(name, files)：**单模块包**的产物文件名（多模块走 r.modules[].name）。
+    //    规则（build-pkg-oct.sh 的模块表口径）：主 TU 去扩展名；__bfgsmin.cc 的 DEFUN 是
+    //    __bfgsmin（单下划线）—— 但那是逐包表知识；通用兜底 = 主 TU basename。
+    //    ⚠️ 有 DEFUN 时**必须**用 DEFUN 名：`partint.cc` ⇒ `partcnt.oct`（实测反例）。
+    function guessOctName(name, files) {
+      var mods = moduleTable(files, function () {}, name);
+      if (mods && mods.length === 1) return mods[0].name;
+      var names = Object.keys(files).sort(function (a, b) {
+        var score = function (n) { return /__/.test(n) ? 0 : (/^[^/]+\.cc$/.test(n) ? 1 : 2); };
+        return score(a) - score(b);
+      });
+      // ⚠️ 必须取 **basename**：源清单里的相对路径是 `pkg-1.3.3/src/cell2cell.cc`
+      //   ⇒ 直接去扩展名会得到带子目录的名字，写盘时嵌套目录不存在 ⇒ ErrnoError 44（实测）。
+      var base = String(names[0]).split('/').pop();
+      return base.replace(/\.[^.]*$/, '') + '.oct';
+    }
+
+    // ── browse/statusOf 的共享内核 ────────────────────────────────────────────
+    // 条目 → Entry（判决书 §3）：三属性 + 版本候选 + 描述。**一条产地**（statusOf 的三属性
+    // 判据与 browse 的 Entry 同源 —— 同一事实不允许两个出口两个答案，N6 的教训）。
+    function _browseEntry (p) {
+      var content = p.content || p.kinds || [];
+      var fromSource = content.indexOf('src') >= 0;
+      var ha = hostArchOf(null);
+      var archBad = !!(p.arch && ha && p.arch !== ha);
+      // 版本候选（表带 versions[] 才有；老表 ⇒ undefined，别编）
+      var versions = null;
+      if (p.versions && p.versions.length) {
+        versions = p.versions.map(function (c) {
+          var cv = { version: c.version, stage: c.stage || 'staged' };
+          if (cv.stage !== 'staged') {           // withheld（schema 词表仅两值；非 staged 一律按 withheld 形状如实带 cause）
+            cv.stage = 'withheld';
+            cv.withheld_cause = c.withheld_cause || 'unknown';
+          } else {
+            if (c.form) cv.form = c.form;
+            if (c.content) cv.content = c.content;
+            if (c.arch) cv.arch = c.arch;
+            if (c.requires) cv.requires = c.requires;
+            if (c.size) cv.size = c.size;
+          }
+          return cv;
+        });
+      }
+      // 状态聚合（按当前解析出的那一版 = 条目顶层标量）：
+      //   installed > blocked（arch 不符）> blocked（该版 withheld）> available
+      var why = [];
+      var st = 'available';
+      if (archBad) { st = 'blocked'; why.push('arch ' + p.arch + ' ≠ 宿主 ' + ha); }
+      var topCand = versions
+        ? versions.filter(function (c) { return c.version === p.version; })[0] : null;
+      if (topCand && topCand.stage === 'withheld') {
+        if (st !== 'blocked') st = 'blocked';
+        why.push('选中版本 ' + p.version + ' 未 stage（' + (topCand.withheld_cause || '?') + '）');
+      }
+      var installedKey = loaded['forge:' + p.name] || loaded['layer:' + p.name] || loaded[p.name];
+      if (installedKey) st = 'installed';
+      if (p.requires && p.requires.length) why.push('requires: ' + p.requires.join(','));
+      return {
+        name: p.name,
+        version: p.version,
+        // 三属性（与 statusOf 同一判据 —— 见上，一条产地）
+        fromSource: fromSource,
+        compatible: !archBad,
+        installed: !!installedKey,
+        // 包级透传（内容仓 mail/029/030；缺省空值不省键 ⇒ UI 恒可渲染）
+        description: p.description || '',
+        links: p.links || [],
+        // 版本候选集（逐候选如实：staged 带派生轴、withheld 只带 cause —— 不许编）
+        versions: versions,
+        state: st, why: why,
+        // 派生细节（诊断用；UI 不必读）
+        detail: { arch: p.arch || null, hostArch: ha || null,
+                  content: content, form: p.form || null,
+                  acceleration: fromSource ? 'not-built' : 'none-needed' }
+      };
+    }
+
     var API = {
       OCTAVE_M: OCTAVE_M,
       init: function (url) {
-        // ★ B6：**没显式给清单时按档取**（线程档 = `assets/manifest.threads.json`）。
+        // ★ B6：**没显式给清单时按档取**（w64 = `assets/manifest.w64.json`）。
         //   为什么必要（实测踩到）：`window.OctaveAssets` 是**全局默认实例**（A2 之前的别名，
         //   套件/工具还在用它）—— 它不知道选档，默认拉基础档清单 ⇒ 线程档会把**基础档的 `.oct`**
         //   装进 FS ⇒ dlopen 报 `failed to load Incompatible version or missing dependencies`
@@ -467,45 +729,36 @@
       //     · installed：**会话态**（`loaded[name]`）—— 就是"这次会话装没装"。
       //   返回对象；查无此包 ⇒ null（不编一个"全 false"的假状态）。
       statusOf: function (name) {
-        // ⚠️ 取数优先级（实测踩到）：**目录条目优先** —— 随站清单（`byName`）里的条目用
+        // ⚠️ 取数优先级（实测踩过）：**目录条目优先** —— 随站清单（`byName`）里的条目用
         //   `kind`（单值）而不是 `content`（多值数组），先取它会得到 `content: []`。
         //   ⚠️ 目录还没读（`_catalogByName` 空，例如刚起的实例 / 注入实例）⇒ 回退随站清单，
         //   且**该条目也在货架上时**以货架那条为准（货架才带 content/arch/requires）。
         //   两边都没有 ⇒ null（查无此内容，不编假状态）。
         var p = _catalogByName[name] || byName[name] || null;
         if (!p) return null;
-        // ⚠️ 随站条目（`byName`）与货架条目（`_catalogByName`）形状不同：前者的 `kind` 是
-        //   **投送形态**（js/oct），不是内容构成 ⇒ 对它**不能**用 kind 冒充 content
-        //   （实测：`statusOf('__delaunayn__').detail.content` 曾拿到 ['oct'] 形态值）。
-        //   ⇒ 只认真正的 content/kinds；两边都没有 ⇒ 空数组（"不知道装的是什么源"如实记）。
-        var content = p.content || p.kinds || [];
-        var fromSource = content.indexOf('src') >= 0;
-        // compatible：架构（有 arch 才判）+ 版本约束（有 requires 才判）
-        var compatible = true, why = [];
-        var ha = hostArchOf(null);
-        if (p.arch && ha && p.arch !== ha) {
-          compatible = false; why.push('arch ' + p.arch + ' ≠ 宿主 ' + ha);
-        }
-        var reqs = p.requires || [];
-        if (reqs.length) {
-          // 版本判据交回目录装配期（R1 已按 fork 版本过滤）⇒ 这里只记"有约束"
-          why.push('requires: ' + reqs.join(','));
-        }
-        return {
-          name: name,
-          fromSource: fromSource,
-          compatible: compatible,
-          // installed 三处都要查：货架包 `forge:<n>`、能力层 `layer:<n>`、**随站资产** `<n>`
-          //   （三种装载路径的键不同 —— 只查前两种会让随站包永远显示"没装"，实测抓到）。
-          installed: !!(loaded['forge:' + name] || loaded['layer:' + name] || loaded[name]),
-          // 派生细节（诊断用；UI 不必读）
-          detail: { arch: p.arch || null, hostArch: ha || null,
-                    content: content, form: p.form || null,
-                    acceleration: fromSource ? 'not-built' : 'none-needed',
-                    why: why }
-        };
+        // ★ 2026-10-17 起：三属性判据与 browse() 共用 `_browseEntry` 这**一条产地**
+        //   （N6 的教训：同一事实两个出口两个答案）。本方法保持同步 + 旧返回形状
+        //   （老套件/UI 在用）；多出来的键（description/links/versions/state/why）是纯增量。
+        return _browseEntry(p);
       },
       loaded: function () { return Object.keys(loaded); },
+      // ★ `browse()` —— 市场读面的**async 正门**（NOTES-market-design §3/§5 第 5 步；
+      //   内容仓 mail/028 §④ 点令上调优先级 + mail/029 请把 description/links 带出）。
+      //   为什么是它而不是 statusOf：statusOf 是**同步方法但依赖异步缓存**（接口缺陷，
+      //   设计判决点名）⇒ 读货架必须走 async 正门；statusOf 留作兼容视图（同步、目录已读时用）。
+      //   形状 = 判决书 §3 的 Entry[]：name/version + 三属性（fromSource/compatible/installed）
+      //   + versions[]（逐候选：stage/derived/withheld_cause）+ description/links（包级透传）。
+      //   状态聚合（state/why）按**当前解析出的那一版**算；解析失败（全 withheld/全不符）
+      //   ⇒ state='blocked' + why 说明，**不抛**（读面不因单包异常挂掉整个列表）。
+      browse: function () {
+        return API.catalog().then(function (cat) {
+          var out = [];
+          (cat.packs || []).forEach(function (p) {
+            try { out.push(_browseEntry(p)); } catch (e) { /* 单包异常不挂列表 */ }
+          });
+          return out;
+        });
+      },
       // ★ 能力层查询（接缝 §5④）：`{pyodide:{ready:true,kind:'python',version,bytes}}`
       layers: function () { return layers; },
       onLoad: function (f) { listeners.push(f); },
@@ -528,6 +781,169 @@
       },
       // 便捷：把资产交给 Octave（在主线程可用时同步调用）
       eval: function (expr) { return Msafe().eval_string(expr); },
+
+      // ── B 线：**浏览器内自编 .oct**（设计稿 NOTES-client-compile-design §4.2/§4.3）────
+      //   接口 = 一个方法（深模块判据：删掉它 ⇒ 每个调用点都要自己拼工具链/头/sysroot 档/
+      //   编译门槛/落盘 ⇒ 复杂度在 N 处复现）。返回 Verdict；diagnostics = 编译日志流
+      //   （§4.2 + 内容仓 mail/037 裁决④：现编、产物只进 MEMFS、不写 OPFS、不产生下载记录）。
+      //   内部四缝（§4.3，不暴露给调用方，只给测试注入）：toolchain()/headers()/
+      //   pickSysroot()/compileAndLand()。
+      compileExtension: function (name, opts) {
+        opts = opts || {};
+        var onProgress = opts.onProgress || function () {};
+        var diags = [];                       // diagnostics：编译日志流（UI 终端/诊断抽屉消费）
+        var pushDiag = function (text) {
+          diags.push(String(text));
+          if (opts.onDiagnostic) { try { opts.onDiagnostic(String(text)); } catch (e) {} }
+        };
+        // 幂等：同包编过（本会话）⇒ 直接回缓存（§4.2 "同 pin 键直接返回"的会话内形态）
+        if (_compiled[name]) {
+          // ★ 缓存返回**与首次返回同形**（octs/bytes/symbolGap 都要带上）：
+          //   第一版只回 octPath ⇒ 第二次调用的调用方看到 `octs: undefined`，
+          //   "同一事实两个出口两个答案"（N6 教训）。实测：多 TU 套件第二次拿到空数组。
+          var c0 = _compiled[name];
+          return Promise.resolve({ state: 'compiled', name: name, cached: true,
+                                   diagnostics: c0.diagnostics,
+                                   octPath: c0.octPath, octs: c0.octs || null,
+                                   bytes: c0.bytes, symbolGap: c0.symbolGap || null });
+        }
+        // ★ 模块表与 catalog 都是"按包取知识"，一起预取（缺表不阻断 ⇒ DEFUN 兜底）
+        return Promise.all([API.catalog(), loadModuleTables()]).then(function (both) {
+          var cat = both[0];
+          // ── 判 kinds：包必须带 src（B 的对象是 src/*.cc；纯 .m 包 ⇒ m-only 软失败，明说）
+          var p = _catalogByName[name];
+          if (!p) throw errCode('NOT_IN_ANY_LIST', '货架上没有包：' + name);
+          var content = p.content || p.kinds || [];
+          var srcTar = p.url;
+          if (content.indexOf('src') < 0) {
+            return { state: 'm-only', name: name,
+                     why: '包不含 src（content=' + JSON.stringify(content) + '）⇒ 无可编译件；.m 部分用 install()',
+                     diagnostics: diags };
+          }
+          // ── 宿主档 ⇒ 目标档（楚河汉界同判据：w64* ⇒ wasm64，其余 ⇒ wasm32）
+          var hostArch = hostArchOf(opts);
+          var target = (hostArch === 'wasm64') ? 'wasm64' : 'wasm32';
+          pushDiag('[compile] ' + name + ' → ' + target + '（宿主 ' + (hostArch || '?') + ' 档）');
+          // ── 取源码 tarball（货架字节，sha 核过）+ 展开成 files 映射
+          // ── 前置：forge m 助手（__forge_src_list__ 在那个 bundle；与 install() 同款前置）
+          return API.load(['webio', 'webshell', 'webfile', 'forge']).catch(function () { return null; })
+          .then(function () {
+          onProgress({ phase: 'src', name: name });
+          return fetchBinary(srcTar).then(function (buf) {
+            return sha256Hex(buf).then(function (hex) {
+              if (p.sha256 && hex && hex !== p.sha256) {
+                throw errCode('SHA_MISMATCH', '源码包校验失败 ' + name + '（期望 ' + p.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
+              }
+              // 解包：委托引擎内建 gunzip+untar（零 JS tar 解析器，与 install() 同款）。
+              //   展到 /tmp/compile-src/<name>/，再从 FS 读出 src/*.cc + config.h。
+              var M = Msafe();
+              if (!M || !M.eval_string) throw errCode('ENGINE_NOT_READY', '引擎还没就绪，不能取源');
+              var workdir = '/tmp/compile-src/' + name;
+              var tarPath = workdir + '.tar.gz';
+              try { M.FS.mkdirTree('/tmp/compile-src'); } catch (e) {}
+              M.FS.writeFile(tarPath, new Uint8Array(buf));
+              var rc = M.eval_string("__forge_src_list__('" + tarPath + "', '" + workdir + "')");
+              if (rc !== 0) throw errCode('UNPACK_FAILED', '源码解包失败（rc=' + rc + '）：' + (M.last_error_message() || ''));
+              // 读回文件清单（__forge_src_list__ 写 workdir/../.filelist）
+              var listRaw = '';
+              try { listRaw = M.FS.readFile(workdir + '.files', { encoding: 'utf8' }); } catch (e) {}
+              var srcFiles = {};
+              (listRaw || '').split('\n').forEach(function (rel) {
+                rel = rel.trim();
+                if (!rel || !/\.cc$|\.cpp$|\.c$|\.h$/.test(rel)) return;
+                try { srcFiles[rel] = M.FS.readFile(workdir + '/' + rel, { encoding: 'utf8' }); } catch (e) {}
+              });
+              if (!Object.keys(srcFiles).length) {
+                return { state: 'm-only', name: name,
+                         why: 'tarball 里没有可编译源（.cc/.cpp/.c）', diagnostics: diags };
+              }
+              pushDiag('[src] ' + Object.keys(srcFiles).length + ' 个源文件');
+              // ── 取 Octave 头 + 合成 config.h（25 宏 = build-pkg-oct.sh emit_config_h 的产物，
+              //    客户端复现的核心知识 ⇒ 数据跟 catalog 走，不硬编码 —— §10 判据 2）
+              onProgress({ phase: 'headers', name: name });
+              // 头由 worker 直接装进 clang FS（见 compile-worker.mjs 的 octincTarUrl 段）；
+              // 这里只报"配置宏就绪"，不再在页面 FS 里解一遍（旧缝 headersInto 已成死代码，保留函数但不调用）。
+              return Promise.resolve(cfgReady()).then(function (nMacro) {
+                pushDiag('[headers] worker 侧安装（Octave 头 + config.h ' + nMacro + ' 宏）');
+                // ── 起 Worker 跑编译（重活离主线程；§7.3）
+                onProgress({ phase: 'toolchain', name: name });
+                return toolchainWorker(target, pushDiag).then(function (worker) {
+                  onProgress({ phase: 'compile', name: name });
+                  return workerCompile(worker, srcFiles, target, pushDiag, name).then(function (r) {
+                    if (!r.ok) {
+                      // 编失败 ⇒ m-only 软失败 + 明说哪一件没成（§6.3 反向：不许静默当成功）
+                      return { state: 'm-only', name: name, stage: r.error ? 'compile' : 'link',
+                               why: String(r.error || 'unknown') +
+                                    (r.detail ? '\n' + r.detail.join('\n') : ''),
+                               diagnostics: diags };
+                    }
+                    // ── 落盘 + addpath + 同步 pkg 库（compileAndLand；§4.2）
+                    //    ★ v2：多模块时**逐个写**（r.modules 里每个 ok 的模块各一个 .oct）；
+                    //    单模块包与 v1 完全等价（r.moduleBytes + guessOctName 的 DEFUN 优先规则）。
+                    var built = (r.modules || []).filter(function (m) { return m.ok; });
+                    var toLand = built.length
+                      ? built.map(function (m) { return { name: m.name, bytes: m.moduleBytes }; })
+                      : [{ name: guessOctName(name, srcFiles), bytes: r.moduleBytes }];
+                    pushDiag('[land] 编译成功 ' + toLand.length + ' 个模块（'
+                             + toLand.map(function (t) { return t.name + ' ' + t.bytes.length + 'B'; }).join(', ')
+                             + '），开始落盘');
+                    var landDir = OCTAVE_M + '/forge/' + name + '/oct-' + target;
+                    // ★ 门槛 2（设计稿 §10 实测）：嵌套路径必须**逐级建父目录**，否则
+                    //   writeFile 报 `ErrnoError errno=44`。旧代码把 mkdirTree 的失败吞进
+                    //   空 catch 里 ⇒ 真正的错在 writeFile 才炸（且信息是数字）。现在 fail-loud。
+                    try { M.FS.mkdirTree(landDir); } catch (e) {
+                      throw errCode('UNPACK_FAILED', '建不了落盘目录 ' + landDir + '：' + (e && e.message));
+                    }
+                    var landed = [];
+                    toLand.forEach(function (t) {
+                      var rel = landDir + '/' + t.name;
+                      try {
+                        M.FS.writeFile(rel, new Uint8Array(t.bytes));
+                        landed.push({ name: t.name, path: rel, bytes: t.bytes.length });
+                        pushDiag('[land] 写盘 OK → ' + rel);
+                      } catch (e) {
+                        throw errCode('UNPACK_FAILED', '写 .oct 失败（' + rel + '）：'
+                                      + (e && (e.message || e.name) || e));
+                      }
+                    });
+                    addPaths([landDir]);
+                    pushDiag('[land] addpath OK');
+                    try {
+                      M.eval_string("if (exist('__pkgfix_sync_db__') == 2) try; __pkgfix_sync_db__ (); catch; end; end");
+                    } catch (e) {}
+                    var _totalBytes = toLand.reduce(function (a, t) { return a + t.bytes.length; }, 0);
+                    _compiled[name] = { octPath: landed[0].path, octs: landed, bytes: _totalBytes,
+                                        symbolGap: r.gap || null, diagnostics: diags.slice() };
+                    onProgress({ phase: 'done', name: name });
+                    return { state: 'compiled', name: name,
+                             octPath: landed[0].path,
+                             octs: landed,
+                             bytes: toLand.reduce(function (a, t) { return a + t.bytes.length; }, 0),
+                             symbolGap: r.gap || null,
+                             diagnostics: diags };
+                  });
+                });
+              });
+            });
+          });
+        });
+          }).catch(function (e) {   // ← forge preload 那层 .then 的 catch（整链兜底）
+          // ★ 抛出物可能是**非 Error 对象**（实测：err:"undefined"、thrown:"[object Object]"）——
+          //   序列化出来，别让调用方只看到 undefined。设计稿 §6.3：失败要明说哪一件没成。
+          var detail;
+          try { detail = (e && e.message) ? (e.message + '\n' + (e.stack || '')) : JSON.stringify(e); }
+          catch (x) { detail = String(e); }
+          // 打点：最近一条 diags 是哪阶段（errno=44 之类无栈错误靠这个定位）
+          var _last = diags.length ? diags[diags.length - 1] : '(none)';
+          var err = errCode((e && e.code) || 'COMPILE_FAILED',
+                            '编译失败：' + String(detail).slice(0, 300)
+                            + ' ｜ 最后阶段：' + String(_last).slice(0, 120));
+          err.__verdict__ = { state: 'failed', name: name, cause: (e && e.code) || 'compile-failed',
+                              why: String(detail).slice(0, 400), retriable: false };
+          err.diagnostics = diags;
+          throw err;
+        });
+      },
 
       // ── Forge **按需拉取**（设计稿 build/113/NOTES-forge-ondemand.md §3）──────────
       // 「货架」= 站点上的 `assets/forge-catalog.json`（构建期由 build/forge-catalog.py
@@ -573,7 +989,7 @@
           _catalogP = null;                       // 失败不缓存（下次可重试）
           catalogState = 'fail';
           publish();                              // 读不到 ≠ 货架没这个包（两态必须可分辨）
-          throw new Error('读不到 Forge 货架（assets/forge-catalog.json）：' + e.message);
+          throw errCode('CATALOG_UNREADABLE', '读不到 Forge 货架（assets/forge-catalog.json）：' + e.message);
         });
         return _catalogP;
       },
@@ -605,7 +1021,7 @@
               // T4：货架**读成功**而查无此包 ⇒ 记进账本（这是**终态**：再等也不会出现）。
               catalogMiss[n] = 1;
               publish();
-              throw new Error('货架上没有包：' + n);
+              throw errCode('NOT_IN_ANY_LIST', '货架上没有包：' + n);
             }
             (p.deps || []).forEach(walk);
             plan.push(p);
@@ -618,7 +1034,7 @@
               if (_pa && _pa !== hostArch) {
                 var _m = '架构不匹配：' + plan[_pi].name + ' 需要 ' + _pa
                        + '，当前宿主是 ' + hostArch + ' 档（它带要在宿主里 dlopen 的 .oct，必须同架构）';
-                var _err = new Error(_m);
+                var _err = errCode('ARCH_MISMATCH', _m);
                 _err.__verdict__ = { state: 'failed', name: plan[_pi].name,
                                      cause: 'arch-mismatch', why: _m, retriable: false };
                 throw _err;
@@ -667,7 +1083,7 @@
                 return fetchBinary(p.url).then(function (buf) {
                   return sha256Hex(buf).then(function (hex) {
                     if (p.sha256 && hex && hex !== p.sha256) {
-                      throw new Error('包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
+                      throw errCode('SHA_MISMATCH', '包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
                                       + '… 实得 ' + hex.slice(0, 12) + '…）—— 拒绝安装');
                     }
                     var tar = '/tmp/forge-' + p.name + '-' + p.version + '.tar.gz';
@@ -677,11 +1093,11 @@
                     //   —— 它内部调引擎内建 gunzip+untar（zlib/ustar，不写 JS tar 解析器），
                     //      再把 inst/ 上提 + 元数据落包根 + 拒绝异架构 .oct（设计稿 §3/§4）。
                     var M = Msafe();
-                    if (!M || !M.eval_string) throw new Error('引擎还没就绪，不能安装包');
+                    if (!M || !M.eval_string) throw errCode('ENGINE_NOT_READY', '引擎还没就绪，不能安装包');
                     var pkgdir = '/usr/src/octave/m/forge/' + p.name;
                     var rc = M.eval_string(
                       "n = __forge_install__ ('" + tar + "', '" + p.name + "', '/usr/src/octave/m/forge');");
-                    if (rc !== 0) throw new Error('__forge_install__ 失败（rc=' + rc + '）：'
+                    if (rc !== 0) throw errCode('UNPACK_FAILED', '__forge_install__ 失败（rc=' + rc + '）：'
                                                   + (M.last_error_message() || ''));
                     addPaths([pkgdir]);
                     // 让核心 pkg 数据库重扫（否则 `pkg list` 看不见新包 —— pkgfix 的既有机制）
@@ -729,12 +1145,36 @@
           installError[name] = msg;
           publish();
           var st = 'failed', why = msg, cause = 'unknown';
-          if (/^架构不匹配：/.test(msg))               { st = 'failed';       cause = 'arch-mismatch'; }
-          if (/^货架上没有包：/.test(msg))              { st = 'not-found';    cause = 'not-in-any-list'; }
-          else if (/^读不到 Forge 货架/.test(msg))      { st = 'cannot-know';  cause = 'catalog-unreadable'; }
-          else if (/包校验失败/.test(msg))             { st = 'failed';       cause = 'sha-mismatch'; }
-          else if (/引擎还没就绪/.test(msg))           { st = 'failed';       cause = 'engine-not-ready'; }
-          else if (/__forge_install__ 失败/.test(msg)) { st = 'failed';       cause = 'unpack-failed'; }
+          // ★ 分类读 e.code（UI mail/028 Q1，2026-10-17）：正则匹配中文消息是脆弱契约
+          //   （消息改一个字分类就错）；code 是 throw 时钉死的。映射表与既有 cause 词表逐字同值
+          //   —— 旧消费者（.m 侧 pkg.m 按消息前缀分流）照读 message，不受影响。
+          //   ★ 2026-10-17 补全（内容仓 mail/030 §Q1 点名）：原表只收 7 码，其余 7 码若从
+          //   install 链冒出（install 会先 API.load 基础资产 ⇒ load 路径的错也能传到这里）
+          //   会静默落 `cause:'unknown'`。⇒ 全 14 码进表 —— **每个 errCode 都有分类**
+          //   （"err.code 渲染文案 + __verdict__.cause 分类"两者不再不同源）。
+          //   状态映射口径：取字失败类 = failed（可重试的 fetch 失败，UI 可提示重试；
+          //   cannot-know 只保留给"连目录都读不到"——那是唯一真正"无从判断"的态）。
+          var _byCode = { ARCH_MISMATCH:        ['failed',      'arch-mismatch'],
+                          NOT_IN_ANY_LIST:      ['not-found',   'not-in-any-list'],
+                          CATALOG_UNREADABLE:   ['cannot-know', 'catalog-unreadable'],
+                          SHA_MISMATCH:         ['failed',      'sha-mismatch'],
+                          ENGINE_NOT_READY:     ['failed',      'engine-not-ready'],
+                          FS_NOT_READY:         ['failed',      'fs-not-ready'],
+                          UNPACK_FAILED:        ['failed',      'unpack-failed'],
+                          MODULE_NOT_READY:     ['failed',      'module-not-ready'],
+                          ASSET_FETCH_FAILED:   ['failed',      'asset-fetch-failed'],
+                          MANIFEST_FETCH_FAILED:['failed',      'manifest-fetch-failed'],
+                          LAYER_UNREACHABLE:    ['failed',      'layer-unreachable'],
+                          ASSET_NO_MOUNT:       ['failed',      'asset-no-mount'],
+                          JS_BUNDLE_NO_META:    ['failed',      'js-bundle-no-meta'],
+                          UNKNOWN_ASSET_KIND:   ['failed',      'unknown-asset-kind'] };
+          if (e && e.code && _byCode[e.code]) { st = _byCode[e.code][0]; cause = _byCode[e.code][1]; }
+          else if (/^架构不匹配：/.test(msg))          { st = 'failed';      cause = 'arch-mismatch'; }
+          else if (/^货架上没有包：/.test(msg))         { st = 'not-found';   cause = 'not-in-any-list'; }
+          else if (/^读不到 Forge 货架/.test(msg))     { st = 'cannot-know'; cause = 'catalog-unreadable'; }
+          else if (/包校验失败/.test(msg))            { st = 'failed';      cause = 'sha-mismatch'; }
+          else if (/引擎还没就绪/.test(msg))          { st = 'failed';      cause = 'engine-not-ready'; }
+          else if (/__forge_install__ 失败/.test(msg)) { st = 'failed';     cause = 'unpack-failed'; }
           e.__verdict__ = { state: st, name: name, cause: cause, why: why,
                             retriable: st === 'cannot-know' };
           throw e;

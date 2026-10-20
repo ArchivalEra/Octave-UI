@@ -22,6 +22,7 @@
   let installingMap = $state<Record<string, boolean>>({});
   let downloadingState = $state<Record<string, { receivedBytes: number; totalBytes: number; phase?: string }>>({});
   let compilingMap = $state<Record<string, boolean>>({});
+  let compiledMap = $state<Record<string, boolean>>({});
 
   let activePlan = $state<InstallPlan | null>(null);
   let activePlanItem = $state<ForgePackageItem | null>(null);
@@ -311,16 +312,28 @@
           },
         });
         compilingMap = { ...compilingMap, [item.name]: false };
-        if (res.state === 'ok') {
+        if (res.state === 'compiled' || res.state === 'ok') {
           diagnosticsStatus = 'success';
           diagnosticsLogs = [
             ...diagnosticsLogs,
             `[compile] ${t('package_manager.compile_success')} ✓`,
             `[compile] ${t('package_manager.relink_pending_note')}`,
           ];
+          compiledMap = { ...compiledMap, [item.name]: true };
+          await refreshStatuses();
+        } else if (res.state === 'm-only') {
+          diagnosticsStatus = 'success';
+          diagnosticsLogs = [
+            ...diagnosticsLogs,
+            `[compile] M-only: ${res.why || 'No compilable native src'}`,
+          ];
+          compiledMap = { ...compiledMap, [item.name]: true };
           await refreshStatuses();
         } else {
           diagnosticsStatus = 'failed';
+          if (res.why && !diagnosticsLogs.some((l) => l.includes(res.why!))) {
+            diagnosticsLogs = [...diagnosticsLogs, `[failed] ${res.why}`];
+          }
         }
       } catch (err: any) {
         compilingMap = { ...compilingMap, [item.name]: false };
@@ -455,7 +468,7 @@
               {@const extraSize = packageManagerPlugin.estimateExtraDownload(item.name)}
               {@const links = getPackageLinks(item)}
 
-              <div class="package-card" class:installed={status.installed} data-package={item.name}>
+              <div class="package-card" class:installed={status.installed || compiledMap[item.name]} data-package={item.name}>
                 <div class="card-header">
                   <div class="title-row">
                     <span class="package-name">{item.name}</span>
@@ -587,7 +600,7 @@
                       {/if}
 
                       <!-- 双动作二：装载 / 编译 / 活跃状态 -->
-                      {#if status.installed}
+                      {#if status.installed || compiledMap[item.name]}
                         <button class="btn-action btn-installed" disabled data-action="installed" data-package={item.name}>
                           {t('package_manager.btn_installed')}
                         </button>

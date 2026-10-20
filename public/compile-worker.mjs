@@ -1,0 +1,1 @@
+bridge/compile-worker.mjs

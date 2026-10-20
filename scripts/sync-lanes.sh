@@ -80,6 +80,18 @@ if [ -d "${BUILD_DIR}/site/assets/llvm" ]; then
   mkdir -p "${REPO_ROOT}/public/assets/llvm"
   cp -rf "${BUILD_DIR}/site/assets/llvm/"* "${REPO_ROOT}/public/assets/llvm/"
 fi
+if [ -d "${BUILD_DIR}/site/assets/octinc" ]; then
+  echo "    --> 同步 octinc 编译器头文件资产"
+  mkdir -p "${REPO_ROOT}/public/assets/octinc"
+  cp -rf "${BUILD_DIR}/site/assets/octinc/"* "${REPO_ROOT}/public/assets/octinc/"
+fi
+if [ -f "${BUILD_DIR}/site/assets/pkg-module-table.json" ]; then
+  echo "    --> 同步 pkg-module-table.json"
+  cp -f "${BUILD_DIR}/site/assets/pkg-module-table.json" "${REPO_ROOT}/public/assets/"
+fi
+
+# 同步上游 bridge 最新胶水与编译 worker
+bash "${REPO_ROOT}/scripts/sync-bridge.sh" "${BUILD_DIR}/site"
 
 echo "=========================================================="
 echo "==> [3/4] 编译前端单页面应用至 dist/..."
