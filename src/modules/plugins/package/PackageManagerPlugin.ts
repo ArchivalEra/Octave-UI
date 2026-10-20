@@ -246,6 +246,21 @@ export class PackageManagerPlugin implements OctavePlugin {
    * 安装指定包或指定版本
    */
   async installPackage(name: string, options?: InstallOptions): Promise<InstallResult> {
+    const pkg = this.byName.get(name);
+    // 裁决⑤：含 'src' 的源码包，装载/安装的必要条件是 LLVM 工具链已下载
+    const hasSrc = pkg && Array.isArray(pkg.content) && pkg.content.includes('src');
+    if (hasSrc) {
+      const llvmReady = await this.hasLLVM();
+      if (!llvmReady) {
+        return {
+          state: 'failed',
+          name,
+          why: 'llvm_required',
+          message: '[ruling-5] 该源码包含 C++ 加速件 (src)，需要现场编译——请先下载 LLVM 工具链 (约 35 MB)。',
+        };
+      }
+    }
+
     this.installingPackages.add(name);
     this.notify();
 
@@ -359,9 +374,13 @@ export class PackageManagerPlugin implements OctavePlugin {
     const installedOnly = !!filter.installedOnly;
 
     return all.filter((item) => {
-      // 1. consumer 筛选（未注明的缺省为 octave）
-      const itemConsumer = item.consumer || 'octave';
-      if (consumer !== 'all' && itemConsumer !== consumer) {
+      // 1. consumer 筛选（支持 string 或 string[]，未注明的缺省为 octave）
+      const itemConsumers: string[] = Array.isArray(item.consumer)
+        ? item.consumer
+        : item.consumer
+        ? [item.consumer]
+        : ['octave'];
+      if (consumer !== 'all' && !itemConsumers.includes(consumer)) {
         return false;
       }
 

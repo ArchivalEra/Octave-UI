@@ -97,6 +97,16 @@ describe('PackageManagerPlugin Deep Module', () => {
         deps: [],
         description: 'OpenModelica compiler runner for Octave',
       },
+      {
+        name: 'dual-tool',
+        version: '1.0.0',
+        size: 12000,
+        form: 'pkg',
+        content: ['m'],
+        consumer: ['octave', 'omc'],
+        deps: [],
+        description: 'Dual engine compatible package',
+      },
     ],
   };
 
@@ -114,7 +124,7 @@ describe('PackageManagerPlugin Deep Module', () => {
 
   it('loads catalog and indexes packages by name', async () => {
     const cat = await plugin.loadCatalog();
-    expect(cat.packs.length).toBe(6);
+    expect(cat.packs.length).toBe(7);
     expect(plugin.getCatalog()).toEqual(sampleCatalog);
 
     const symbolic = plugin.getPackage('symbolic');
@@ -254,19 +264,19 @@ describe('PackageManagerPlugin Deep Module', () => {
     await plugin.loadCatalog();
     mockAdapter.setStatus('cgi', { installed: true });
 
-    // 1. Consumer filter
+    // 1. Consumer filter (dual-tool with array consumer ['octave', 'omc'] matches both)
     const octaveOnly = plugin.filterPackages({ consumer: 'octave' });
-    expect(octaveOnly.map((p) => p.name)).toEqual(['cgi', 'symbolic', 'pyodide', 'signal', 'control']);
+    expect(octaveOnly.map((p) => p.name)).toEqual(['cgi', 'symbolic', 'pyodide', 'signal', 'control', 'dual-tool']);
 
     const omcOnly = plugin.filterPackages({ consumer: 'omc' });
-    expect(omcOnly.map((p) => p.name)).toEqual(['omc-simulator']);
+    expect(omcOnly.map((p) => p.name)).toEqual(['omc-simulator', 'dual-tool']);
 
     // 2. Form filter
     const treeOnly = plugin.filterPackages({ form: 'tree' });
     expect(treeOnly.map((p) => p.name)).toEqual(['pyodide']);
 
     const pkgOnly = plugin.filterPackages({ form: 'pkg' });
-    expect(pkgOnly.map((p) => p.name)).toEqual(['cgi', 'symbolic', 'signal', 'control', 'omc-simulator']);
+    expect(pkgOnly.map((p) => p.name)).toEqual(['cgi', 'symbolic', 'signal', 'control', 'omc-simulator', 'dual-tool']);
 
     // 3. Installed only
     const installed = plugin.filterPackages({ installedOnly: true });
@@ -288,7 +298,11 @@ describe('PackageManagerPlugin Deep Module', () => {
     // signal 包含 'src'，属于源码加速包
     expect(await plugin.hasLLVM()).toBe(false);
 
-    // 未下载 LLVM 时，请求编译/构建 signal 必须被裁决⑤拦截
+    // 未下载 LLVM 时，直接 installPackage 或 compilePackage 必须被裁决⑤拦截
+    const blockedInstall = await plugin.installPackage('signal');
+    expect(blockedInstall.state).toBe('failed');
+    expect(blockedInstall.why).toBe('llvm_required');
+
     const blockedRes = await plugin.compilePackage('signal');
     expect(blockedRes.state).toBe('failed');
     expect(blockedRes.why).toBe('llvm_required');

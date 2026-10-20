@@ -55,7 +55,7 @@ export class ThemeManager {
 
       const savedHue = storage.getItem(ThemeManager.HUE_STORAGE_KEY);
       if (savedHue !== null && /^\d+$/.test(savedHue)) {
-        this._hue = parseInt(savedHue, 10);
+        this._hue = Math.max(0, Math.min(360, parseInt(savedHue, 10)));
       } else {
         this._hue = ThemeManager.DEFAULT_HUE;
       }

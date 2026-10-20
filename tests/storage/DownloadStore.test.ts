@@ -284,8 +284,8 @@ describe('DownloadStore Deep Module', () => {
     expect(store.isEngineDownloaded('master')).toBe(true);
 
     // 2. 同时下载 OpenModelica 第二引擎档 (omc)
-    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler_bg.wasm', 'omc-wasm', 'omc-lane-sha');
-    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler.js', 'omc-js', 'omc-lane-sha');
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler_bg.wasm', 'omc-wasm', '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001');
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler.js', 'omc-js', '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17');
 
     expect(store.isEngineDownloaded('omc')).toBe(false);
     const recOmc = await store.downloadEngine('omc');

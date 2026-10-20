@@ -56,9 +56,10 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     }
 
     // 构造符合 octave-core.js 契约的具象车道计划
+    const isW64 = lane === 'master' || lane === 'IllegalPerformance';
     const lanePlan = {
       lane: lane === 'wasm32-final' || lane === 'omc' ? 'base' : 'w64',
-      dir: '',
+      dir: isW64 ? 'w64/' : '',
       js: 'octave.js',
       wasm: 'octave.wasm',
       data: 'octave.data',
@@ -82,7 +83,7 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     window.octave = embed;
     WasmEmbedAdapter.alignDocstringsPaths(embed);
     if (lane === 'omc' || opts.enableOmc) {
-      await WasmEmbedAdapter.setupOmcBridge(embed);
+      await WasmEmbedAdapter.setupOmcBridge(embed, lane);
     }
     return new WasmEmbedAdapter(embed);
   }
@@ -90,7 +91,7 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
   /**
    * 初始化 OpenModelica 桥接环境与 MEMFS 路径
    */
-  static async setupOmcBridge(embed: any): Promise<void> {
+  static async setupOmcBridge(embed: any, lane?: EngineLane): Promise<void> {
     try {
       const FS =
         embed?.mod?.FS ||
@@ -108,7 +109,10 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
           const globalBase = (document.querySelector('meta[name="site-base"]')?.getAttribute('content') || (window as any).__siteBase) || '/';
           const normalizedBase = globalBase.endsWith('/') ? globalBase : `${globalBase}/`;
           const omcScriptUrl = `${normalizedBase}omc/OpenModelicaCompiler.js`;
-          const omcMod = await (import(/* @vite-ignore */ omcScriptUrl).catch(() => null));
+          const omcMod = await (import(/* @vite-ignore */ omcScriptUrl).catch((err) => {
+            console.warn('[WasmEmbedAdapter] OMC import failed:', err);
+            return null;
+          }));
           if (omcMod) {
             if (typeof omcMod.default === 'function') {
               await omcMod.default();
@@ -123,12 +127,24 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
               omcMod.omc_set_inwasm_driver(1);
             }
             (window as any).__omc = omcMod;
+          } else if (lane === 'omc') {
+            const err = new Error('OpenModelica compiler runtime unavailable');
+            (err as any).code = 'FLAVOR_UNAVAILABLE';
+            throw err;
           }
-        } catch {
+        } catch (err: any) {
+          if (lane === 'omc') {
+            (err as any).code = (err as any).code || 'FLAVOR_UNAVAILABLE';
+            throw err;
+          }
           // 静默降级，不阻断 Octave 主运行
         }
       }
-    } catch {}
+    } catch (err: any) {
+      if (lane === 'omc') {
+        throw err;
+      }
+    }
   }
 
   /**

@@ -96,22 +96,22 @@ export class DownloadStore {
 
   getEngineRecord(lane: string): DownloadRecord | null {
     const ref: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', arch: 'wasm32' }
-      : { kind: 'engine', name: 'octave', arch: lane };
+      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
+      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
     return this.getRecord(ref);
   }
 
   isEngineDownloaded(lane: string): boolean {
     const ref: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', arch: 'wasm32' }
-      : { kind: 'engine', name: 'octave', arch: lane };
+      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
+      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
     return this.has(ref);
   }
 
   isEngineDownloading(lane: string): boolean {
     const ref: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', arch: 'wasm32' }
-      : { kind: 'engine', name: 'octave', arch: lane };
+      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
+      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
     return this.isDownloading(ref);
   }
 
@@ -120,15 +120,15 @@ export class DownloadStore {
     options?: { onProgress?: DownloadProgressCallback; signal?: AbortSignal }
   ): Promise<DownloadRecord> {
     const ref: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', arch: 'wasm32' }
-      : { kind: 'engine', name: 'octave', arch: lane };
+      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
+      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
     return this.download(ref, options);
   }
 
   async removeEngine(lane: string): Promise<void> {
     const ref: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', arch: 'wasm32' }
-      : { kind: 'engine', name: 'octave', arch: lane };
+      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
+      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
     await this.remove(ref);
   }
 
@@ -600,10 +600,12 @@ export class DownloadStore {
       const urlWasm = this.resolveUrl(`/omc/${filenameWasm}`);
       const urlJs = this.resolveUrl(`/omc/${filenameJs}`);
 
-      // 快照估算 71.1 MB wasm + 1.2 MB js
-      const bytes = 74579404;
+      // 真实测算：74,579,404 B wasm + 56,586 B js = 74,635,990 B (~71.2 MiB)
+      const bytes = 74635990;
+      const shaWasm = '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001';
+      const shaJs = '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17';
       return {
-        sha256: 'omc-lane-sha',
+        sha256: `${shaWasm}${shaJs}`,
         bytes,
         provenanceUrl: urlWasm,
         items: [
@@ -611,11 +613,13 @@ export class DownloadStore {
             filename: filenameWasm,
             url: urlWasm,
             destPath: `downloads/engine/omc/${filenameWasm}`,
+            sha256: shaWasm,
           },
           {
             filename: filenameJs,
             url: urlJs,
             destPath: `downloads/engine/omc/${filenameJs}`,
+            sha256: shaJs,
           },
         ],
       };
@@ -630,6 +634,7 @@ export class DownloadStore {
       candidateFolders.push('');
     } else if (lane === 'master' || lane === 'w64' || lane === 'IllegalPerformance') {
       candidateFolders.push('w64');
+      candidateFolders.push(`lanes/${lane}/w64`);
       candidateFolders.push('');
     }
 

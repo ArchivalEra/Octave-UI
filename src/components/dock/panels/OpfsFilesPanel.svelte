@@ -1,6 +1,6 @@
 <!-- src/components/dock/panels/OpfsFilesPanel.svelte -->
 <script lang="ts">
-  import { workspaceStorage, projectWorkspace, supervisor, t } from '../../../modules/appContext';
+  import { workspaceStorage, projectWorkspace, supervisor, t, toastService } from '../../../modules/appContext';
   import type { FileTreeNode } from '../../../modules/storage/types';
   import { splitPath } from '../../../modules/storage/types';
   import { downloadFile } from '../../../modules/storage/ExportService';
@@ -81,7 +81,7 @@
             await workspaceStorage.syncToEngine(supervisor);
           }
         } catch (e: any) {
-          alert(t('sidebar.err_import_zip', { error: e?.message || String(e) }));
+          toastService.error(t('sidebar.err_import_zip', { error: e?.message || String(e) }), e?.code);
         }
       }
       if (input.parentNode) {
@@ -96,7 +96,7 @@
     try {
       await workspaceStorage.exportAsZip('octave-workspace.zip');
     } catch (err: any) {
-      alert(t('sidebar.err_export_zip', { error: err?.message || String(err) }));
+      toastService.error(t('sidebar.err_export_zip', { error: err?.message || String(err) }), err?.code);
     }
   }
 
@@ -119,7 +119,7 @@
       }
       await workspaceStorage.syncToEngine(supervisor);
     } catch (err: any) {
-      alert(t('sidebar.err_drag_drop', { error: err?.message || String(err) }));
+      toastService.error(t('sidebar.err_drag_drop', { error: err?.message || String(err) }), err?.code);
     }
   }
 
@@ -163,7 +163,7 @@
       const { name } = splitPath(path);
       downloadFile(data, name, 'application/octet-stream');
     } catch (err: any) {
-      alert(t('sidebar.err_download_file', { error: err?.message || String(err) }));
+      toastService.error(t('sidebar.err_download_file', { error: err?.message || String(err) }), err?.code);
     }
   }
 

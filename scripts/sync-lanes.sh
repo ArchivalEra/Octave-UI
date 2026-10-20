@@ -44,6 +44,31 @@ for LANE in "${LANES[@]}"; do
   fi
 done
 
+# 同步 w64 最新多线程二进制
+if [ -d "${BUILD_DIR}/site/w64" ]; then
+  echo "    --> 同步 w64 多线程二进制至 master/w64 与 IllegalPerformance/w64"
+  mkdir -p "${REPO_ROOT}/public/lanes/master/w64" "${REPO_ROOT}/public/lanes/IllegalPerformance/w64"
+  cp -rf "${BUILD_DIR}/site/w64/"* "${REPO_ROOT}/public/lanes/master/w64/"
+  cp -rf "${BUILD_DIR}/site/w64/"* "${REPO_ROOT}/public/lanes/IllegalPerformance/w64/"
+fi
+
+# 同步 OpenModelica 引擎二进制
+if [ -d "/mnt/hdd/openmodelica-wasm-build/site-omc/omc" ]; then
+  echo "    --> 同步 OpenModelica 二进制至 public/omc"
+  mkdir -p "${REPO_ROOT}/public/omc"
+  cp -rf "/mnt/hdd/openmodelica-wasm-build/site-omc/omc/"* "${REPO_ROOT}/public/omc/"
+fi
+
+# 同步包管理器 catalog 与 forge tarball
+if [ -f "${BUILD_DIR}/site/assets/forge-catalog.json" ]; then
+  echo "    --> 同步 forge-catalog.json 与 tarballs"
+  mkdir -p "${REPO_ROOT}/public/assets/forge"
+  cp -f "${BUILD_DIR}/site/assets/forge-catalog.json" "${REPO_ROOT}/public/assets/forge-catalog.json"
+  if [ -d "${BUILD_DIR}/site/assets/forge" ]; then
+    cp -rf "${BUILD_DIR}/site/assets/forge/"* "${REPO_ROOT}/public/assets/forge/"
+  fi
+fi
+
 echo "=========================================================="
 echo "==> [3/4] 编译前端单页面应用至 dist/..."
 echo "=========================================================="

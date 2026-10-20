@@ -111,6 +111,10 @@ export class WorkspaceStorageManager {
 
     const collected: EntryMeta[] = [];
     for await (const item of this._store.list()) {
+      // 隔离 downloads/ 内部下载沙箱目录，避免污染用户工作区与 MEMFS 同步
+      if (item.path === 'downloads' || item.path.startsWith('downloads/')) {
+        continue;
+      }
       collected.push(item);
     }
     this._entries = collected;

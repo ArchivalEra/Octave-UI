@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { projectWorkspace, supervisor, themeManager, i18n, t } from '../modules/appContext';
+  import { projectWorkspace, supervisor, themeManager, i18n, t, toastService } from '../modules/appContext';
   import type { Locale } from '../modules/i18n/types';
   import type { ProjectCell } from '../modules/workspace/ProjectWorkspace';
   import type {
@@ -87,7 +87,7 @@
     try {
       await projectWorkspace.mountLocalDirectory();
     } catch (err: any) {
-      alert(t('workbench.mount_error', { error: err?.message || err }));
+      toastService.error(t('workbench.mount_error', { error: err?.message || err }));
     }
   }
 
@@ -95,7 +95,7 @@
     try {
       await projectWorkspace.reselectDirectory();
     } catch (err: any) {
-      alert(t('workbench.mount_error', { error: err?.message || err }));
+      toastService.error(t('workbench.mount_error', { error: err?.message || err }));
     }
   }
 

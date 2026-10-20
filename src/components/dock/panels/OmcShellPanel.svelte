@@ -15,15 +15,8 @@
   let isExecuting = $state(false);
   let isOmcEnabled = $state(projectWorkspace.isOmcEnabled);
   let engineState = $state(supervisor.state);
-  let history = $state<ShellHistoryEntry[]>([
-    {
-      id: 'init-1',
-      command: 'getVersion()',
-      output: 'OpenModelica 1.25.0~dev-wasm32 (GNU Octave UI Integration)',
-      status: 'success',
-      timestamp: new Date().toLocaleTimeString(),
-    },
-  ]);
+  let history = $state<ShellHistoryEntry[]>([]);
+  let simulationProgress = $state<{ seq?: number; phase?: string; elapsedMs?: number } | null>(null);
 
   $effect(() => {
     const unsubPw = projectWorkspace.subscribe(() => {
@@ -32,9 +25,23 @@
     const unsubSup = supervisor.onStateChange((s) => {
       engineState = s;
     });
+
+    function handleProgress(e: any) {
+      if (e.detail) {
+        simulationProgress = e.detail;
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('omc:simulate-progress', handleProgress);
+    }
+
     return () => {
       unsubPw();
       unsubSup();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('omc:simulate-progress', handleProgress);
+      }
     };
   });
 
@@ -56,29 +63,53 @@
     history = [...history, newEntry];
     inputCmd = '';
     isExecuting = true;
+    simulationProgress = null;
 
     try {
       if (engineState !== 'idle' && engineState !== 'busy') {
         throw new Error(t('omc.status_unloaded'));
       }
 
-      // 跨引擎桥接调用：通过 supervisor 驱动 Octave 侧 omc_* 桥
-      // 如果输入形如 simulate(ModelName)，自动包装为 omc_simulate('ModelName')
-      let octaveCmd = trimmed;
-      if (trimmed.startsWith('simulate(') && trimmed.endsWith(')')) {
-        const modelArg = trimmed.slice(9, -1).trim();
-        octaveCmd = `omc_simulate('${modelArg}')`;
+      let output = '';
+      let isSuccess = true;
+
+      if (typeof window !== 'undefined' && (window as any).__omc?.omc_eval) {
+        try {
+          output = (window as any).__omc.omc_eval(trimmed);
+        } catch (e: any) {
+          output = `OMC Error: ${e?.message || e}`;
+          isSuccess = false;
+        }
+      } else {
+        // 跨引擎桥接调用：通过 supervisor 驱动 Octave 侧 omc_* 桥
+        let octaveCmd = trimmed;
+        if (trimmed.startsWith('simulate(') && trimmed.endsWith(')')) {
+          const modelArg = trimmed.slice(9, -1).trim();
+          octaveCmd = `omc_simulate('${modelArg}')`;
+        }
+
+        let capturedOut = '';
+        const unsub = supervisor.onOutput((chunk) => {
+          capturedOut += chunk;
+        });
+
+        try {
+          const res = await supervisor.eval(octaveCmd);
+          isSuccess = res.ok;
+          output = capturedOut.trim() || (res.ok ? 'LOG_SUCCESS | Simulation completed successfully.' : `Exit code: ${res.rc}`);
+        } finally {
+          unsub();
+        }
       }
 
-      const res = await supervisor.evaluate(octaveCmd);
       const elapsed = Math.round(performance.now() - startTime);
 
       history = history.map((item) =>
         item.id === entryId
           ? {
               ...item,
-              output: res.output || 'LOG_SUCCESS | Simulation completed successfully.',
-              status: res.error ? 'error' : 'success',
+              output,
+              status: isSuccess ? 'success' : 'error',
               durationMs: elapsed,
             }
           : item
@@ -166,7 +197,13 @@
           <span class="time-meta">{entry.timestamp}</span>
         </div>
         {#if entry.status === 'pending'}
-          <div class="output-pending">⏳ {t('omc.status_simulating')}</div>
+          <div class="output-pending">
+            {#if simulationProgress}
+              ⏳ {simulationProgress.phase || t('omc.status_simulating')} ({simulationProgress.elapsedMs || 0}ms)
+            {:else}
+              ⏳ {t('omc.status_simulating')}
+            {/if}
+          </div>
         {:else if entry.output}
           <pre class="output-content">{entry.output}</pre>
         {/if}

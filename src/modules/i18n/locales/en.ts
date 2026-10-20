@@ -118,7 +118,6 @@ export const en = {
   'figure.btn_force': 'Force Execute (High Risk)',
 
   // Header additions
-  'header.brand_tag': 'Ready · Local · 100% Private',
   'header.btn_diagnostics': 'Diagnostics',
   'header.btn_examples': 'Examples',
   'header.btn_packages': 'Packages',

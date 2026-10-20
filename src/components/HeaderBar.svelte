@@ -1,23 +1,19 @@
 <script lang="ts">
-  import { supervisor, themeManager, projectWorkspace, i18n, t } from '../modules/appContext';
+  import { supervisor, themeManager, projectWorkspace, i18n, t, toastService } from '../modules/appContext';
   import type { SupervisorState, EngineLane } from '../modules/engine/types';
   import type { Locale } from '../modules/i18n/types';
   import type { WorkbenchMode } from '../modules/workspace/ProjectWorkspace';
 
   let {
     onOpenBootModal,
-    onToggleSidebar,
     onOpenExamples,
     onOpenDiagnostics,
     onOpenPackages,
-    sidebarOpen = false,
   } = $props<{
     onOpenBootModal: () => void;
-    onToggleSidebar: () => void;
     onOpenExamples: () => void;
     onOpenDiagnostics: () => void;
     onOpenPackages?: () => void;
-    sidebarOpen?: boolean;
   }>();
 
   let state = $state<SupervisorState>(supervisor.state);
@@ -117,8 +113,9 @@
     e.stopPropagation();
     try {
       await projectWorkspace.downloadEngine(lane);
+      toastService.success(t('header.engine_download_success') || `Engine ${lane} downloaded`);
     } catch (err: any) {
-      alert(err?.message || String(err));
+      toastService.error(err?.message || String(err), err?.code);
     }
   }
 
@@ -126,8 +123,9 @@
     e.stopPropagation();
     try {
       await projectWorkspace.removeEngine(lane);
+      toastService.info(t('header.engine_remove_success') || `Engine ${lane} removed`);
     } catch (err: any) {
-      alert(err?.message || String(err));
+      toastService.error(err?.message || String(err), err?.code);
     }
   }
 
@@ -183,7 +181,7 @@
     try {
       await projectWorkspace.reselectDirectory();
     } catch (err: any) {
-      alert(t('workbench.mount_error', { error: err?.message || String(err) }));
+      toastService.error(t('workbench.mount_error', { error: err?.message || String(err) }));
     } finally {
       menuOpen = false;
     }
@@ -195,19 +193,8 @@
 </script>
 
 <header class="m3-top-app-bar">
-  <!-- 左侧：侧栏开关 + 品牌与当前文件 + 视图模式切换胶囊 -->
+  <!-- 左侧：品牌与当前文件 + 视图模式切换胶囊 -->
   <div class="top-bar-left">
-    <button
-      class="m3-icon-btn sidebar-toggle-btn"
-      onclick={onToggleSidebar}
-      title={sidebarOpen ? t('header.sidebar_hide') : t('header.sidebar_show')}
-      aria-label="Toggle Sidebar"
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 12h18M3 6h18M3 18h18"/>
-      </svg>
-    </button>
-
     <div class="brand-group">
       <div class="brand">
         <svg class="logo" viewBox="0 0 100 100" width="24" height="24">

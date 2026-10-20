@@ -2,6 +2,7 @@
 // 终端状态机：输入缓冲、光标管理、历史寻迹、ANSI 解析、16ms 合并更新与零双重回显
 import { HistoryStore } from '../history/HistoryStore';
 import type { EngineSessionLike } from '../engine/types';
+import { p5FigureOverlayPlugin } from '../plugins';
 
 export interface AnsiSpan {
   text: string;
@@ -18,6 +19,7 @@ export type TerminalOutputListener = (lines: AnsiSpan[][]) => void;
 export class TerminalController {
   private _history: HistoryStore;
   private _session: EngineSessionLike | null = null;
+  private _codePreparer?: (code: string) => string;
   private _inputBuffer = '';
   private _cursorPos = 0;
   private _outputLines: AnsiSpan[][] = [];
@@ -26,8 +28,9 @@ export class TerminalController {
   private _listeners: Set<TerminalOutputListener> = new Set();
   private _inputChangeListeners: Set<(input: string, cursor: number) => void> = new Set();
 
-  constructor(history?: HistoryStore, session?: EngineSessionLike) {
+  constructor(history?: HistoryStore, session?: EngineSessionLike, codePreparer?: (code: string) => string) {
     this._history = history || new HistoryStore();
+    this._codePreparer = codePreparer;
     if (session) {
       this.attachSession(session);
     }
@@ -154,7 +157,9 @@ export class TerminalController {
     this.setInput('', 0);
 
     if (this._session && cmd.trim()) {
-      await this._session.eval(cmd);
+      const preparer = this._codePreparer || ((c: string) => p5FigureOverlayPlugin ? p5FigureOverlayPlugin.prepareCode(c) : c);
+      const codeToEval = preparer(cmd);
+      await this._session.eval(codeToEval);
     }
 
     return cmd;

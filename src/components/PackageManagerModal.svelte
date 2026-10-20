@@ -246,6 +246,14 @@
   }
 
   async function triggerInstall(item: ForgePackageItem) {
+    const hasSrc = item.content && item.content.includes('src');
+    if (hasSrc) {
+      const llvmReady = await packageManagerPlugin.hasLLVM();
+      if (!llvmReady) {
+        llvmPromptOpen = true;
+        return;
+      }
+    }
     const version = selectedVersions[item.name] || item.version;
     errorMsg = null;
     try {
@@ -284,6 +292,11 @@
         compilingMap = { ...compilingMap, [item.name]: false };
         if (res.state === 'ok') {
           diagnosticsStatus = 'success';
+          diagnosticsLogs = [
+            ...diagnosticsLogs,
+            `[compile] ${t('package_manager.compile_success')} ✓`,
+            `[compile] ${t('package_manager.relink_pending_note')}`,
+          ];
           await refreshStatuses();
         } else {
           diagnosticsStatus = 'failed';
@@ -466,6 +479,22 @@
                 </div>
 
                 <p class="package-desc">{item.description || t('package_manager.no_desc')}</p>
+
+                {#if item.links && Object.keys(item.links).length > 0}
+                  <div class="package-links-row">
+                    {#each Object.entries(item.links) as [label, url]}
+                      <a href={url} target="_blank" rel="noopener noreferrer" class="package-link-pill">
+                        {label} ↗
+                      </a>
+                    {/each}
+                  </div>
+                {:else if item.upstream_url}
+                  <div class="package-links-row">
+                    <a href={item.upstream_url} target="_blank" rel="noopener noreferrer" class="package-link-pill">
+                      Upstream ↗
+                    </a>
+                  </div>
+                {/if}
 
                 {#if item.deps && item.deps.length > 0}
                   <div class="deps-row">
@@ -1050,6 +1079,29 @@
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+
+  .package-links-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .package-link-pill {
+    font-size: 0.7rem;
+    color: var(--accent-primary);
+    background: var(--bg-surface-hover);
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-decoration: none;
+    border: 1px solid var(--border-subtle);
+    transition: all 0.15s ease;
+  }
+  .package-link-pill:hover {
+    background: var(--accent-primary);
+    color: var(--accent-primary-text);
+    text-decoration: none;
   }
 
   .deps-row {

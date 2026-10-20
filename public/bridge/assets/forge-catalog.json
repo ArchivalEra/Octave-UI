@@ -2,7 +2,7 @@
  "schema": 2,
  "octave": "11.3.0",
  "generated_by": "build/forge-catalog.py",
- "shelf_commit": "922736ae62938efd662deb7a3a59fea56d8bf634",
+ "shelf_commit": "285af2ff20bc8b39c7fd6e26173b08fb8088636f",
  "note": "Forge 按需拉取目录（客户端读它，不下载包字节）。字节在同源 assets/forge/。",
  "packs": [
   {
@@ -27,6 +27,34 @@
     }
    ],
    "deps": [],
+   "description": "Common Gateway Interface for Octave.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-2.0-or-later",
+     "url": "https://sourceforge.net/p/octave/cgi/ci/master/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/cgi/ci/master/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/cgi/ci/master/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/cgi/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(cgi)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m"
@@ -47,7 +75,7 @@
      "version": "1.4.2",
      "sha256": "86aef8eddb8f39025cc32a6a385157dc8adbc83417ca25b1e95681c7dae08b47",
      "url": "assets/forge/datatypes-1.4.2.tar.gz",
-     "size": 0,
+     "size": 2091502,
      "stage": "staged",
      "form": "pkg",
      "content": [
@@ -262,6 +290,34 @@
     }
    ],
    "deps": [],
+   "description": "Extra data types for GNU Octave.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://github.com/pr0m1th3as/datatypes/blob/master/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://github.com/pr0m1th3as/datatypes/releases"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://github.com/pr0m1th3as/datatypes/"
+    },
+    {
+     "icon": "fas fa-book",
+     "label": "package documentation",
+     "url": "https://pr0m1th3as.github.io/datatypes/"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://github.com/pr0m1th3as/datatypes/issues"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -297,6 +353,34 @@
    "deps": [
     "matgeom"
    ],
+   "description": "Library for extending MatGeom functionality.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later and BSL-1.0",
+     "url": "https://sourceforge.net/p/octave/geometry/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/geometry/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/geometry/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/geometry/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(geometry)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -305,7 +389,55 @@
    "kinds": [
     "m",
     "src"
+   ],
+   "artifacts": [
+    {
+     "arch": "wasm32",
+     "form": "octdir",
+     "files": [
+      {
+       "name": "polybool_mrf.oct",
+       "sha256": "477fc7952af6843ec7f35e50d050cf6393ee504885f1e6987e24c4be8d5f1195",
+       "size": 54660
+      }
+     ],
+     "url": "assets/octdir/geometry/",
+     "stage": "staged",
+     "octave": "11.3.0",
+     "toolchain": "emcc 6.0.12",
+     "recipe": "O2"
+    },
+    {
+     "arch": "wasm64",
+     "form": "octdir",
+     "files": [
+      {
+       "name": "polybool_mrf.oct",
+       "sha256": "3ce7bf98c0861bf1ec535f0fc4c58d2247049c72c4da874b3635ba2a26612703",
+       "size": 56604
+      }
+     ],
+     "url": "assets/octdir-w64/geometry/",
+     "stage": "staged",
+     "octave": "11.3.0",
+     "toolchain": "emcc 6.0.12",
+     "recipe": "O2"
+    }
    ]
+  },
+  {
+   "name": "llvm-wasm",
+   "version": "6.0.12",
+   "form": "tree",
+   "content": [],
+   "consumer": [
+    "octave"
+   ],
+   "sha256": "198e84c4baeb3ce4c8d11cbbef75f072ec61db1b527df0ee2c90c9a4ffc72a85",
+   "url": "assets/llvm/clang.wasm",
+   "size": 122922700,
+   "deps": [],
+   "note": "浏览器内编 .oct 的工具链能力层（clang/lld/sysroot 两档/driver）；含 `src` 的源码包在装载前需要它（用户裁决 2026-10-18）。字节由 build/113/provision-llvm-wasm.sh 供给（sha 见 upstream-lock.json 的 llvm-wasm 条）"
   },
   {
    "name": "matgeom",
@@ -329,6 +461,39 @@
     }
    ],
    "deps": [],
+   "description": "Geometry toolbox for 2D/3D geometric computing.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "BSD-2-Clause-FreeBSD",
+     "url": "https://sourceforge.net/p/octave/matgeom/ci/master/tree/LICENSE.txt"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/matgeom/ci/master/tree/CHANGELOG.md"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/matgeom/ci/master/tree/"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository (upstream)",
+     "url": "https://github.com/mattools/matGeom/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/matgeom/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://github.com/mattools/matGeom/issues"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m"
@@ -360,6 +525,34 @@
     }
    ],
    "deps": [],
+   "description": "Miscellaneous tools that don't fit somewhere else.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://github.com/gnu-octave/octave-miscellaneous/blob/main/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://gnu-octave.github.io/octave-miscellaneous/news/"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://github.com/gnu-octave/octave-miscellaneous/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://gnu-octave.github.io/octave-miscellaneous/functions/"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://github.com/gnu-octave/octave-miscellaneous/issues"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -368,6 +561,50 @@
    "kinds": [
     "m",
     "src"
+   ],
+   "artifacts": [
+    {
+     "arch": "wasm32",
+     "form": "octdir",
+     "files": [
+      {
+       "name": "cell2cell.oct",
+       "sha256": "36d844b1cd42bd97e1dcc1396f96a187e0edf85e439cecf12046e2f86f48f636",
+       "size": 8138
+      },
+      {
+       "name": "partint.oct",
+       "sha256": "267b548da0dcb67fd488defce1a9d23787cddd878f4d9bd5d2ffcb445f1ca6b3",
+       "size": 10538
+      }
+     ],
+     "url": "assets/octdir/miscellaneous/",
+     "stage": "staged",
+     "octave": "11.3.0",
+     "toolchain": "emcc 6.0.12",
+     "recipe": "O2"
+    },
+    {
+     "arch": "wasm64",
+     "form": "octdir",
+     "files": [
+      {
+       "name": "cell2cell.oct",
+       "sha256": "b5566f0b776c82490618e0159154d0f91c090f3b96067f92488ba578511aafb5",
+       "size": 8467
+      },
+      {
+       "name": "partint.oct",
+       "sha256": "0f156dd8a5b8539f1e44a1a6e50a13351d7c75d381b153cf3f67d093bdd1adb6",
+       "size": 10994
+      }
+     ],
+     "url": "assets/octdir-w64/miscellaneous/",
+     "stage": "staged",
+     "octave": "11.3.0",
+     "toolchain": "emcc 6.0.12",
+     "recipe": "O2"
+    }
    ]
   },
   {
@@ -393,6 +630,39 @@
     }
    ],
    "deps": [],
+   "description": "A statistics and machine learning toolbox for data with and w/o missing values.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://sourceforge.net/p/octave/NaN/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/NaN/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/NaN/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/nan/overview.html"
+    },
+    {
+     "icon": "fas fa-book",
+     "label": "package documentation",
+     "url": "https://pub.ist.ac.at/~schloegl/matlab/NaN/"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(nan)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -429,6 +699,39 @@
     "statistics",
     "struct"
    ],
+   "description": "Non-linear optimization toolkit.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later and BSD-3-Clause and public domain",
+     "url": "https://octave.sourceforge.io/optim/COPYING.html"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://octave.sourceforge.io/optim/NEWS.html"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://octave.sourceforge.io/pkg-repository/optim/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/optim/overview.html"
+    },
+    {
+     "icon": "fas fa-book",
+     "label": "package documentation",
+     "url": "https://octave.sourceforge.io/optim/package_doc/"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(optim)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -437,6 +740,80 @@
    "kinds": [
     "m",
     "src"
+   ],
+   "artifacts": [
+    {
+     "arch": "wasm32",
+     "form": "octdir",
+     "files": [
+      {
+       "name": "__bfgsmin.oct",
+       "sha256": "f878860dfcb668a636f93f1165f5a2c02262997d71fa35f01ca8de4acc8709d4",
+       "size": 57271
+      },
+      {
+       "name": "__disna_optim__.oct",
+       "sha256": "3ff5fadfba7a54a17f84220396bb8eebecd1d64aecb20341316bfaff3cf5cff5",
+       "size": 12837
+      },
+      {
+       "name": "__max_nargin_optim__.oct",
+       "sha256": "e13c2ac6ce46809e9cfebea67e0244c1b711994e10e96d129bb40eb0f9610b51",
+       "size": 8311
+      },
+      {
+       "name": "numgradient.oct",
+       "sha256": "eec740a02315b72efbc5c7d3596d54b4c0f0d65c8747c331fafc8b61446c0f42",
+       "size": 17025
+      },
+      {
+       "name": "numhessian.oct",
+       "sha256": "e30e436eb7a713f224013405798230afdeafcf932d43d2e32189b55b124fa748",
+       "size": 17515
+      }
+     ],
+     "url": "assets/octdir/optim/",
+     "stage": "staged",
+     "octave": "11.3.0",
+     "toolchain": "emcc 6.0.12",
+     "recipe": "O2"
+    },
+    {
+     "arch": "wasm64",
+     "form": "octdir",
+     "files": [
+      {
+       "name": "__bfgsmin.oct",
+       "sha256": "9f16452f9cc7e3ef5010e05fbe99e9350aeacc6dfcc90bb3086d9d4c1e9b0cde",
+       "size": 57500
+      },
+      {
+       "name": "__disna_optim__.oct",
+       "sha256": "c53507fb7791309f80632737adb93ef9c0d5009dae7f3fed674081e2d73691e1",
+       "size": 13411
+      },
+      {
+       "name": "__max_nargin_optim__.oct",
+       "sha256": "c8394907d39a735ccbd61b2da670c2c447a13b0f71d9d3718e974375476e39eb",
+       "size": 8639
+      },
+      {
+       "name": "numgradient.oct",
+       "sha256": "a0541461156b05576721fcd43f2fa0ad82a030028589b5942195f5d940716b3b",
+       "size": 17519
+      },
+      {
+       "name": "numhessian.oct",
+       "sha256": "e6899abc489c9d622af12f198d93be1a5ed8725845a9d5534300a3a20b06f7fe",
+       "size": 18212
+      }
+     ],
+     "url": "assets/octdir-w64/optim/",
+     "stage": "staged",
+     "octave": "11.3.0",
+     "toolchain": "emcc 6.0.12",
+     "recipe": "O2"
+    }
    ]
   },
   {
@@ -475,6 +852,34 @@
     }
    ],
    "deps": [],
+   "description": "Quaternion package for GNU Octave, includes a quaternion class with overloaded operators.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://sourceforge.net/p/octave/quaternion/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/quaternion/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/quaternion/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/quaternion/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(quaternion)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m"
@@ -505,6 +910,34 @@
     }
    ],
    "deps": [],
+   "description": "Additional spline functions",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later and public domain",
+     "url": "https://sourceforge.net/p/octave/splines/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/splines/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/splines/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/splines/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(splines)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m"
@@ -542,6 +975,34 @@
     }
    ],
    "deps": [],
+   "description": "The Statistics package for GNU Octave.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://github.com/gnu-octave/statistics/blob/master/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://github.com/gnu-octave/statistics/releases"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://github.com/gnu-octave/statistics/"
+    },
+    {
+     "icon": "fas fa-book",
+     "label": "package documentation",
+     "url": "https://gnu-octave.github.io/statistics/"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://github.com/gnu-octave/statistics/issues"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -550,6 +1011,100 @@
    "kinds": [
     "m",
     "src"
+   ],
+   "artifacts": [
+    {
+     "arch": "wasm32",
+     "form": "octdir",
+     "files": [
+      {
+       "name": "editDistance.oct",
+       "sha256": "06a2ba3f39de533680c0061c81fc74e3fc94ce444e1b575c05e8306ee380bb12",
+       "size": 35429
+      },
+      {
+       "name": "fcnnpredict.oct",
+       "sha256": "f89d01103869935d54dd68fd0bae9519ddfe633924f5e34fb6d65ea9e44553bf",
+       "size": 39068
+      },
+      {
+       "name": "fcnntrain.oct",
+       "sha256": "676dce55d403dc192867804b3345b4081f07458530baa5ddf50679a9f4faf411",
+       "size": 47303
+      },
+      {
+       "name": "libsvmread.oct",
+       "sha256": "c7591cb3237147f1a2d78b45db48e147dae8b0faaac1d23ac15900ecec9d3f93",
+       "size": 12678
+      },
+      {
+       "name": "libsvmwrite.oct",
+       "sha256": "0fc8ad01b083c030b33216a8ba232d5fcc0a5b71d7d288f8e0a7f8e4ab1e6b29",
+       "size": 8506
+      },
+      {
+       "name": "svmpredict.oct",
+       "sha256": "b18c40f1dcc1fa7644458df93a2f6d21c2dad14cadf1ff2efe58402dd1b776d8",
+       "size": 88179
+      },
+      {
+       "name": "svmtrain.oct",
+       "sha256": "f7a84e89c8f0e83af041f11c58af4ff541e99e0ab77250a3cd5d2cade8aaf71a",
+       "size": 85962
+      }
+     ],
+     "url": "assets/octdir/statistics/",
+     "stage": "staged",
+     "octave": "11.3.0",
+     "toolchain": "emcc 6.0.12",
+     "recipe": "O2"
+    },
+    {
+     "arch": "wasm64",
+     "form": "octdir",
+     "files": [
+      {
+       "name": "editDistance.oct",
+       "sha256": "ccf4720758e991cd41639b60c53a341452c22f99c44ab7ed1e45848b3450a79d",
+       "size": 35812
+      },
+      {
+       "name": "fcnnpredict.oct",
+       "sha256": "bc060b228ee0ab59b5eb59aef24f0f99c02c7afdf9284d326c69b0eecc2551c4",
+       "size": 40164
+      },
+      {
+       "name": "fcnntrain.oct",
+       "sha256": "a5835ea7e7cc83002e1e849dc5d38a96c1de4cc203ce4c5c19793cc8a23f40ed",
+       "size": 48945
+      },
+      {
+       "name": "libsvmread.oct",
+       "sha256": "fa49095587072985a6e92a8e4a7a0359aff0104aa5af8bf964b07bf2598489d3",
+       "size": 13199
+      },
+      {
+       "name": "libsvmwrite.oct",
+       "sha256": "bcad7c11b1cb57ab89dd79f35aca6154d7ccf41385be4cd41833bf40a660b301",
+       "size": 8902
+      },
+      {
+       "name": "svmpredict.oct",
+       "sha256": "d8814c6171d8195f689b84df4d2434615972c8be01ab816a18f967a0b1869261",
+       "size": 90779
+      },
+      {
+       "name": "svmtrain.oct",
+       "sha256": "d53a9cced25fc6f6f8b32af54bfee88bd05e60f2d2addb27cbfa53ea7eb9465f",
+       "size": 88762
+      }
+     ],
+     "url": "assets/octdir-w64/statistics/",
+     "stage": "staged",
+     "octave": "11.3.0",
+     "toolchain": "emcc 6.0.12",
+     "recipe": "O2"
+    }
    ]
   },
   {
@@ -575,6 +1130,34 @@
     }
    ],
    "deps": [],
+   "description": "Additional structure manipulation functions.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://sourceforge.net/p/octave/struct/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/struct/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/struct/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/struct/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(struct)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -583,6 +1166,70 @@
    "kinds": [
     "m",
     "src"
+   ],
+   "artifacts": [
+    {
+     "arch": "wasm32",
+     "form": "octdir",
+     "files": [
+      {
+       "name": "cell2fields.oct",
+       "sha256": "7749d8907feef9171667e26e9e039d9bf59ba9b35cfebab5747efc717e5d0385",
+       "size": 16456
+      },
+      {
+       "name": "fieldempty.oct",
+       "sha256": "8ce92bec65da78d2917502af605f4e7e91b43f780952a6dbad32beac421efd4d",
+       "size": 11661
+      },
+      {
+       "name": "fields2cell.oct",
+       "sha256": "df355f5acd925441742f7bf06da52b6fcca93f70de3f0dfa40da6f5cc5a67ba6",
+       "size": 13566
+      },
+      {
+       "name": "structcat.oct",
+       "sha256": "ecd3bd8335e89c0db88802abd642cef4ec2da868b8b30bcdb40c51bceb69cc34",
+       "size": 15074
+      }
+     ],
+     "url": "assets/octdir/struct/",
+     "stage": "staged",
+     "octave": "11.3.0",
+     "toolchain": "emcc 6.0.12",
+     "recipe": "O2"
+    },
+    {
+     "arch": "wasm64",
+     "form": "octdir",
+     "files": [
+      {
+       "name": "cell2fields.oct",
+       "sha256": "216d658133078886b5f463d173c227435aba2c32a28fe3940cefeb9d1ca79d22",
+       "size": 17082
+      },
+      {
+       "name": "fieldempty.oct",
+       "sha256": "ecb74e6d11e8851bedf0c39588afc270c1a1fe9138559da36a0761c768996f7c",
+       "size": 12324
+      },
+      {
+       "name": "fields2cell.oct",
+       "sha256": "2103e12f6e7f80d97167aedc0778176cb2129447788e61f5866110da0ba533e5",
+       "size": 14024
+      },
+      {
+       "name": "structcat.oct",
+       "sha256": "c9ff0a7141c2cd48145890cdda03045ad716449552809e0eada9b7c6cf9863d1",
+       "size": 15821
+      }
+     ],
+     "url": "assets/octdir-w64/struct/",
+     "stage": "staged",
+     "octave": "11.3.0",
+     "toolchain": "emcc 6.0.12",
+     "recipe": "O2"
+    }
    ]
   },
   {
@@ -633,6 +1280,39 @@
    "deps": [
     "pyodide"
    ],
+   "description": "Symbolic calculation features, including common Computer Algebra System tools such as algebraic operations, calculus, equation solving, Fourier and Laplace transforms, variable precision arithmetic and other features. Compatibility with other symbolic toolboxes is intended.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://github.com/gnu-octave/symbolic/blob/main/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://github.com/gnu-octave/symbolic/blob/main/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://github.com/gnu-octave/symbolic"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/symbolic/overview.html"
+    },
+    {
+     "icon": "fas fa-book",
+     "label": "package wiki",
+     "url": "https://github.com/gnu-octave/symbolic/wiki"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://github.com/gnu-octave/symbolic/issues"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m"
@@ -665,6 +1345,34 @@
    ],
    "deps": [
     "nan"
+   ],
+   "description": "Stochastic concepts and maximum entropy methods for time series analysis.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://sourceforge.net/p/octave/tsa/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/tsa/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/tsa/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/tsa/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(tsa)"
+    }
    ],
    "form": "pkg",
    "content": [

@@ -119,7 +119,6 @@ const _de = {
   'figure.btn_force': 'Erzwingen (Hohes Risiko)',
 
   // Header additions
-  'header.brand_tag': 'Bereit · Lokal · 100% Privat',
   'header.btn_diagnostics': 'Diagnose',
   'header.btn_examples': 'Beispiele',
   'header.btn_packages': 'Pakete & Erweiterungen',

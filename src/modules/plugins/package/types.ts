@@ -25,12 +25,13 @@ export interface ForgePackageItem {
   version: string;
   form: DeliveryForm;
   content: ContentKind[];
-  consumer?: ConsumerEngine;
+  consumer?: ConsumerEngine | ConsumerEngine[];
   deps?: string[];
   size?: number;
   url?: string;
   upstream_url?: string;
   description?: string;
+  links?: Record<string, string>;
   versions?: PackageVersionCandidate[];
 }
 

@@ -99,4 +99,22 @@ describe('TerminalController Deep Module', () => {
     controller.clear();
     expect(controller.lines.length).toBe(0);
   });
+
+  it('automatically flushes plot commands with drawnow on submit (D10)', async () => {
+    let evaledCode = '';
+    const spyAdapter = new MockEmbedAdapter();
+    const origEval = spyAdapter.eval.bind(spyAdapter);
+    spyAdapter.eval = async (code: string) => {
+      evaledCode = code;
+      return origEval(code);
+    };
+    const spySupervisor = new EngineSupervisor({ adapterFactory: () => spyAdapter, skipPreflight: true });
+    await spySupervisor.boot();
+
+    const term = new TerminalController(new HistoryStore(), spySupervisor);
+    term.setInput('plot(1:10);');
+    await term.submit();
+
+    expect(evaledCode).toBe('plot(1:10);\ndrawnow;');
+  });
 });

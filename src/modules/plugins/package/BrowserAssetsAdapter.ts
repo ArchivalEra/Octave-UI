@@ -22,23 +22,54 @@ export class BrowserAssetsAdapter implements IAssetsPort {
   }
 
   async fetchCatalog(): Promise<ForgeCatalog> {
-    if (typeof window !== 'undefined' && (window as any).OctaveAssets?.catalog) {
-      try {
-        const cat = await (window as any).OctaveAssets.catalog();
-        if (cat && Array.isArray(cat.packs)) {
-          return cat;
+    if (typeof window !== 'undefined') {
+      const assets = (window as any).OctaveAssets;
+      if (assets?.browse) {
+        try {
+          const cat = await assets.browse();
+          if (cat && Array.isArray(cat.packs)) {
+            return cat;
+          }
+        } catch (err) {
+          console.warn('[BrowserAssetsAdapter] OctaveAssets.browse failed, falling back', err);
         }
-      } catch (err) {
-        console.warn('[BrowserAssetsAdapter] OctaveAssets.catalog failed, falling back to direct fetch', err);
+      }
+      if (assets?.catalog) {
+        try {
+          const cat = await assets.catalog();
+          if (cat && Array.isArray(cat.packs)) {
+            return cat;
+          }
+        } catch (err) {
+          console.warn('[BrowserAssetsAdapter] OctaveAssets.catalog failed, falling back to direct fetch', err);
+        }
       }
     }
 
-    const targetUrl = `${this.base}assets/forge-catalog.json`;
-    const resp = await fetch(targetUrl);
-    if (!resp.ok) {
-      throw new Error(`Failed to load forge catalog from ${targetUrl} (${resp.status} ${resp.statusText})`);
+    const candidateUrls = [
+      `${this.base}assets/forge-catalog.json`,
+      `${this.base}bridge/assets/forge-catalog.json`,
+    ];
+
+    let lastErr: any = null;
+    for (const targetUrl of candidateUrls) {
+      try {
+        const resp = await fetch(targetUrl);
+        if (resp.ok) {
+          const ct = resp.headers.get('content-type') || '';
+          if (ct.includes('text/html')) {
+            throw new Error(`Endpoint returned HTML instead of JSON (${targetUrl})`);
+          }
+          return (await resp.json()) as ForgeCatalog;
+        }
+      } catch (err) {
+        lastErr = err;
+      }
     }
-    return (await resp.json()) as ForgeCatalog;
+
+    const error = new Error(`Failed to load forge catalog: ${lastErr?.message || 'Not found'}`);
+    (error as any).code = 'CATALOG_UNREADABLE';
+    throw error;
   }
 
   getStatusOf(name: string): PackageStatusResult {

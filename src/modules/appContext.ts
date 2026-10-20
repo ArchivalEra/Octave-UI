@@ -19,6 +19,9 @@ import { WorkspaceStorageManager } from './storage/WorkspaceStorageManager';
 import { DownloadStore } from './storage/DownloadStore';
 import { DockLayoutStore } from './dock/DockLayoutStore';
 import { PanelRegistry, panelRegistryInstance } from './dock/PanelRegistry';
+import { toastService } from './ui/ToastService.svelte';
+
+export { toastService };
 
 export const historyStore = new HistoryStore();
 export const supervisor = new EngineSupervisor();

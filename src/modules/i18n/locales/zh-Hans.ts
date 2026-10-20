@@ -119,7 +119,6 @@ const _zhHans = {
   'figure.btn_force': '强制执行（高风险）',
 
   // Header additions
-  'header.brand_tag': '就绪 · 纯本地 · 隐私安全',
   'header.btn_diagnostics': '开发诊断',
   'header.btn_examples': '示例画廊',
   'header.btn_packages': '包与扩展',
