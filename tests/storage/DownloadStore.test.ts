@@ -304,4 +304,50 @@ describe('DownloadStore Deep Module', () => {
     expect(store.isEngineDownloaded('omc')).toBe(false);
     expect(store.isEngineDownloaded('master')).toBe(true);
   });
+
+  it('resolves octave.build.json from candidate fallback when lanes/<lane> is absent (host-007)', async () => {
+    // 模拟无 engineBuildProvider，且 lanes/wasm32-final 不存在，直接部署在站点根目录 <site>/octave.build.json
+    const rootEngineBuild = {
+      measured: {
+        files: {
+          'octave.js': { sha256: 'sha-root-js', bytes: 120 },
+          'octave.wasm': { sha256: 'sha-root-wasm', bytes: 600 },
+        },
+      },
+    };
+
+    const rootFetch = new MockFetchAdapter();
+    rootFetch.setJSON('https://octave.test/octave.build.json', rootEngineBuild);
+    rootFetch.setFile('https://octave.test/octave.js', 'root-js', 'sha-root-js');
+    rootFetch.setFile('https://octave.test/octave.wasm', 'root-wasm', 'sha-root-wasm');
+
+    const realStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: rootFetch,
+      baseUrl: 'https://octave.test',
+    });
+    await realStore.init();
+
+    const rec = await realStore.downloadEngine('wasm32-final');
+    expect(rec.ref.arch).toBe('wasm32-final');
+    expect(rec.bytes).toBe(16);
+    expect(realStore.isEngineDownloaded('wasm32-final')).toBe(true);
+  });
+
+  it('rejects HTML responses with clear INDEX_UNREADABLE error rather than naked JSON.parse error', async () => {
+    const htmlFetch = new MockFetchAdapter();
+    htmlFetch.setError('https://octave.test/lanes/wasm32-final/octave.build.json', new Error('Expected JSON response, received HTML'));
+    htmlFetch.setError('https://octave.test/octave.build.json', new Error('Expected JSON response, received HTML'));
+
+    const htmlStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: htmlFetch,
+      baseUrl: 'https://octave.test',
+    });
+    await htmlStore.init();
+
+    await expect(htmlStore.downloadEngine('wasm32-final')).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+    });
+  });
 });

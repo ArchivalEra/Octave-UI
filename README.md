@@ -27,6 +27,7 @@ GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 网页端用户界面与交�
   - **纯下载深模块与 OPFS 资产持久化**（`DownloadStore`）：贯彻 I1-I6 不变量体系（权威来源哈希解析、原子发布与无半包回滚、当日目录哈希防漂移、零 `Module.FS` 纯净依赖、多架构独立隔离与真实存储对账自动降级），采用 7 个封闭错误码（`NOT_DOWNLOADED`、`VERSION_WITHHELD`、`FLAVOR_UNAVAILABLE`、`STORAGE_WRITE_FAILED`、`DOWNLOAD_ABORTED`、`INDEX_UNREADABLE`、`STORAGE_QUOTA_EXHAUSTED`）和 3 语 100% 字典平权守护离线存储；支持 `octave:download-changed` 跨模块事件总线。
   - **包管理双动作与现场编译诊断流**（`PackageManagerModal`）：支持“下载（落盘 OPFS 沙箱）”与“装载/从源码构建（入 Octave 引擎）”双动作彻底解耦；落实裁决⑤前置依赖拦截（含 `src` 的 C++ 源码扩展包强制拦截并提示前置下载 `llvm-wasm` 编译器）；集成展开式实时编译诊断抽屉，输出结构化构建日志流并清晰区分“编译成功 ✓”与“跨边界调用待宿主工单 65 重链”；支持 A4 体量预演分件清单弹窗与 A5 存储配额（`STORAGE_QUOTA_EXHAUSTED`）强校验阻断。
   - **下载与装载解耦与双列多引擎协同架构**：支持将下载（写入 OPFS 沙箱）与装载（载入 WebAssembly 实例）彻底解耦，用户可同时将多档引擎（Octave 三档 + OpenModelica 一档）自由预下载至本地；界面重构为正交双列设计（左列 Octave 三档单选，右列 OpenModelica 独立打勾），两边不干涉，支持一键双引擎同页并发实例化（`Promise.all`）与 MEMFS 桥接，100% 纯客户端静态托管。
+  - **引擎离线化与资产解析容错**（`DownloadStore` & `OpfsStore`）：自动探测站点基础路径（`site-base`），实现多车道（`lanes/<lane>/`）与根目录同源部署自动回退对账；`FetchPort` 具备 Content-Type 与 HTML 错误页识别防护；OPFS 扫描层深度适配 Chromium 临时 `.crswap` 文件过滤与瞬态文件竞争防护，确保多引擎二进制离线下载顺畅。
   - **可拖拽多引擎工作台架构**（`DockWorkspace` & `DockLayoutStore`）：
     - 采用深模块 2D 二叉分屏与标签树布局引擎，支持自由标签拖拽停靠（Docking）、独立浮动窗口（Floating Window）及 5 区域精准落点预览（上下左右中），状态透明持久化至 `localStorage`。
     - **OPFS 工业沙箱一级解耦面板**（`OpfsFilesPanel`）：将 OPFS 资源仓解耦为可自由停靠、浮动的独立工作区面板，完整保留目录导入导出、ZIP 解包及与 MEMFS 双向二进制同步能力。

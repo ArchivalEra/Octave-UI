@@ -57,8 +57,27 @@ export class DownloadStore {
     this.catalogProvider = options?.catalogProvider;
     this.engineBuildProvider = options?.engineBuildProvider;
     this.laneProvider = options?.laneProvider;
-    this.baseUrl = options?.baseUrl || '';
+
+    if (options?.baseUrl !== undefined && options.baseUrl !== '') {
+      this.baseUrl = options.baseUrl.replace(/\/+$/, '');
+    } else {
+      let detectedBase = '';
+      if (typeof document !== 'undefined') {
+        const meta = document.querySelector('meta[name="site-base"]');
+        detectedBase = meta?.getAttribute('content') || (window as any).__siteBase || '';
+      }
+      if (!detectedBase && typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) {
+        detectedBase = import.meta.env.BASE_URL;
+      }
+      this.baseUrl = (detectedBase || '').replace(/\/+$/, '');
+    }
+
     this.maxQuotaBytes = options?.maxQuotaBytes;
+  }
+
+  resolveUrl(subPath: string): string {
+    const cleanSub = subPath.startsWith('/') ? subPath : `/${subPath}`;
+    return `${this.baseUrl}${cleanSub}`.replace(/([^:]\/)\/+/g, '$1');
   }
 
   get isReady(): boolean {
@@ -509,7 +528,7 @@ export class DownloadStore {
     const sha256 = (targetVersion as any).sha256 || '';
     const bytes = targetVersion.size || 0;
     const filename = `${ref.name}-${ref.version}.tar.gz`;
-    const url = `${this.baseUrl}/assets/packages/${filename}`;
+    const url = this.resolveUrl(`/assets/packages/${filename}`);
     const destPath = `downloads/src/${ref.name}/${ref.version}/${filename}`;
 
     return {
@@ -556,7 +575,7 @@ export class DownloadStore {
     const files = matched.files || [{ name: `${ref.name}.oct`, size: matched.size, sha256: matched.sha256 }];
     for (const f of files) {
       const filename = f.name || `${ref.name}.oct`;
-      const url = `${this.baseUrl}/assets/packages/${ref.arch}/${filename}`;
+      const url = this.resolveUrl(`/assets/packages/${ref.arch}/${filename}`);
       const destPath = `downloads/pre/${ref.name}/${ref.version}/${ref.arch}/${filename}`;
       items.push({ filename, url, destPath, sha256: f.sha256 });
       totalBytes += f.size || 0;
@@ -578,8 +597,8 @@ export class DownloadStore {
       // OpenModelica 第二引擎档 (mail/016, 017)
       const filenameWasm = 'OpenModelicaCompiler_bg.wasm';
       const filenameJs = 'OpenModelicaCompiler.js';
-      const urlWasm = `${this.baseUrl}/omc/${filenameWasm}`;
-      const urlJs = `${this.baseUrl}/omc/${filenameJs}`;
+      const urlWasm = this.resolveUrl(`/omc/${filenameWasm}`);
+      const urlJs = this.resolveUrl(`/omc/${filenameJs}`);
 
       // 快照估算 71.1 MB wasm + 1.2 MB js
       const bytes = 74579404;
@@ -603,17 +622,46 @@ export class DownloadStore {
     }
 
     // Octave 引擎档：从 <site>/lanes/<lane>/octave.build.json 的 measured.files 拿取权威 sha (host-007 §①)
-    const lanePath = lane.startsWith('lanes/') ? lane : `lanes/${lane}`;
-    let buildManifest: any = null;
-    if (this.engineBuildProvider) {
-      buildManifest = await this.engineBuildProvider(lane);
-    } else {
-      const manifestUrl = `${this.baseUrl}/${lanePath}/octave.build.json`.replace(/([^:]\/)\/+/g, '$1');
-      buildManifest = await this.fetchPort.fetchJSON(manifestUrl);
+    // 候选路径列表：先尝试多车道同步目录 (lanes/<lane>)，再按 host-007 规范回退到同源随档部署位置 (<site>/octave.build.json 或 <site>/w64/...)
+    const candidateFolders: string[] = [];
+    candidateFolders.push(`lanes/${lane}`);
+
+    if (lane === 'wasm32-final' || lane === 'base') {
+      candidateFolders.push('');
+    } else if (lane === 'master' || lane === 'w64' || lane === 'IllegalPerformance') {
+      candidateFolders.push('w64');
+      candidateFolders.push('');
     }
 
-    if (!buildManifest || !buildManifest.measured || !buildManifest.measured.files) {
-      throw new DownloadError('INDEX_UNREADABLE', `Invalid octave.build.json for lane ${lane}`);
+    let chosenFolder = '';
+    let buildManifest: any = null;
+
+    if (this.engineBuildProvider) {
+      buildManifest = await this.engineBuildProvider(lane);
+      chosenFolder = candidateFolders[0];
+    } else {
+      let lastErr: any = null;
+      for (const folder of candidateFolders) {
+        const manifestSubPath = folder ? `${folder}/octave.build.json` : 'octave.build.json';
+        const manifestUrl = this.resolveUrl(manifestSubPath);
+        try {
+          const json = await this.fetchPort.fetchJSON(manifestUrl);
+          if (json && json.measured && json.measured.files) {
+            buildManifest = json;
+            chosenFolder = folder;
+            break;
+          }
+        } catch (e: any) {
+          lastErr = e;
+        }
+      }
+
+      if (!buildManifest || !buildManifest.measured || !buildManifest.measured.files) {
+        throw new DownloadError(
+          'INDEX_UNREADABLE',
+          `Failed to load octave.build.json for lane ${lane}: ${lastErr?.message || 'Invalid or missing manifest'}`
+        );
+      }
     }
 
     const files = buildManifest.measured.files as Record<string, { sha256: string; bytes: number }>;
@@ -622,17 +670,19 @@ export class DownloadStore {
     let combinedSha = '';
 
     for (const [filename, meta] of Object.entries(files)) {
-      const url = `${this.baseUrl}/${lanePath}/${filename}`.replace(/([^:]\/)\/+/g, '$1');
+      const fileSubPath = chosenFolder ? `${chosenFolder}/${filename}` : filename;
+      const url = this.resolveUrl(fileSubPath);
       const destPath = `downloads/engine/${lane}/${filename}`;
       items.push({ filename, url, destPath, sha256: meta.sha256 });
       totalBytes += meta.bytes;
       combinedSha += meta.sha256;
     }
 
+    const provenanceSubPath = chosenFolder ? `${chosenFolder}/octave.build.json` : 'octave.build.json';
     return {
       sha256: combinedSha,
       bytes: totalBytes,
-      provenanceUrl: `${this.baseUrl}/${lanePath}/octave.build.json`.replace(/([^:]\/)\/+/g, '$1'),
+      provenanceUrl: this.resolveUrl(provenanceSubPath),
       items,
     };
   }

@@ -102,7 +102,19 @@ export class BrowserFetchAdapter implements FetchPort {
     if (!res.ok) {
       throw new Error(`HTTP ${res.status} fetching ${url}`);
     }
-    return (await res.json()) as T;
+    const contentType = res.headers.get('content-type') || '';
+    const text = await res.text();
+    const trimmed = text.trim();
+    if (trimmed.startsWith('<') || (contentType && !contentType.includes('json') && !url.endsWith('.json'))) {
+      throw new Error(
+        `Expected JSON response from ${url}, received HTML/non-JSON content (Content-Type: ${contentType || 'unknown'})`
+      );
+    }
+    try {
+      return JSON.parse(text) as T;
+    } catch (e: any) {
+      throw new Error(`Invalid JSON received from ${url}: ${e?.message || e}`);
+    }
   }
 }
 

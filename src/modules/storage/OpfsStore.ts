@@ -56,13 +56,20 @@ export class OpfsStore implements Store {
   private async _resolveDir(
     dirPath: string,
     create = false
-  ): Promise<FileSystemDirectoryHandle> {
+  ): Promise<FileSystemDirectoryHandle | null> {
     let current = await this._ensureWorkspace();
     if (!dirPath) return current;
 
     const segments = dirPath.split('/').filter(Boolean);
     for (const seg of segments) {
-      current = await current.getDirectoryHandle(seg, { create });
+      try {
+        current = await current.getDirectoryHandle(seg, { create });
+      } catch (err: any) {
+        if (!create && err?.name === 'NotFoundError') {
+          return null;
+        }
+        throw err;
+      }
     }
     return current;
   }
@@ -83,16 +90,31 @@ export class OpfsStore implements Store {
             name: entry.name,
             kind: 'dir',
           };
-          yield* scanDir(entry as FileSystemDirectoryHandle, itemPath);
+          try {
+            yield* scanDir(entry as FileSystemDirectoryHandle, itemPath);
+          } catch (err: any) {
+            if (err?.name === 'NotFoundError') continue;
+            throw err;
+          }
         } else if (entry.kind === 'file') {
-          const file = await (entry as FileSystemFileHandle).getFile();
-          yield {
-            path: itemPath,
-            name: entry.name,
-            kind: 'file',
-            size: file.size,
-            mtime: file.lastModified,
-          };
+          if (entry.name.endsWith('.crswap') || entry.name.startsWith('.tmp')) {
+            continue;
+          }
+          try {
+            const file = await (entry as FileSystemFileHandle).getFile();
+            yield {
+              path: itemPath,
+              name: entry.name,
+              kind: 'file',
+              size: file.size,
+              mtime: file.lastModified,
+            };
+          } catch (err: any) {
+            if (err?.name === 'NotFoundError') {
+              continue;
+            }
+            throw err;
+          }
         }
       }
     }
@@ -106,6 +128,9 @@ export class OpfsStore implements Store {
 
     try {
       const dirHandle = await this._resolveDir(dir, false);
+      if (!dirHandle) {
+        throw new Error(`Directory "${dir}" not found in OPFS`);
+      }
       const fileHandle = await dirHandle.getFileHandle(name);
       const file = await fileHandle.getFile();
       const buffer = await file.arrayBuffer();
@@ -119,7 +144,7 @@ export class OpfsStore implements Store {
     const valid = validatePath(path);
     const { dir, name } = splitPath(valid);
 
-    const dirHandle = await this._resolveDir(dir, true);
+    const dirHandle = (await this._resolveDir(dir, true))!;
     const fileHandle = await dirHandle.getFileHandle(name, { create: true });
 
     // 使用 createWritable 原子流写入
@@ -142,6 +167,7 @@ export class OpfsStore implements Store {
 
     try {
       const dirHandle = await this._resolveDir(dir, false);
+      if (!dirHandle) return;
       await dirHandle.removeEntry(name, { recursive: true });
     } catch (err: any) {
       if (err?.name === 'NotFoundError') {
@@ -157,6 +183,8 @@ export class OpfsStore implements Store {
 
     try {
       const dirHandle = await this._resolveDir(dir, false);
+      if (!dirHandle) return null;
+
       // 先探测是否是文件
       try {
         const fileHandle = await dirHandle.getFileHandle(name);
@@ -170,12 +198,16 @@ export class OpfsStore implements Store {
         };
       } catch {
         // 探测是否是子目录
-        await dirHandle.getDirectoryHandle(name);
-        return {
-          path: valid,
-          name,
-          kind: 'dir',
-        };
+        try {
+          await dirHandle.getDirectoryHandle(name);
+          return {
+            path: valid,
+            name,
+            kind: 'dir',
+          };
+        } catch {
+          return null;
+        }
       }
     } catch {
       return null;

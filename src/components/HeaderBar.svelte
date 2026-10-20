@@ -31,6 +31,17 @@
   let isDirectoryMounted = $state<boolean>(projectWorkspace.isDirectoryMounted);
   let directoryName = $state<string | null>(projectWorkspace.directoryName);
   let isCoiAvailable = $state(true);
+  let downloadRevision = $state(0);
+
+  function isEngineDownloaded(lane: string): boolean {
+    if (downloadRevision < 0) return false;
+    return projectWorkspace.isEngineDownloaded(lane);
+  }
+
+  function isEngineDownloading(lane: string): boolean {
+    if (downloadRevision < 0) return false;
+    return projectWorkspace.isEngineDownloading(lane);
+  }
 
   let menuOpen = $state(false);
   let paletteOpen = $state(false);
@@ -61,6 +72,7 @@
       isOmcEnabled = projectWorkspace.isOmcEnabled;
       isDirectoryMounted = projectWorkspace.isDirectoryMounted;
       directoryName = projectWorkspace.directoryName;
+      downloadRevision++;
     });
     const unsubI18n = i18n.subscribe((loc) => {
       currentLocale = loc;
@@ -465,7 +477,7 @@
                         <span class="choice-desc">{laneItem.desc}</span>
                         <div class="lane-meta-row">
                           <span class="size-hint">{laneItem.size}</span>
-                          {#if projectWorkspace.isEngineDownloaded(laneItem.id)}
+                          {#if isEngineDownloaded(laneItem.id)}
                             <span class="dl-status downloaded">✓ {t('header.downloaded_badge')}</span>
                             <button
                               type="button"
@@ -473,7 +485,7 @@
                               title={t('header.delete_download')}
                               onclick={(e) => handleRemoveEngine(laneItem.id, e)}
                             >✕</button>
-                          {:else if projectWorkspace.isEngineDownloading(laneItem.id)}
+                          {:else if isEngineDownloading(laneItem.id)}
                             <span class="dl-status downloading">⏳ {t('header.downloading_badge')}</span>
                           {:else}
                             <button
@@ -520,7 +532,7 @@
                       <span class="choice-desc">{t('header.lane_omc_desc')}</span>
                       <div class="lane-meta-row">
                         <span class="size-hint">~71.1MB</span>
-                        {#if projectWorkspace.isEngineDownloaded('omc')}
+                        {#if isEngineDownloaded('omc')}
                           <span class="dl-status downloaded">✓ {t('header.downloaded_badge')}</span>
                           <button
                             type="button"
@@ -528,7 +540,7 @@
                             title={t('header.delete_download')}
                             onclick={(e) => handleRemoveEngine('omc', e)}
                           >✕</button>
-                        {:else if projectWorkspace.isEngineDownloading('omc')}
+                        {:else if isEngineDownloading('omc')}
                           <span class="dl-status downloading">⏳ {t('header.downloading_badge')}</span>
                         {:else}
                           <button

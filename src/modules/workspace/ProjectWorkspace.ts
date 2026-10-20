@@ -106,6 +106,7 @@ export class ProjectWorkspace {
       window.addEventListener('octave:download-changed', () => {
         this._notify();
       });
+      void this._downloadStore?.init().then(() => this._notify()).catch(() => {});
     }
 
     if (this._storageManager) {

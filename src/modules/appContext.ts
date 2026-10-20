@@ -28,9 +28,24 @@ export const engineSession = supervisor as any;
 export const dockLayoutStore = new DockLayoutStore();
 export const panelRegistry = panelRegistryInstance;
 
+function getSiteBase(): string {
+  if (typeof document !== 'undefined') {
+    const meta = document.querySelector('meta[name="site-base"]');
+    const content = meta?.getAttribute('content');
+    if (content) return content;
+    if ((window as any).__siteBase) return (window as any).__siteBase;
+  }
+  if (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) {
+    return import.meta.env.BASE_URL;
+  }
+  return '';
+}
+
 export const workspaceStorage = new WorkspaceStorageManager();
 export const downloadStore = new DownloadStore({
   storage: workspaceStorage.store,
+  baseUrl: getSiteBase(),
+  catalogProvider: () => packageManagerPlugin.getAssetsPort().fetchCatalog(),
 });
 export const projectWorkspace = new ProjectWorkspace(supervisor, undefined, workspaceStorage, downloadStore);
 export const terminalController = new TerminalController(historyStore, supervisor as any);
