@@ -398,6 +398,9 @@ const _zhHans = {
   'errors.DOWNLOAD_ABORTED': '下载操作已取消',
   'errors.INDEX_UNREADABLE': '本地存储清单丢失或损坏',
   'errors.STORAGE_QUOTA_EXHAUSTED': '存储配额不足，请先在文件树中清理旧引擎或临时文件',
+  'errors.CATALOG_UNREADABLE': '货架目录丢失或无法解析',
+  'errors.NOT_INSTALLABLE': '该条目为工具链能力，不走解释器装载',
+  'errors.LAYER_NOT_IMPLEMENTED': '能力层尚未在当前构建中实现',
 
   // Package Manager & Download additions
   'package_manager.btn_download': '下载',
@@ -424,7 +427,7 @@ const _zhHans = {
   'package_manager.omc_engine_desc': '第二引擎档：提供原生 Modelica 物理建模与多领域系统仿真能力。',
   'header.lane_omc': 'OpenModelica',
   'header.lane_omc_badge': '物理仿真',
-  'header.lane_omc_desc': 'Modelica 物理建模与仿真第二引擎档 · 71MB',
+  'header.lane_omc_desc': 'Modelica 物理建模与仿真第二引擎档 · 74.6MB',
   'header.engine_octave_badge': '数值计算',
   'header.download_btn': '下载',
   'header.downloaded_badge': '已下载',
@@ -432,7 +435,7 @@ const _zhHans = {
   'header.delete_download': '删除本地缓存',
   'header.omc_dual_boot_tip': '启动时将同时装载 Octave 与 OpenModelica 双引擎 (同页协同计算)',
   'boot.omc_engine_label': '物理建模引擎',
-  'boot.omc_engine_val': 'OpenModelica wasm32 (~71.1 MB)',
+  'boot.omc_engine_val': 'OpenModelica wasm32 (~74.6 MB)',
   'dock.panel_files': '工作区文件 (OPFS)',
   'dock.panel_notebook': 'Octave 笔记本',
   'dock.panel_terminal': 'Octave 终端',

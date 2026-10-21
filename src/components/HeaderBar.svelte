@@ -518,7 +518,7 @@
                       </span>
                       <span class="choice-desc">{t('header.lane_omc_desc')}</span>
                       <div class="lane-meta-row">
-                        <span class="size-hint">~71.1MB</span>
+                        <span class="size-hint">~74.6MB</span>
                         {#if isEngineDownloaded('omc')}
                           <span class="dl-status downloaded">✓ {t('header.downloaded_badge')}</span>
                           <button

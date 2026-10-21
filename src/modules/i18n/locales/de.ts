@@ -397,6 +397,9 @@ const _de = {
   'errors.DOWNLOAD_ABORTED': 'Download-Vorgang wurde abgebrochen',
   'errors.INDEX_UNREADABLE': 'Speichermanifest fehlt oder ist unlesbar',
   'errors.STORAGE_QUOTA_EXHAUSTED': 'Speicherkontingent erschöpft. Bitte geben Sie Speicherplatz im Dateibaum frei',
+  'errors.CATALOG_UNREADABLE': 'Forge-Katalog fehlt oder ist unlesbar',
+  'errors.NOT_INSTALLABLE': 'Eintrag ist eine Toolchain-Fähigkeit und kann nicht direkt geladen werden',
+  'errors.LAYER_NOT_IMPLEMENTED': 'Fähigkeitsebene ist im aktuellen Build nicht implementiert',
 
   // Package Manager & Download additions
   'package_manager.btn_download': 'Herunterladen',
@@ -423,7 +426,7 @@ const _de = {
   'package_manager.omc_engine_desc': 'Zweite Engine-Stufe für native Modelica-Physikmodellierung und Simulation.',
   'header.lane_omc': 'OpenModelica',
   'header.lane_omc_badge': 'Physik',
-  'header.lane_omc_desc': 'Modelica-Physikmodellierungs- und Simulations-Engine · 71MB',
+  'header.lane_omc_desc': 'Modelica-Physikmodellierungs- und Simulations-Engine · 74.6MB',
   'header.engine_octave_badge': 'Numerik',
   'header.download_btn': 'Herunterladen',
   'header.downloaded_badge': 'Heruntergeladen',
@@ -431,7 +434,7 @@ const _de = {
   'header.delete_download': 'Download löschen',
   'header.omc_dual_boot_tip': 'Startet Octave und OpenModelica gleichzeitig auf derselben Seite',
   'boot.omc_engine_label': 'Physik-Engine',
-  'boot.omc_engine_val': 'OpenModelica wasm32 (~71.1 MB)',
+  'boot.omc_engine_val': 'OpenModelica wasm32 (~74.6 MB)',
   'dock.panel_files': 'Arbeitsbereich-Dateien (OPFS)',
   'dock.panel_notebook': 'Octave Notizbuch',
   'dock.panel_terminal': 'Octave Terminal',

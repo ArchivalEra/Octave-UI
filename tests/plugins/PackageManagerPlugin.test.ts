@@ -311,14 +311,14 @@ describe('PackageManagerPlugin Deep Module', () => {
     // 模拟将 llvm-wasm 记录写入 DownloadStore
     const downloadStore = plugin.getDownloadStore();
     await downloadStore.init();
-    // 注入 llvm 资产
-    (downloadStore as any).manifest.items['llvm-wasm@19.1.0'] = {
-      ref: { name: 'llvm-wasm', version: '19.1.0', kind: 'runtime' },
-      sha256: 'sha-llvm-wasm',
-      bytes: 36700160,
-      files: [{ path: 'downloads/runtime/llvm-wasm/19.1.0/llvm-wasm.tar.gz', bytes: 36700160, sha256: 'sha-llvm' }],
+    // 注入 llvm 资产 (6.0.12 单一权威版本)
+    (downloadStore as any).manifest.items['llvm-wasm@6.0.12'] = {
+      ref: { name: 'llvm-wasm', version: '6.0.12', kind: 'runtime' },
+      sha256: 'cd6450fe7944875cb39f8e4a0790d5a08e032044f1db89054dadcabb749b20ce',
+      bytes: 34693729,
+      files: [{ path: 'downloads/runtime/llvm-wasm/6.0.12/llvm-wasm-6.0.12.tar.gz', bytes: 34693729, sha256: 'cd6450fe7944875cb39f8e4a0790d5a08e032044f1db89054dadcabb749b20ce' }],
       downloadedAt: new Date().toISOString(),
-      provenanceUrl: 'https://octave.test/assets/runtimes/llvm-wasm.tar.gz',
+      provenanceUrl: 'https://octave.test/assets/runtimes/llvm-wasm-6.0.12.tar.gz',
     };
 
     expect(await plugin.hasLLVM()).toBe(true);
@@ -335,5 +335,13 @@ describe('PackageManagerPlugin Deep Module', () => {
     expect(compileRes.diagnostics.length).toBeGreaterThanOrEqual(3);
     expect(diagnosticsStream.length).toBeGreaterThanOrEqual(3);
     expect(diagnosticsStream).toContain('[compile] Emitted signal.oct');
+  });
+
+  it('forbids installing role: toolchain packages and returns NOT_INSTALLABLE (mail/024 & Q1)', async () => {
+    await plugin.loadCatalog();
+    const res = await plugin.installPackage('llvm-wasm');
+    expect(res.state).toBe('failed');
+    expect(res.why).toBe('NOT_INSTALLABLE');
+    expect(res.message).toContain('编译工具链');
   });
 });

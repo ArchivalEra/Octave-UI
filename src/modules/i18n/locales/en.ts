@@ -396,6 +396,9 @@ export const en = {
   'errors.DOWNLOAD_ABORTED': 'Download operation was cancelled',
   'errors.INDEX_UNREADABLE': 'Storage manifest is missing or unreadable',
   'errors.STORAGE_QUOTA_EXHAUSTED': 'Storage quota exhausted. Please free up space in your file tree',
+  'errors.CATALOG_UNREADABLE': 'Forge catalog is missing or unreadable',
+  'errors.NOT_INSTALLABLE': 'Item is a toolchain capability and cannot be loaded directly',
+  'errors.LAYER_NOT_IMPLEMENTED': 'Capability layer is not implemented in current build',
 
   // Package Manager & Download additions
   'package_manager.btn_download': 'Download',
@@ -422,7 +425,7 @@ export const en = {
   'package_manager.omc_engine_desc': 'Second engine tier providing native Modelica physical system modeling and simulation.',
   'header.lane_omc': 'OpenModelica',
   'header.lane_omc_badge': 'Physics',
-  'header.lane_omc_desc': 'Modelica physical system modeling & simulation · 71MB',
+  'header.lane_omc_desc': 'Modelica physical system modeling & simulation · 74.6MB',
   'header.engine_octave_badge': 'Numeric',
   'header.download_btn': 'Download',
   'header.downloaded_badge': 'Downloaded',
@@ -430,7 +433,7 @@ export const en = {
   'header.delete_download': 'Delete download',
   'header.omc_dual_boot_tip': 'Will boot both Octave and OpenModelica simultaneously (co-simulation)',
   'boot.omc_engine_label': 'Physics Engine',
-  'boot.omc_engine_val': 'OpenModelica wasm32 (~71.1 MB)',
+  'boot.omc_engine_val': 'OpenModelica wasm32 (~74.6 MB)',
   'dock.panel_files': 'Workspace Files (OPFS)',
   'dock.panel_notebook': 'Octave Notebook',
   'dock.panel_terminal': 'Octave Terminal',

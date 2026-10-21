@@ -82,7 +82,11 @@
             refreshStatuses();
           })
           .catch((err) => {
-            errorMsg = t('package_manager.err_load_catalog', { error: err.message || String(err) });
+            const errCode = err?.code;
+            const codeKey = errCode ? `errors.${errCode}` : '';
+            errorMsg = (codeKey && t(codeKey) !== codeKey)
+              ? t(codeKey)
+              : t('package_manager.err_load_catalog', { error: err?.message || String(err) });
           });
       } else {
         catalogLoaded = true;
@@ -620,16 +624,8 @@
                         <button class="btn-action btn-compile" onclick={() => handleLoadOrCompile(item)} data-action="compile" data-package={item.name}>
                           {t('package_manager.btn_compile')}
                         </button>
-                      {:else if item.name === 'llvm-wasm'}
-                        {#if downloadedRecords[item.name]}
-                          <button class="btn-action btn-installed" disabled data-action="installed" data-package={item.name}>
-                            {t('package_manager.btn_installed')}
-                          </button>
-                        {:else}
-                          <button class="btn-action btn-download" onclick={() => openDownloadConfirm(item)} data-action="download" data-package={item.name}>
-                            {t('package_manager.btn_download')}
-                          </button>
-                        {/if}
+                      {:else if item.role === 'toolchain' || item.name === 'llvm-wasm'}
+                        <!-- 编译工具链由 DownloadStore 管理，不走解释器装载 (mail/024) -->
                       {:else}
                         <button class="btn-action btn-install" onclick={() => handleLoadOrCompile(item)} data-action="install" data-package={item.name}>
                           {t('package_manager.btn_load')}

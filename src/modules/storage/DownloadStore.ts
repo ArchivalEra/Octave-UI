@@ -32,6 +32,17 @@ export interface DownloadStoreOptions {
   maxQuotaBytes?: number;
 }
 
+export const KNOWN_RUNTIME_METADATA: Record<string, { bytes: number; sha256: string }> = {
+  'llvm-wasm@6.0.12': {
+    bytes: 34693729,
+    sha256: 'cd6450fe7944875cb39f8e4a0790d5a08e032044f1db89054dadcabb749b20ce',
+  },
+  'pyodide@314.0.7': {
+    bytes: 13742761,
+    sha256: '6a4976babd0cb34c8906e4847405614db92c70588b42f27d7612898c3debbd76',
+  },
+};
+
 export class DownloadStore {
   private storage: Store;
   private fetchPort: FetchPort;
@@ -462,13 +473,21 @@ export class DownloadStore {
 
   private async resolveRuntimeTarget(ref: DownloadRef) {
     let filename = `${ref.name}-${ref.version}.tar.gz`;
+    const known = KNOWN_RUNTIME_METADATA[`${ref.name}@${ref.version}`];
+
     if (this.catalogProvider) {
       try {
         const cat = await this.catalogProvider();
         const pkg = (cat.packs || []).find((p) => p.name === ref.name);
         if (pkg) {
-          const sha256 = (pkg as any).sha256 || `${ref.name}-${ref.version}-sha`;
-          const bytes = pkg.size || 22000000;
+          const sha256 = (pkg as any).sha256 || known?.sha256;
+          const bytes = (pkg as any).size || known?.bytes;
+          if (!sha256 || !bytes) {
+            throw new DownloadError(
+              'FLAVOR_UNAVAILABLE',
+              `No verified checksum/size found for runtime ${ref.name}@${ref.version}`
+            );
+          }
           let url: string;
           if ((pkg as any).url) {
             url = this.resolveUrl((pkg as any).url);
@@ -488,19 +507,26 @@ export class DownloadStore {
           };
         }
       } catch (err) {
+        if (err instanceof DownloadError) throw err;
         console.warn('[DownloadStore] resolveRuntimeTarget catalog error:', err);
       }
     }
 
-    // 默认工具链运行时（如 llvm-wasm）
+    // 默认工具链/已知运行时（如 llvm-wasm、pyodide）
+    if (!known) {
+      throw new DownloadError(
+        'FLAVOR_UNAVAILABLE',
+        `Unknown runtime target or missing checksum: ${ref.name}@${ref.version}`
+      );
+    }
+
     const url = this.resolveUrl(`assets/runtimes/${filename}`);
     const destPath = `downloads/runtime/${ref.name}/${ref.version}/${filename}`;
-    const bytes = ref.name.includes('llvm') ? 36700160 : 20000000;
     return {
-      sha256: `${ref.name}-${ref.version}-sha`,
-      bytes,
+      sha256: known.sha256,
+      bytes: known.bytes,
       provenanceUrl: url,
-      items: [{ filename, url, destPath, sha256: `${ref.name}-${ref.version}-sha` }],
+      items: [{ filename, url, destPath, sha256: known.sha256 }],
     };
   }
 

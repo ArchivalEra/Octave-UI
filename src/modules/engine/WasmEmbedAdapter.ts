@@ -136,17 +136,26 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
               omcMod.omc_set_inwasm_driver(1);
             }
             (window as any).__omc = omcMod;
-          } else if (lane === 'omc') {
+          } else {
             const err = new Error('OpenModelica compiler runtime unavailable');
             (err as any).code = 'FLAVOR_UNAVAILABLE';
             throw err;
           }
         } catch (err: any) {
+          (err as any).code = (err as any).code || 'FLAVOR_UNAVAILABLE';
           if (lane === 'omc') {
-            (err as any).code = (err as any).code || 'FLAVOR_UNAVAILABLE';
             throw err;
           }
-          // 静默降级，不阻断 Octave 主运行
+          // 双引擎模式下 OM 失败：不能静默冒充成功，记录错误并通过 Toast 告知用户
+          (window as any).__omcError = err;
+          console.warn('[WasmEmbedAdapter] OMC bridge failed in dual engine mode:', err);
+          try {
+            const { toastService } = await import('../ui/ToastService.svelte');
+            toastService.warning(
+              `OpenModelica runtime unavailable (${err?.message || err}). Running in Octave-only mode.`,
+              'FLAVOR_UNAVAILABLE'
+            );
+          } catch {}
         }
       }
     } catch (err: any) {

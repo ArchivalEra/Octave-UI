@@ -82,8 +82,9 @@ describe('DownloadStore Deep Module', () => {
       } as any,
       {
         name: 'llvm-wasm',
-        version: '19.1.0',
-        size: 36700160,
+        version: '6.0.12',
+        size: 34693729,
+        sha256: 'cd6450fe7944875cb39f8e4a0790d5a08e032044f1db89054dadcabb749b20ce',
         form: 'tree',
         content: [],
       },

@@ -24,24 +24,73 @@ export class BrowserAssetsAdapter implements IAssetsPort {
   async fetchCatalog(): Promise<ForgeCatalog> {
     if (typeof window !== 'undefined') {
       const assets = (window as any).OctaveAssets;
-      if (assets?.browse) {
-        try {
-          const cat = await assets.browse();
-          if (cat && Array.isArray(cat.packs)) {
-            return cat;
-          }
-        } catch (err) {
-          console.warn('[BrowserAssetsAdapter] OctaveAssets.browse failed, falling back', err);
-        }
-      }
+      // 优先通过 OctaveAssets.catalog() 结合 OctaveAssets.browse() 获取权威货架及元数据 (mail/030 出口)
       if (assets?.catalog) {
         try {
           const cat = await assets.catalog();
           if (cat && Array.isArray(cat.packs)) {
+            if (assets.browse) {
+              try {
+                const entries = await assets.browse();
+                if (Array.isArray(entries)) {
+                  const entryMap = new Map<string, any>();
+                  for (const e of entries) {
+                    if (e && e.name) entryMap.set(e.name, e);
+                  }
+                  for (const p of cat.packs) {
+                    const e = entryMap.get(p.name);
+                    if (e) {
+                      if (e.description !== undefined && e.description !== '') p.description = e.description;
+                      if (e.links !== undefined && Array.isArray(e.links) && e.links.length > 0) p.links = e.links;
+                      if (e.versions !== undefined && Array.isArray(e.versions) && e.versions.length > 0) p.versions = e.versions;
+                      (p as any).status = {
+                        compatible: e.compatible,
+                        fromSource: e.fromSource,
+                        installed: e.installed,
+                        state: e.state,
+                        why: e.why,
+                      };
+                    }
+                  }
+                }
+              } catch (browseErr) {
+                console.warn('[BrowserAssetsAdapter] OctaveAssets.browse failed:', browseErr);
+              }
+            }
             return cat;
           }
         } catch (err) {
-          console.warn('[BrowserAssetsAdapter] OctaveAssets.catalog failed, falling back to direct fetch', err);
+          console.warn('[BrowserAssetsAdapter] OctaveAssets.catalog failed, falling back to browse/direct fetch', err);
+        }
+      }
+
+      if (assets?.browse) {
+        try {
+          const entries = await assets.browse();
+          if (Array.isArray(entries)) {
+            const packs = entries.map((e) => ({
+              name: e.name,
+              version: e.version,
+              description: e.description || '',
+              links: e.links || [],
+              versions: e.versions,
+              form: e.detail?.form || 'pkg',
+              content: e.detail?.content || [],
+              arch: e.detail?.arch,
+              status: {
+                compatible: e.compatible,
+                fromSource: e.fromSource,
+                installed: e.installed,
+                state: e.state,
+                why: e.why,
+              },
+            }));
+            return { packs: packs as any };
+          } else if (entries && Array.isArray((entries as any).packs)) {
+            return entries;
+          }
+        } catch (err) {
+          console.warn('[BrowserAssetsAdapter] OctaveAssets.browse fallback failed:', err);
         }
       }
     }
@@ -94,9 +143,10 @@ export class BrowserAssetsAdapter implements IAssetsPort {
   async install(name: string, options?: InstallOptions): Promise<InstallResult> {
     if (name === 'llvm-wasm' || name.includes('llvm')) {
       return {
-        state: 'ok',
-        message: 'LLVM toolchain capability ready',
-        installed: [name],
+        state: 'failed',
+        cause: 'NOT_INSTALLABLE',
+        why: 'NOT_INSTALLABLE',
+        message: 'llvm-wasm 是编译工具链，由下载管理（DownloadStore），不走装载',
       };
     }
 
@@ -116,11 +166,11 @@ export class BrowserAssetsAdapter implements IAssetsPort {
       };
     } catch (err: any) {
       const verdict = err?.__verdict__;
-      const cause = verdict?.cause || err?.message || 'unknown error';
+      const cause = verdict?.cause || err?.code || err?.message || 'unknown error';
       if (cause === 'not-found' || cause === 'version-not-found') {
         return { state: 'not-found', cause, message: err.message };
       }
-      return { state: 'failed', cause, message: err.message };
+      return { state: 'failed', cause, why: err?.code || cause, message: err.message };
     }
   }
 

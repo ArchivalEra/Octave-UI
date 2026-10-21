@@ -247,6 +247,16 @@ export class PackageManagerPlugin implements OctavePlugin {
    */
   async installPackage(name: string, options?: InstallOptions): Promise<InstallResult> {
     const pkg = this.byName.get(name);
+    // 角色隔离：role: "toolchain" 属于编译工具链，由 DownloadStore 管理，不得走解释器 install 路径
+    if (pkg?.role === 'toolchain' || name === 'llvm-wasm') {
+      return {
+        state: 'failed',
+        name,
+        why: 'NOT_INSTALLABLE',
+        message: 'llvm-wasm 是编译工具链，由下载管理（DownloadStore），不走装载',
+      };
+    }
+
     // 裁决⑤：含 'src' 的源码包，装载/安装的必要条件是 LLVM 工具链已下载
     const hasSrc = pkg && Array.isArray(pkg.content) && pkg.content.includes('src');
     if (hasSrc) {
