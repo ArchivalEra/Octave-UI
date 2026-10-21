@@ -12,6 +12,8 @@ import type {
   FigureCallback,
 } from './types';
 
+import { toastService } from '../ui/ToastService.svelte';
+
 declare global {
   interface Window {
     OctaveEmbed?: {
@@ -150,7 +152,6 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
           (window as any).__omcError = err;
           console.warn('[WasmEmbedAdapter] OMC bridge failed in dual engine mode:', err);
           try {
-            const { toastService } = await import('../ui/ToastService.svelte');
             toastService.warning(
               `OpenModelica runtime unavailable (${err?.message || err}). Running in Octave-only mode.`,
               'FLAVOR_UNAVAILABLE'

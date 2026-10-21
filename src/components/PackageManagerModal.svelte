@@ -285,14 +285,21 @@
     try {
       const res = await packageManagerPlugin.installPackage(item.name, { version });
       if (res.state !== 'ok') {
-        errorMsg = t('package_manager.err_install_failed', { error: res.message || res.cause || res.state });
+        const errKey = res.why ? `errors.${res.why}` : res.cause ? `errors.${res.cause}` : '';
+        errorMsg = (errKey && t(errKey) !== errKey)
+          ? `${t(errKey)} (${res.message || res.cause || res.why})`
+          : t('package_manager.err_install_failed', { error: res.message || res.cause || res.state });
       } else {
         activePlan = null;
         activePlanItem = null;
         await refreshStatuses();
       }
     } catch (err: any) {
-      errorMsg = t('package_manager.err_install_generic', { error: err.message || String(err) });
+      const errCode = err?.code || err?.cause;
+      const codeKey = errCode ? `errors.${errCode}` : '';
+      errorMsg = (codeKey && t(codeKey) !== codeKey)
+        ? `${t(codeKey)} (${err?.message || errCode})`
+        : t('package_manager.err_install_generic', { error: err.message || String(err) });
     }
   }
 

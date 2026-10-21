@@ -17,6 +17,7 @@ describe('PackageManagerPlugin Deep Module', () => {
         version: '0.1.2',
         size: 9960,
         form: 'pkg',
+        role: 'package',
         content: ['m'],
         consumer: 'octave',
         deps: [],
@@ -43,6 +44,7 @@ describe('PackageManagerPlugin Deep Module', () => {
         version: '3.2.2',
         size: 276452,
         form: 'pkg',
+        role: 'package',
         content: ['m'],
         consumer: 'octave',
         deps: ['pyodide'],
@@ -62,6 +64,7 @@ describe('PackageManagerPlugin Deep Module', () => {
         version: '0.26.2',
         size: 22013349,
         form: 'tree',
+        role: 'language-bridge',
         content: [], // 能力层：content 为空数组，非未知
         consumer: 'octave',
         deps: [],
@@ -72,6 +75,7 @@ describe('PackageManagerPlugin Deep Module', () => {
         version: '1.4.5',
         size: 345000,
         form: 'pkg',
+        role: 'package',
         content: ['m', 'src'],
         consumer: 'octave',
         deps: ['control'],
@@ -82,6 +86,7 @@ describe('PackageManagerPlugin Deep Module', () => {
         version: '4.0.1',
         size: 210000,
         form: 'pkg',
+        role: 'package',
         content: ['m'],
         consumer: 'octave',
         deps: [],
@@ -92,6 +97,7 @@ describe('PackageManagerPlugin Deep Module', () => {
         version: '1.2.0',
         size: 512000,
         form: 'pkg',
+        role: 'package',
         content: ['m'],
         consumer: 'omc',
         deps: [],
@@ -102,6 +108,7 @@ describe('PackageManagerPlugin Deep Module', () => {
         version: '1.0.0',
         size: 12000,
         form: 'pkg',
+        role: 'package',
         content: ['m'],
         consumer: ['octave', 'omc'],
         deps: [],
@@ -342,6 +349,36 @@ describe('PackageManagerPlugin Deep Module', () => {
     const res = await plugin.installPackage('llvm-wasm');
     expect(res.state).toBe('failed');
     expect(res.why).toBe('NOT_INSTALLABLE');
+    expect(res.cause).toBe('NOT_INSTALLABLE');
     expect(res.message).toContain('编译工具链');
+
+    // 验证任意带 role: 'toolchain' 的条目均被消费端拦截
+    const customToolchainCat: ForgeCatalog = {
+      packs: [
+        {
+          name: 'zig-wasm',
+          version: '0.11.0',
+          role: 'toolchain',
+          form: 'tree',
+          size: 50000,
+          consumer: ['octave'],
+        },
+      ],
+    };
+    const customAdapter = new MockAssetsAdapter(customToolchainCat);
+    const customPlugin = new PackageManagerPlugin(customAdapter);
+    await customPlugin.loadCatalog();
+    const customRes = await customPlugin.installPackage('zig-wasm');
+    expect(customRes.state).toBe('failed');
+    expect(customRes.why).toBe('NOT_INSTALLABLE');
+    expect(customRes.cause).toBe('NOT_INSTALLABLE');
+    expect(customRes.message).toBe('zig-wasm 是编译工具链，由下载管理（DownloadStore），不走装载');
+  });
+
+  it('permits installing role: language-bridge packages through interpreter layer', async () => {
+    await plugin.loadCatalog();
+    const res = await plugin.installPackage('pyodide');
+    expect(res.state).toBe('ok');
+    expect(res.installed).toEqual(['pyodide']);
   });
 });
