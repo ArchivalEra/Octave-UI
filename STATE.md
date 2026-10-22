@@ -46,19 +46,20 @@
 
 | 键 | 值 | 测于 | 复跑命令 |
 |---|---|---|---|
-| `astro_files` | **2** | 2026-10-22T18:29:34+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
-| `get_assets_port_alive` | **getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）** | 2026-10-22T18:29:34+0800 | `grep -c 'getAssetsPort' src/modules/plugins/package/PackageManagerPlugin.ts` |
-| `integrity_check_physical` | **integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）** | 2026-10-22T18:29:34+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts` |
-| `md_files` | **46** | 2026-10-22T18:29:34+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `md_lines` | **3229** | 2026-10-22T18:29:34+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
-| `py_files` | **30** | 2026-10-22T18:29:34+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `py_lines` | **6556** | 2026-10-22T18:29:34+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
-| `supervisor_no_mock_fallback` | **EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）** | 2026-10-22T18:29:34+0800 | `grep -c 'MockEmbedAdapter' src/modules/engine/EngineSupervisor.ts || true` |
-| `svelte_files` | **20** | 2026-10-22T18:29:34+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
-| `test_files` | **33** | 2026-10-22T18:29:34+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
-| `ts_files` | **95** | 2026-10-22T18:29:34+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
+| `astro_files` | **2** | 2026-10-22T18:29:57+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
+| `get_assets_port_alive` | **getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）** | 2026-10-22T18:29:57+0800 | `grep -c 'getAssetsPort' src/modules/plugins/package/PackageManagerPlugin.ts` |
+| `integrity_check_physical` | **integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）** | 2026-10-22T18:29:57+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts` |
+| `md_files` | **46** | 2026-10-22T18:29:57+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `md_lines` | **3229** | 2026-10-22T18:29:57+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
+| `plot_panel_figure_chain` | **GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）** | 2026-10-22T18:29:57+0800 | `grep -c 'onFigure' src/modules/figure/GraphicsSink.ts` |
+| `py_files` | **30** | 2026-10-22T18:29:57+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `py_lines` | **6569** | 2026-10-22T18:29:57+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
+| `supervisor_no_mock_fallback` | **EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）** | 2026-10-22T18:29:57+0800 | `grep -c 'MockEmbedAdapter' src/modules/engine/EngineSupervisor.ts || true` |
+| `svelte_files` | **20** | 2026-10-22T18:29:57+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
+| `test_files` | **33** | 2026-10-22T18:29:57+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
+| `ts_files` | **95** | 2026-10-22T18:29:57+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
 
-11 条事实。
+12 条事实。
 <!-- /AUTO:FACTS -->
 
 <!-- AUTO:GATES -->

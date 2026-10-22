@@ -120,6 +120,19 @@ def measure_example():
         witness=nomock_cmd, witness_expect="0",
     )
 
+    # wayfinder #5 gate: 锚点——Plots 面板图表事件链存在（onFigure 事件面 + wireFigureSource 单一出口）
+    onfig_cmd = "grep -c 'onFigure' src/modules/figure/GraphicsSink.ts"
+    n_onfig = int(subprocess.run(onfig_cmd, shell=True, capture_output=True, text=True,
+                                 check=True, cwd=GATE_REPO).stdout.strip())
+    facts["plot_panel_figure_chain"] = fact(
+        "GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）",
+        onfig_cmd,
+        "wayfinder #5",
+        "票面 gate: 锚点；值是vitest一次采样（贵不逐字复跑）",
+        replay=False,
+        witness=onfig_cmd, witness_expect=str(n_onfig),
+    )
+
     return facts
 
 
