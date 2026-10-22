@@ -1,13 +1,13 @@
 {
  "schema": 1,
- "generated": "2026-10-22T18:29:57+0800",
+ "generated": "2026-10-22T19:58:32+0800",
  "_why": "事实台账：每条 = 一个**测出来**的值 + 复跑命令 + 出处。别手改，跑 zreflect/facts.py。",
  "facts": {
   "ts_files": {
-   "value": 95,
+   "value": 97,
    "cmd": "find . \\( -path './src/*' -o -path './tests/*' \\) -name '*.ts' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-22",
    "note": "TypeScript 源码与测试文件数"
   },
@@ -15,7 +15,7 @@
    "value": 20,
    "cmd": "find . -path './src/*' -name '*.svelte' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-19",
    "note": "Svelte 5 组件与 Islands 数量"
   },
@@ -23,15 +23,15 @@
    "value": 2,
    "cmd": "find . -path './src/*' -name '*.astro' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-04",
    "note": "Astro 静态页面与布局数"
   },
   "test_files": {
-   "value": 33,
+   "value": 34,
    "cmd": "find . -path './tests/*' -name '*.test.ts' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-22",
    "note": "Vitest 单元测试套件数"
   },
@@ -39,14 +39,14 @@
    "value": 30,
    "cmd": "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-18"
   },
   "py_lines": {
    "value": 6569,
    "cmd": "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-22",
    "note": "刻意 ≥100，用来示范裸数字判据"
   },
@@ -54,14 +54,14 @@
    "value": 46,
    "cmd": "find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-22"
   },
   "md_lines": {
    "value": 3229,
    "cmd": "find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-22",
    "note": "不含机器块：块就渲染在文档里，数进去会让渲染一遍值就过期"
   },
@@ -69,7 +69,7 @@
    "value": "integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）",
    "cmd": "pnpm test -- tests/engine/EngineAssetResolver.test.ts",
    "source": "wayfinder #7",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-22",
    "note": "票面 gate: 锚点；值是 vitest 用例面的一次采样（跑全测太贵不逐字复跑）",
    "replay": false,
@@ -80,7 +80,7 @@
    "value": "getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）",
    "cmd": "grep -c 'getAssetsPort' src/modules/plugins/package/PackageManagerPlugin.ts",
    "source": "wayfinder #8",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-22",
    "note": "票面 gate: 锚点；值是vitest+tsc一次采样（贵不逐字复跑）",
    "replay": false,
@@ -91,7 +91,7 @@
    "value": "EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）",
    "cmd": "grep -c 'MockEmbedAdapter' src/modules/engine/EngineSupervisor.ts || true",
    "source": "wayfinder #9",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-22",
    "note": "票面 gate: 锚点；值是vitest一次采样（贵不逐字复跑）",
    "replay": false,
@@ -102,7 +102,7 @@
    "value": "GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）",
    "cmd": "grep -c 'onFigure' src/modules/figure/GraphicsSink.ts",
    "source": "wayfinder #5",
-   "measured_at": "2026-10-22T18:29:57+0800",
+   "measured_at": "2026-10-22T19:58:32+0800",
    "first_seen": "2026-10-22",
    "note": "票面 gate: 锚点；值是vitest一次采样（贵不逐字复跑）",
    "replay": false,

@@ -1,6 +1,7 @@
 // src/modules/appContext.ts
 // 全局领域服务单例与应用状态上下文：装配 EngineSupervisor、CapabilityPolicy 与 GraphicsSink
 import { EngineSupervisor } from './engine/EngineSupervisor';
+import { onOmcFlavorError } from './engine/OmcBridge';
 import { TerminalController } from './terminal/TerminalController';
 import { HistoryStore } from './history/HistoryStore';
 import { WorkspaceStore } from './workspace/WorkspaceStore';
@@ -90,5 +91,15 @@ supervisor.onStateChange((state) => {
   if (state === 'idle') {
     void workspaceStorage.syncToEngine(supervisor);
   }
+});
+
+// OMC 附加 flavor 失败降级告知：engine 层只 throw 不碰 UI 面，
+// 组合根经 onOmcFlavorError 通道订阅后呈现（双引擎模式 Octave-only 降级的唯一 UI 出口；
+// 纯 omc lane 的失败走 boot reject 主链路，不进这里）。
+onOmcFlavorError((err) => {
+  toastService.warning(
+    `OpenModelica runtime unavailable (${err?.message || err}). Running in Octave-only mode.`,
+    'FLAVOR_UNAVAILABLE'
+  );
 });
 

@@ -12,8 +12,8 @@ import type {
   FigureCallback,
 } from './types';
 
-import { toastService } from '../ui/ToastService.svelte';
 import { EngineAssetResolver, type EngineLane, type EngineVariant } from './EngineAssetResolver';
+import * as OmcBridge from './OmcBridge';
 
 declare global {
   interface Window {
@@ -118,103 +118,23 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
         window.octave = embed;
         WasmEmbedAdapter.alignDocstringsPaths(embed);
         if (lane === 'omc' || opts.enableOmc) {
-          await WasmEmbedAdapter.setupOmcBridge(embed, lane as EngineLane);
+          try {
+            await OmcBridge.setupOmcBridge(embed, lane as EngineLane);
+          } catch (err: any) {
+            if (lane !== 'omc' && err?.code === 'FLAVOR_UNAVAILABLE') {
+              // 双引擎模式（附加 flavor）失败带 FLAVOR_UNAVAILABLE code ⇒ 降级为 Octave-only：
+              // engine 层不碰 UI 面，toast 由组合根经 onOmcFlavorError 通道呈现。
+              console.warn('[WasmEmbedAdapter] OMC flavor unavailable, continuing in Octave-only mode:', err);
+            } else {
+              // lane='omc'（主 flavor）失败 = boot 失败，必须上抛；
+              // 无 code 的意外错误（编程缺陷一类）也不许静默吞掉——静默降级比显式失败更难查。
+              throw err;
+            }
+          }
         }
         return new WasmEmbedAdapter(embed);
       }
     );
-  }
-
-  /**
-   * 初始化 OpenModelica 桥接环境与 MEMFS 路径
-   */
-  static async setupOmcBridge(embed: any, lane?: EngineLane): Promise<void> {
-    try {
-      const FS =
-        embed?.mod?.FS ||
-        (typeof window !== 'undefined'
-          ? (window as any).__octaveHosts?.[0]?.mod?.FS || (window as any).Module?.FS
-          : null);
-      if (!FS) return;
-      try { FS.mkdir('/tmp'); } catch {}
-      if (embed?.eval) {
-        try { await embed.eval("addpath('/tmp');"); } catch {}
-      }
-
-      if (typeof window !== 'undefined' && !(window as any).__omc) {
-        try {
-          await EngineAssetResolver.getInstance().withLocalAssets('omc', 'w32', async () => {
-            const globalBase = (document.querySelector('meta[name="site-base"]')?.getAttribute('content') || (window as any).__siteBase) || '/';
-            const normalizedBase = globalBase.endsWith('/') ? globalBase : `${globalBase}/`;
-            const omcScriptUrl = `${normalizedBase}omc/OpenModelicaCompiler.js`;
-            const omcWasmUrl = `${normalizedBase}omc/OpenModelicaCompiler_bg.wasm`;
-            let omcMod: any = null;
-            let blobUrl: string | null = null;
-
-            try {
-              omcMod = await import(/* @vite-ignore */ omcScriptUrl);
-            } catch (netErr) {
-              // 离线环境降级：若网络/同源加载失败，从 OPFS 本地资产读取 js 胶水
-              try {
-                const resolver = EngineAssetResolver.getInstance();
-                const jsBlob = await resolver.getBlob('downloads/engine/omc/w32/OpenModelicaCompiler.js')
-                  .catch(() => resolver.getBlob('downloads/engine/omc/OpenModelicaCompiler.js'));
-                blobUrl = URL.createObjectURL(new Blob([jsBlob], { type: 'text/javascript' }));
-                omcMod = await import(/* @vite-ignore */ blobUrl);
-              } catch (opfsErr) {
-                console.warn('[WasmEmbedAdapter] OMC import failed from network and OPFS:', netErr, opfsErr);
-                omcMod = null;
-              }
-            }
-
-            try {
-              if (omcMod) {
-                if (typeof omcMod.default === 'function') {
-                  // 显式传参 wasmUrl：防范 blob: 作用域下 new URL(bg, import.meta.url) 抛出 Invalid URL
-                  await omcMod.default(omcWasmUrl);
-                }
-                if (typeof omcMod.omc_set_env === 'function') {
-                  omcMod.omc_set_env('OPENMODELICAHOME', '/usr');
-                }
-                if (typeof omcMod.omc_init === 'function') {
-                  omcMod.omc_init();
-                }
-                if (typeof omcMod.omc_set_inwasm_driver === 'function') {
-                  omcMod.omc_set_inwasm_driver(1);
-                }
-                (window as any).__omc = omcMod;
-              } else {
-                const err = new Error('OpenModelica compiler runtime unavailable');
-                (err as any).code = 'FLAVOR_UNAVAILABLE';
-                throw err;
-              }
-            } finally {
-              if (blobUrl) {
-                URL.revokeObjectURL(blobUrl);
-              }
-            }
-          });
-        } catch (err: any) {
-          (err as any).code = (err as any).code || 'FLAVOR_UNAVAILABLE';
-          if (lane === 'omc') {
-            throw err;
-          }
-          // 双引擎模式下 OM 失败：不能静默冒充成功，记录错误并通过 Toast 告知用户
-          (window as any).__omcError = err;
-          console.warn('[WasmEmbedAdapter] OMC bridge failed in dual engine mode:', err);
-          try {
-            toastService.warning(
-              `OpenModelica runtime unavailable (${err?.message || err}). Running in Octave-only mode.`,
-              'FLAVOR_UNAVAILABLE'
-            );
-          } catch {}
-        }
-      }
-    } catch (err: any) {
-      if (lane === 'omc') {
-        throw err;
-      }
-    }
   }
 
   /**
