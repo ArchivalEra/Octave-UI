@@ -49,6 +49,14 @@ export class PackageManagerPlugin implements OctavePlugin {
     this.port = port;
   }
 
+  /**
+   * 暴露资产端口：port 的单一出口必须是插件本身（seam 持有者），
+   * 调用方（如 appContext 的 catalogProvider 闭包）不得绕过插件直持 port
+   */
+  getAssetsPort(): IAssetsPort {
+    return this.port;
+  }
+
   setDownloadStore(store: DownloadStore): void {
     this.downloadStore = store;
   }

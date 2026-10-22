@@ -712,7 +712,18 @@ export class DownloadStore {
               files: (pkg as any).files || omcMeta.files,
             };
           }
-        } catch {}
+        } catch (err: any) {
+          // 吞错分级：降级到静态元数据是合法路径，但代码级缺陷（"is not a function"）不许无声——
+          // 那意味着 catalogProvider 闭包引用了不存在的方法（死代码缝），必须响亮打出；
+          // 其余（网络族 TypeError 'Failed to fetch'、DownloadError 合法降级）维持静默，离线场景不刷屏
+          if (
+            err &&
+            typeof err.message === 'string' &&
+            err.message.includes('is not a function')
+          ) {
+            console.error('[DownloadStore] catalog provider is broken (code defect):', err);
+          }
+        }
       }
 
       const filenameWasm = 'OpenModelicaCompiler_bg.wasm';
