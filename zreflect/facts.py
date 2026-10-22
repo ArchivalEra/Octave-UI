@@ -107,6 +107,19 @@ def measure_example():
         witness=gap_cmd, witness_expect=str(n_gap),
     )
 
+    # wayfinder #9 gate: 锚点——生产路径无 Mock 回退（supervisor 源零 MockEmbedAdapter 引用）
+    nomock_cmd = "grep -c 'MockEmbedAdapter' src/modules/engine/EngineSupervisor.ts || true"
+    nomock_out = subprocess.run(nomock_cmd, shell=True, capture_output=True, text=True,
+                                check=True, cwd=GATE_REPO).stdout.strip()
+    facts["supervisor_no_mock_fallback"] = fact(
+        "EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）",
+        nomock_cmd,
+        "wayfinder #9",
+        "票面 gate: 锚点；值是vitest一次采样（贵不逐字复跑）",
+        replay=False,
+        witness=nomock_cmd, witness_expect="0",
+    )
+
     return facts
 
 
