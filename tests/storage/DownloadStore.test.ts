@@ -283,8 +283,11 @@ describe('DownloadStore Deep Module', () => {
 
   it('supports decoupled engine download and multi-engine coexistence in OPFS', async () => {
     // 1. 下载 Octave 引擎档 (master)
+    //    #6 起引擎下载是「五件套」：build/manifest 两件也随档抓取（sha256: undefined 走 intake 守卫跳过校验）
     mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', 'sha-js');
     mockFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', 'sha-wasm');
+    mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', 'sha-build');
+    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', 'sha-assets');
 
     expect(store.isEngineDownloaded('master')).toBe(false);
     const recOctave = await store.downloadEngine('master');
@@ -330,6 +333,9 @@ describe('DownloadStore Deep Module', () => {
     rootFetch.setJSON('https://octave.test/octave.build.json', rootEngineBuild);
     rootFetch.setFile('https://octave.test/octave.js', 'root-js', 'sha-root-js');
     rootFetch.setFile('https://octave.test/octave.wasm', 'root-wasm', 'sha-root-wasm');
+    // #6 五件套 +2：部署在站点根目录的两件清单（chosenFolder='' ⇒ url 无前缀）
+    rootFetch.setFile('https://octave.test/octave.build.json', 'root-build', 'sha-root-build');
+    rootFetch.setFile('https://octave.test/assets/manifest.json', 'root-assets', 'sha-root-assets');
 
     const realStore = new DownloadStore({
       storage: memoryStore,
@@ -340,8 +346,13 @@ describe('DownloadStore Deep Module', () => {
 
     const rec = await realStore.downloadEngine('wasm32-final');
     expect(rec.ref.arch).toBe('wasm32-final');
-    expect(rec.bytes).toBe(16);
+    // #6 五件套：两件核心 (10+6) + 两件清单 ('root-build' 11 + 'root-assets' 12) = 37
+    expect(rec.bytes).toBe(37);
     expect(realStore.isEngineDownloaded('wasm32-final')).toBe(true);
+    // 五件套记账面：js/wasm/build/assets-manifest（平铺名）四条全落 downloads/engine/wasm32-final/w32/
+    const paths = rec.files.map((f: { path: string }) => f.path);
+    expect(paths).toContain('downloads/engine/wasm32-final/w32/octave.build.json');
+    expect(paths).toContain('downloads/engine/wasm32-final/w32/assets-manifest.json');
   });
 
   it('rejects HTML responses with clear INDEX_UNREADABLE error rather than naked JSON.parse error', async () => {

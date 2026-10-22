@@ -125,13 +125,54 @@ describe('WasmEmbedAdapter boot with EngineAssetResolver', () => {
   });
 
   it('boots 100% offline with zero network requests when OPFS assets are present', async () => {
+    // #6 离线五件套 fixture：wasm/data/js/build/assets-manifest 五件盘上齐 +
+    // 伪 manifest 记账五条带真算 sha（参照 EngineAssetResolver.test.ts 的
+    // writeVerifiedEngine 写法）⇒ checkPhysicalStatus verified ⇒ boot 走
+    // OPFS 直载路线（octave.js 从本地 Blob 注入），fetch 全断也零网络。
     const { MemoryStore } = await import('../../src/modules/storage/MemoryStore');
     const { EngineAssetResolver } = await import('../../src/modules/engine/EngineAssetResolver');
 
+    function sha256OfNode(data: Uint8Array): string {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const nodeCrypto = require('node:crypto') as typeof import('node:crypto');
+      return nodeCrypto.createHash('sha256').update(data).digest('hex');
+    }
+
     const memoryStore = new MemoryStore();
     await memoryStore.init();
-    await memoryStore.write('downloads/engine/master/w64/octave.wasm', new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01]));
-    await memoryStore.write('downloads/engine/master/w64/octave.data', new Uint8Array([0x4f, 0x43, 0x54, 0x41, 0x56, 0x45]));
+
+    const prefix = 'downloads/engine/master/w64';
+    const fiveFiles: Array<{ name: string; data: Uint8Array }> = [
+      { name: 'octave.wasm', data: new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01]) },
+      { name: 'octave.data', data: new Uint8Array([0x4f, 0x43, 0x54, 0x41, 0x56, 0x45]) },
+      { name: 'octave.js', data: new TextEncoder().encode('// glue') },
+      { name: 'octave.build.json', data: new TextEncoder().encode('{"measured":{"files":{}}}') },
+      { name: 'assets-manifest.json', data: new TextEncoder().encode('{"assets":{}}') },
+    ];
+    for (const f of fiveFiles) {
+      await memoryStore.write(`${prefix}/${f.name}`, f.data);
+    }
+    await memoryStore.write(
+      'downloads/manifest.json',
+      new TextEncoder().encode(
+        JSON.stringify({
+          schema: 1,
+          items: {
+            'engine:octave@11.3.0:master/w64': {
+              ref: { name: 'octave', version: '11.3.0', kind: 'engine', arch: 'master/w64' },
+              sha256: 'combined',
+              bytes: fiveFiles.reduce((s, f) => s + f.data.length, 0),
+              files: fiveFiles.map((f) => ({
+                path: `${prefix}/${f.name}`,
+                sha256: sha256OfNode(f.data),
+                bytes: f.data.length,
+              })),
+              downloadedAt: '2026-10-23T00:00:00.000Z',
+            },
+          },
+        })
+      )
+    );
 
     const resolver = new EngineAssetResolver(memoryStore);
     EngineAssetResolver.setInstance(resolver);
@@ -164,17 +205,105 @@ describe('WasmEmbedAdapter boot with EngineAssetResolver', () => {
       },
     };
 
-    const existingScript = document.createElement('script');
-    existingScript.setAttribute('data-lane', 'master-w64');
-    document.head.appendChild(existingScript);
+    // 不预置 data-lane script：OPFS 直载路线必须自己从本地读 octave.js 注入
+    document.querySelectorAll('script[data-lane]').forEach((s) => s.remove());
 
     const adapter = await WasmEmbedAdapter.boot({ lane: 'master' });
     expect(adapter).toBeInstanceOf(WasmEmbedAdapter);
     expect(wasmFetchedStatus).toBe(200);
     expect(dataFetchedStatus).toBe(200);
-    expect(networkFetchMock).not.toHaveBeenCalled();
+    // 零网络：dummy fetch 从未被调用（本地 script 注入 + scoped 代理全接管）
+    expect(networkFetchMock).toHaveBeenCalledTimes(0);
+    // OPFS 直载证据：data-lane script 是本地注入的（无 src 属性 = 不是网络 script）
+    const injected = document.querySelector('script[data-lane]');
+    expect(injected).not.toBeNull();
+    expect(injected!.getAttribute('data-lane')).toBe('master-w64');
+    expect(injected!.getAttribute('src')).toBeNull();
 
-    existingScript.remove();
+    injected?.remove();
+    EngineAssetResolver.resetInstance();
+  });
+
+  it('throws ENGINE_CORRUPTED before boot when the five-piece set is broken on disk (missing assets-manifest)', async () => {
+    // #6 Q6.4 缺件用例：记账五条、盘上四条（用户手删 assets-manifest.json）
+    // ⇒ integrity corrupted（含缓存不命中验证：先验一次让缓存进 verified，
+    // 再删件，第二次必须不再命中缓存——指纹面与记账面同宽）
+    const { MemoryStore } = await import('../../src/modules/storage/MemoryStore');
+    const { EngineAssetResolver } = await import('../../src/modules/engine/EngineAssetResolver');
+
+    function sha256OfNode(data: Uint8Array): string {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const nodeCrypto = require('node:crypto') as typeof import('node:crypto');
+      return nodeCrypto.createHash('sha256').update(data).digest('hex');
+    }
+
+    const memoryStore = new MemoryStore();
+    await memoryStore.init();
+
+    const prefix = 'downloads/engine/master/w64';
+    const fiveFiles: Array<{ name: string; data: Uint8Array }> = [
+      { name: 'octave.wasm', data: new Uint8Array(2048) },
+      { name: 'octave.data', data: new Uint8Array(1024) },
+      { name: 'octave.js', data: new TextEncoder().encode('// glue') },
+      { name: 'octave.build.json', data: new TextEncoder().encode('{"measured":{"files":{}}}') },
+      { name: 'assets-manifest.json', data: new TextEncoder().encode('{"assets":{}}') },
+    ];
+    for (const f of fiveFiles) {
+      await memoryStore.write(`${prefix}/${f.name}`, f.data);
+    }
+    await memoryStore.write(
+      'downloads/manifest.json',
+      new TextEncoder().encode(
+        JSON.stringify({
+          schema: 1,
+          items: {
+            'engine:octave@11.3.0:master/w64': {
+              ref: { name: 'octave', version: '11.3.0', kind: 'engine', arch: 'master/w64' },
+              sha256: 'combined',
+              bytes: fiveFiles.reduce((s, f) => s + f.data.length, 0),
+              files: fiveFiles.map((f) => ({
+                path: `${prefix}/${f.name}`,
+                sha256: sha256OfNode(f.data),
+                bytes: f.data.length,
+              })),
+              downloadedAt: '2026-10-23T00:00:00.000Z',
+            },
+          },
+        })
+      )
+    );
+
+    const resolver = new EngineAssetResolver(memoryStore);
+    EngineAssetResolver.setInstance(resolver);
+
+    // 先验一次让会话缓存进 verified（指纹记的是五件 stat size）
+    expect((await resolver.checkPhysicalStatus('master')).integrity).toBe('verified');
+
+    // 用户手删 assets-manifest.json：wasm/data 的 size 不变——旧指纹（只看两件）
+    // 会误命中缓存报 verified；五件指纹必须让缓存失活
+    await memoryStore.remove(`${prefix}/assets-manifest.json`);
+
+    const status = await resolver.checkPhysicalStatus('master');
+    expect(status.downloaded).toBe(true); // wasm/data 仍在：存在语义保持
+    expect(status.integrity).toBe('corrupted'); // 记账五条盘上四条 ⇒ 盘变账没变
+
+    // boot 前置对账：corrupted ⇒ throw ENGINE_CORRUPTED（fail fast，不静默走网络）
+    const networkFetchMock = vi.fn();
+    globalThis.fetch = networkFetchMock;
+
+    (globalThis as any).window = {
+      OctaveEmbed: {
+        create: vi.fn(),
+      },
+    };
+
+    await expect(WasmEmbedAdapter.boot({ lane: 'master' })).rejects.toSatisfy((err: unknown) => {
+      const e = err as Error & { code?: string };
+      return e instanceof Error && e.code === 'ENGINE_CORRUPTED';
+    });
+    // fail fast：坏盘不许碰网络下载路线
+    expect(networkFetchMock).toHaveBeenCalledTimes(0);
+
     EngineAssetResolver.resetInstance();
   });
 });

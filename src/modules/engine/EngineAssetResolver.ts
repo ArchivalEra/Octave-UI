@@ -214,16 +214,34 @@ export class EngineAssetResolver implements IEngineAssetResolver {
       return null;
     }
 
-    // Octave 资产匹配: octave.wasm, octave.data 与 octave.js
+    // Octave 资产匹配: octave.wasm, octave.data, octave.js
+    // 加上离线五件套的两条拦截键（#6）：
+    //   · assets/manifest.json  —— assets-loader.js 的 Assets.init(lane.manifest) 按此 URL 取清单；
+    //   · octave.build.json     —— octave-core.js 的 loadManifest() 按此 URL 取构建清单。
+    // w64 档的 manifest.w64.json **不拦**（层③ 按需资产维持网络 + 如实报错，票面裁定）。
     const isWasm = pathname.endsWith('/octave.wasm') || pathname === 'octave.wasm' || pathname.endsWith('octave.wasm');
     const isData = pathname.endsWith('/octave.data') || pathname === 'octave.data' || pathname.endsWith('octave.data');
     const isJs = pathname.endsWith('/octave.js') || pathname === 'octave.js' || pathname.endsWith('octave.js');
+    // 注意 endsWith('manifest.json') 不含 manifest.w64.json（后缀不同），w64 档天然走网络
+    const isAssetsManifest = pathname.endsWith('/assets/manifest.json') || pathname === 'assets/manifest.json';
+    const isBuildJson = pathname.endsWith('/octave.build.json') || pathname === 'octave.build.json';
 
-    if (!isWasm && !isData && !isJs) {
+    if (!isWasm && !isData && !isJs && !isAssetsManifest && !isBuildJson) {
       return null;
     }
 
-    const filename = isWasm ? 'octave.wasm' : isData ? 'octave.data' : 'octave.js';
+    // 存储名映射（#6 唯一一处）：URL 里的 assets/manifest.json 在 OPFS 记账里是
+    // 平铺名 assets-manifest.json（下载时 destPath 就这么定——避免与站点资产清单语义混淆）。
+    // tryServeFromStorage 按 filename 拼存储路径，这里在匹配出口直接换算。
+    const filename = isWasm
+      ? 'octave.wasm'
+      : isData
+      ? 'octave.data'
+      : isJs
+      ? 'octave.js'
+      : isAssetsManifest
+      ? 'assets-manifest.json'
+      : 'octave.build.json';
 
     // 路径防交叉污染检查：
     // 1. 若路径显式包含其他车道名，严禁跨车道误拦截
@@ -356,11 +374,18 @@ export class EngineAssetResolver implements IEngineAssetResolver {
       };
     }
 
-    // Octave: octave.wasm 与 octave.data 均须物理存在且 > 0 字节
+    // Octave: 离线五件套（#6）—— wasm/data/js/build/assets-manifest。
+    // downloaded 语义仍由 wasm+data 两件决定（对齐历史存在语义）；
+    // 五件全部 stat 进 physicals ⇒ 指纹面与 #7 的记账面同宽：
+    // 记账收的是全部五件，指纹只看两件的话，用户删 assets-manifest.json
+    // 而 wasm/data size 不变 ⇒ 缓存命中误报 verified（对账漏判）。
     const standardWasm = `downloads/engine/${lane}/${v}/octave.wasm`;
     const legacyWasm = `downloads/engine/${lane}/octave.wasm`;
     const standardData = `downloads/engine/${lane}/${v}/octave.data`;
     const legacyData = `downloads/engine/${lane}/octave.data`;
+    const standardJs = `downloads/engine/${lane}/${v}/octave.js`;
+    const standardBuild = `downloads/engine/${lane}/${v}/octave.build.json`;
+    const standardAssetsManifest = `downloads/engine/${lane}/${v}/assets-manifest.json`;
 
     let wasmStat = await this._store.stat(standardWasm);
     if (!wasmStat || (wasmStat.size ?? 0) <= 0) {
@@ -381,6 +406,10 @@ export class EngineAssetResolver implements IEngineAssetResolver {
       ? await this._checkLaneIntegrity(lane, v, [
           { stat: wasmStat!, path: wasmStat!.path },
           { stat: dataStat!, path: dataStat!.path },
+          // 缺件进指纹按 size -1：文件删了 ⇒ 指纹必变 ⇒ 缓存不命中 ⇒ 重走全量对账
+          { stat: (await this._store.stat(standardJs)) || { size: -1 }, path: standardJs },
+          { stat: (await this._store.stat(standardBuild)) || { size: -1 }, path: standardBuild },
+          { stat: (await this._store.stat(standardAssetsManifest)) || { size: -1 }, path: standardAssetsManifest },
         ])
       : 'unchecked';
 
@@ -427,6 +456,12 @@ export class EngineAssetResolver implements IEngineAssetResolver {
     for (const phys of physicals) {
       const record = byPath.get(phys.path);
       if (!record) {
+        // 五件指纹把「缺件」（size -1 的占位 stat）也送进来对账：只对**物理在**的件
+        // 查记账缺号；缺件本身不必有账（是否 corrupted 由下面的 sha 复验环对全部记账
+        // 文件逐条 read 兜住——记账有、盘上无 ⇒ read 失败 ⇒ corrupted）。
+        if ((phys.stat.size ?? 0) < 0) {
+          continue;
+        }
         return 'corrupted';
       }
       // size 硬判：截断/膨胀在算哈希前就拦下

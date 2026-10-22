@@ -810,6 +810,31 @@ export class DownloadStore {
       combinedSha += meta.sha256;
     }
 
+    // 离线五件套 +2（#6 Q6.1）：octave.build.json 与 assets/manifest.json 也随引擎下载，
+    // 让 boot 侧（octave-core.js loadManifest / assets-loader.js Assets.init）的清单请求
+    // 能被 EngineAssetResolver 拦截进 OPFS，实现五件齐零网络。
+    // 两条 items 不给 sha256（octave.build.json 本身就是 sha 的产地，没有自证哈希可用；
+    // assets/manifest.json 同为清单类文件）——intake 的 `if (item.sha256 && ...)` 守卫
+    // 自动跳过校验，downloadedFiles.push 记账存 fetchBytes 真算的 sha（#7 对账有账可对）。
+    // 注意 assets/manifest.json 的 destPath 用平铺名 assets-manifest.json——
+    // 避免与站点资产清单语义混淆；EngineAssetResolver.matchRequest 出口做同名映射。
+    // OMC 车道不追加（上面已 return）。
+    const buildSubPath = chosenFolder ? `${chosenFolder}/octave.build.json` : 'octave.build.json';
+    items.push({
+      filename: 'octave.build.json',
+      url: this.resolveUrl(buildSubPath),
+      destPath: `downloads/engine/${lane}/${variant}/octave.build.json`,
+      sha256: undefined,
+    });
+    const assetsManifestSubPath = chosenFolder ? `${chosenFolder}/assets/manifest.json` : 'assets/manifest.json';
+    items.push({
+      filename: 'assets/manifest.json',
+      url: this.resolveUrl(assetsManifestSubPath),
+      destPath: `downloads/engine/${lane}/${variant}/assets-manifest.json`,
+      sha256: undefined,
+    });
+    // 清单类文件不计入 combinedSha（它是内容指纹聚合，口径漂移归 #12 处理，此处不动）
+
     const provenanceSubPath = chosenFolder ? `${chosenFolder}/octave.build.json` : 'octave.build.json';
     return {
       sha256: combinedSha,

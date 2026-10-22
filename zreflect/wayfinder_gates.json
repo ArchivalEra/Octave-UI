@@ -6,6 +6,7 @@
     {"ticket": 8,  "key": "get_assets_port_alive",       "kind": "ledger", "check": null},
     {"ticket": 9,  "key": "supervisor_no_mock_fallback", "kind": "ledger", "check": null},
     {"ticket": 5,  "key": "plot_panel_figure_chain",     "kind": "ledger", "check": null},
+    {"ticket": 6,  "key": "offline_boot_five_piece",     "kind": "ledger", "check": null},
     {"ticket": 11, "key": "engine_layer_no_ui_import",   "kind": "ledger", "check": null},
     {"ticket": 13, "key": "check_wayfinder_selftest",    "kind": "gate",   "check": "zreflect/check_wayfinder.py"}
   ],
@@ -13,6 +14,10 @@
     {"ticket": 9,  "desc": "EngineSupervisor 生产路径零 MockEmbedAdapter 引用", "file": "src/modules/engine/EngineSupervisor.ts", "must_not_contain": "MockEmbedAdapter"},
     {"ticket": 8,  "desc": "getAssetsPort() 定义存在", "file": "src/modules/plugins/package/PackageManagerPlugin.ts", "must_contain": "getAssetsPort"},
     {"ticket": 5,  "desc": "GraphicsSink 事件面 onFigure 存在", "file": "src/modules/figure/GraphicsSink.ts", "must_contain": "onFigure"},
+    {"ticket": 6,  "desc": "matchRequest 拦截键形状：assets-manifest.json 平铺存储名映射在 resolver 源里", "file": "src/modules/engine/EngineAssetResolver.ts", "must_contain": "assets-manifest.json"},
+    {"ticket": 6,  "desc": "matchRequest 拦截键形状：octave.build.json 拦截在 resolver 源里", "file": "src/modules/engine/EngineAssetResolver.ts", "must_contain": "octave.build.json"},
+    {"ticket": 6,  "desc": "boot OPFS 优先形状：WasmEmbedAdapter 走 assertBootable 前置对账", "file": "src/modules/engine/WasmEmbedAdapter.ts", "must_contain": "assertBootable"},
+    {"ticket": 6,  "desc": "五件套下载形状：DownloadStore Octave 分支追加 assets/manifest.json item", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "assets-manifest.json"},
     {"ticket": 11, "desc": "engine 层所有 .ts 不含 toastService（无 UI 旁路）", "dir": "src/modules/engine", "ext": ".ts", "must_not_contain": "toastService"},
     {"ticket": 11, "desc": "appContext 经 onOmcFlavorError 通道订阅（已知缝收编）", "file": "src/modules/appContext.ts", "must_contain": "onOmcFlavorError"},
     {"ticket": 10, "desc": "src/lib/engine 壳不存在（迁移落地面）", "path_must_not_exist": "src/lib/engine", "pending": true},

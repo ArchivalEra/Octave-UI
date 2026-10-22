@@ -162,6 +162,21 @@ def measure_example():
         witness=uiimport_cmd, witness_expect=str(n_noui),
     )
 
+    # wayfinder #6 gate: 锚点——离线五件套 OPFS 直载（boot 反转 + 两拦截键 + 五件指纹）。
+    # 值 = 一次实测采样（用例面叙述），replay=False（跑 vitest 太贵不逐字复跑）；
+    # witness = 便宜 grep（matchRequest 拦截键已进 resolver 源），每提交真跑。
+    five_cmd = "python3 -c \"import os; p='src/modules/engine/EngineAssetResolver.ts'; print(open(p).read().count('assets-manifest.json') if os.path.exists(p) else 'absent')\""
+    n_five = _probe(five_cmd)
+    if n_five is not None:
+      facts["offline_boot_five_piece"] = fact(
+        "boot OPFS 优先（verified ⇒ getBlob 读 octave.js 注入，未下载走网络，corrupted ⇒ throw ENGINE_CORRUPTED）+ matchRequest 两拦截键（assets/manifest.json 映射平铺名 assets-manifest.json、octave.build.json；w64 档 manifest.w64.json 不拦）+ 五件指纹（删 assets-manifest 后缓存不命中 ⇒ corrupted）（tests/engine/ 两文件 + DownloadStore 五件套记账，2026-10-23 实测 326/326 绿）",
+        "pnpm test -- tests/engine/EngineAssetResolver.test.ts tests/engine/WasmEmbedAdapter.test.ts",
+        "wayfinder #6",
+        "票面 gate: 锚点；值是 vitest 用例面的一次采样（跑全测太贵不逐字复跑）",
+        replay=False,
+        witness=five_cmd, witness_expect=str(n_five),
+      )
+
     return facts
 
 

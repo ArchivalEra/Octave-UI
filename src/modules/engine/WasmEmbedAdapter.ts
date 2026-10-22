@@ -48,7 +48,21 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     const scriptUrl = `${base}${scriptPath}`;
     const scriptKey = `${laneFolder}-${isW64 ? 'w64' : 'base'}`;
 
-    // 确保按需加载对应车道的 Emscripten 胶水脚本
+    const variant: EngineVariant = isW64 ? 'w64' : 'w32';
+    const octaveLane: EngineLane = (lane === 'omc' ? 'wasm32-final' : lane) as EngineLane;
+
+    // boot 前置对账（#6 Q6.2b，路线反转）：
+    // · verified ⇒ OPFS 直载零网络（octave.js 从本地读出注入 script）；
+    // · 未下载 false ⇒ 网络路线（未下载走网络下载是合法路径）；
+    // · 坏盘（downloaded 但对账不过）⇒ assertBootable throw ENGINE_CORRUPTED——
+    //   fail fast，绝不把坏字节送进 WebAssembly.compile；重下是用户显式动作。
+    const resolver = EngineAssetResolver.getInstance();
+    const bootable = await resolver.assertBootable(octaveLane, variant);
+
+    // 确保按需加载对应车道的 Emscripten 胶水脚本：
+    // OPFS 已验（bootable）走本地直载；否则网络 <script src> 是唯一来源——
+    // 网络路线失败就是失败（原 onerror 里的 OPFS 降级已按 #6 决议删除：
+    // 对账不过的盘不该被静默拿来兜底，那正是本次修掉的「误报可用」坑）。
     if (typeof document !== 'undefined') {
       const existing = document.querySelector(`script[data-lane]`);
       const currentActive = existing?.getAttribute('data-lane');
@@ -56,30 +70,30 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
         if (existing) {
           existing.remove();
         }
-        await new Promise<void>((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = scriptUrl;
-          s.setAttribute('data-lane', scriptKey);
-          s.onload = () => resolve();
-          s.onerror = async () => {
-            // 离线环境降级：从 OPFS 本地资产读取 octave.js 注入脚本
-            try {
-              const resolver = EngineAssetResolver.getInstance();
-              const jsPath = `downloads/engine/${laneFolder}/${isW64 ? 'w64' : 'w32'}/octave.js`;
-              const legacyJsPath = `downloads/engine/${laneFolder}/octave.js`;
-              const jsBlob = await resolver.getBlob(jsPath).catch(() => resolver.getBlob(legacyJsPath));
-              const jsText = await jsBlob.text();
-              const fallbackScript = document.createElement('script');
-              fallbackScript.setAttribute('data-lane', scriptKey);
-              fallbackScript.textContent = jsText;
-              document.head.appendChild(fallbackScript);
-              resolve();
-            } catch {
+        if (bootable) {
+          // OPFS 直载：从本地资产读 octave.js 注入脚本（原 onerror 降级逻辑转正为主路线，
+          // data-lane 标记保持；保留 legacy 平铺路径 .catch() 降级兼容旧布局）
+          const jsPath = `downloads/engine/${octaveLane}/${variant}/octave.js`;
+          const legacyJsPath = `downloads/engine/${octaveLane}/octave.js`;
+          const jsBlob = await resolver.getBlob(jsPath).catch(() => resolver.getBlob(legacyJsPath));
+          const jsText = await jsBlob.text();
+          const localScript = document.createElement('script');
+          localScript.setAttribute('data-lane', scriptKey);
+          localScript.textContent = jsText;
+          document.head.appendChild(localScript);
+        } else {
+          // 网络路线：未下载是唯一合法走网络的理由
+          await new Promise<void>((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = scriptUrl;
+            s.setAttribute('data-lane', scriptKey);
+            s.onload = () => resolve();
+            s.onerror = () => {
               reject(new Error(`Failed to load engine runtime script from ${scriptUrl}`));
-            }
-          };
-          document.head.appendChild(s);
-        });
+            };
+            document.head.appendChild(s);
+          });
+        }
       }
     }
 
@@ -92,9 +106,6 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
       data: isW64 ? 'w64/octave.data' : 'octave.data',
       manifest: isW64 ? 'assets/manifest.w64.json' : 'assets/manifest.json',
     };
-
-    const variant: EngineVariant = isW64 ? 'w64' : 'w32';
-    const octaveLane: EngineLane = (lane === 'omc' ? 'wasm32-final' : lane) as EngineLane;
 
     return await EngineAssetResolver.getInstance().withLocalAssets(
       octaveLane,

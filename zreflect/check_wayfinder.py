@@ -274,11 +274,19 @@ def _cases():
     _w(APPCTX, "import { onOmcFlavorError } from './engine/OmcBridge';\n"
                "onOmcFlavorError((err) => {});\n")
     _w(DOWNLOAD, "const meta = { sha256: 'ab'.repeat(8) };\n")
+    # #6 五件套断言的夹具目标（形状与真仓一致：两拦截键 + boot 前置对账 + 平铺存储名）
+    RESOLVER = os.path.join(d, "src/modules/engine/EngineAssetResolver.ts")
+    EMBED = os.path.join(d, "src/modules/engine/WasmEmbedAdapter.ts")
+    _w(RESOLVER, "const STORAGE_NAME = 'assets-manifest.json';"
+                 " const INTERCEPT = 'octave.build.json';\n")
+    _w(EMBED, "const gate = 'assertBootable';\n")
+    _w(DOWNLOAD, DOWNLOAD and open(DOWNLOAD, encoding="utf-8").read()
+       + "const FLAT = 'assets-manifest.json';\n")
     # 夹具台账键集（A 面）。gate 锚点在夹具里指向不存在的文件（zreflect/ 不在
     # 夹具根）⇒ 良好用例须先把该锚点换成夹具内在册的路径。
     keys = {"integrity_check_physical", "get_assets_port_alive",
             "supervisor_no_mock_fallback", "plot_panel_figure_chain",
-            "engine_layer_no_ui_import"}
+            "engine_layer_no_ui_import", "offline_boot_five_piece"}
     # 基底登记表 = 真登记表（含 pending 两条）；gate 锚点的 check 指向夹具里
     # 真实存在的文件（闸门自己），保持 A/B 两面在夹具上完整可判。
     good_reg = json.load(open(os.path.join(

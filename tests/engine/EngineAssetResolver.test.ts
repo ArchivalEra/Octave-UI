@@ -113,6 +113,60 @@ describe('EngineAssetResolver Deep Module', () => {
     expect(resolver.matchRequest('wasm32-final', 'w32', '/w64/octave.wasm')).toBeNull();
   });
 
+  it('matchRequest: #6 离线五件套两拦截键（assets/manifest.json / octave.build.json）走同一防交叉面', () => {
+    // wasm32-final (w32) 规则：本车道命中（存储名映射：manifest.json ⇒ assets-manifest.json）
+    expect(resolver.matchRequest('wasm32-final', 'w32', '/lanes/wasm32-final/assets/manifest.json')).toEqual({
+      filename: 'assets-manifest.json',
+    });
+    expect(resolver.matchRequest('wasm32-final', 'w32', '/lanes/wasm32-final/octave.build.json')).toEqual({
+      filename: 'octave.build.json',
+    });
+
+    // master 规则：不得交叉命中 wasm32-final 的清单请求
+    expect(resolver.matchRequest('master', 'w64', '/lanes/wasm32-final/assets/manifest.json')).toBeNull();
+    expect(resolver.matchRequest('master', 'w64', '/lanes/wasm32-final/octave.build.json')).toBeNull();
+
+    // 根相对通用路径（不含 /lanes/）⇒ 命中（与 wasm/data/js 同一 isGeneric 面）
+    expect(resolver.matchRequest('wasm32-final', 'w32', '/assets/manifest.json')).toEqual({
+      filename: 'assets-manifest.json',
+    });
+    expect(resolver.matchRequest('wasm32-final', 'w32', '/octave.build.json')).toEqual({
+      filename: 'octave.build.json',
+    });
+
+    // w64 档的 manifest.w64.json 不拦（票面裁定固化：层③ 按需资产维持网络 + 如实报错）
+    expect(resolver.matchRequest('master', 'w64', '/lanes/master/w64/assets/manifest.w64.json')).toBeNull();
+    expect(resolver.matchRequest('master', 'w64', '/assets/manifest.w64.json')).toBeNull();
+
+    // 冲突架构防交叉：w32 规则不拦 w64 目录下的清单
+    expect(resolver.matchRequest('wasm32-final', 'w32', '/lanes/master/w64/assets/manifest.json')).toBeNull();
+  });
+
+  it('matchRequest → tryServeFromStorage: manifest.json 映射到平铺存储名 assets-manifest.json 并从 OPFS 服务', async () => {
+    // #6 存储名映射的端到端：URL 里的 assets/manifest.json 在 OPFS 是
+    // downloads/engine/${lane}/${variant}/assets-manifest.json（下载时的 destPath）
+    const manifestBytes = new TextEncoder().encode('{"assets":{"a.js":{}}}');
+    await memoryStore.write('downloads/engine/wasm32-final/w32/assets-manifest.json', manifestBytes);
+    const buildBytes = new TextEncoder().encode('{"measured":{"files":{}}}');
+    await memoryStore.write('downloads/engine/wasm32-final/w32/octave.build.json', buildBytes);
+
+    const dummyNetworkFetch = vi.fn().mockResolvedValue(new Response('from network'));
+    globalThis.fetch = dummyNetworkFetch;
+
+    await resolver.withLocalAssets('wasm32-final', 'w32', async () => {
+      const resManifest = await fetch('https://octave.test/lanes/wasm32-final/assets/manifest.json');
+      expect(resManifest.status).toBe(200);
+      expect(new Uint8Array(await resManifest.arrayBuffer())).toEqual(manifestBytes);
+
+      const resBuild = await fetch('https://octave.test/lanes/wasm32-final/octave.build.json');
+      expect(resBuild.status).toBe(200);
+      expect(new Uint8Array(await resBuild.arrayBuffer())).toEqual(buildBytes);
+    });
+
+    // 两键全被本地接管：网络 fetch 不被调用
+    expect(dummyNetworkFetch).not.toHaveBeenCalled();
+  });
+
   it('evict: physically removes engine files and transitions status to downloaded=false', async () => {
     await memoryStore.write('downloads/engine/master/w64/octave.wasm', new Uint8Array([1, 2]));
     await memoryStore.write('downloads/engine/master/w64/octave.data', new Uint8Array([3, 4]));
@@ -254,15 +308,21 @@ describe('EngineAssetResolver Deep Module', () => {
     return nodeCrypto.createHash('sha256').update(data).digest('hex');
   }
 
-  /** 写完整两文件 + 伪 manifest 记账（DownloadStore download() 成功后的盘面形状） */
+  /** 写完整五件套 + 伪 manifest 记账（DownloadStore download() 成功后的盘面形状，#6 起 +2 件） */
   async function writeVerifiedEngine(): Promise<{ wasm: Uint8Array; data: Uint8Array }> {
     const wasm = new Uint8Array(2048);
     const data = new Uint8Array(1024);
     for (let i = 0; i < wasm.length; i++) wasm[i] = i & 0xff;
     for (let i = 0; i < data.length; i++) data[i] = (i * 7) & 0xff;
+    const js = new TextEncoder().encode('// octave glue');
+    const build = new TextEncoder().encode('{"measured":{"files":{}}}');
+    const assetsManifest = new TextEncoder().encode('{"assets":{}}');
 
     await memoryStore.write('downloads/engine/master/w64/octave.wasm', wasm);
     await memoryStore.write('downloads/engine/master/w64/octave.data', data);
+    await memoryStore.write('downloads/engine/master/w64/octave.js', js);
+    await memoryStore.write('downloads/engine/master/w64/octave.build.json', build);
+    await memoryStore.write('downloads/engine/master/w64/assets-manifest.json', assetsManifest);
 
     await memoryStore.write(
       manifestPath,
@@ -273,10 +333,13 @@ describe('EngineAssetResolver Deep Module', () => {
             'engine:octave@11.3.0:master/w64': {
               ref: { name: 'octave', version: '11.3.0', kind: 'engine', arch: 'master/w64' },
               sha256: 'combined',
-              bytes: wasm.length + data.length,
+              bytes: wasm.length + data.length + js.length + build.length + assetsManifest.length,
               files: [
                 { path: 'downloads/engine/master/w64/octave.wasm', sha256: sha256OfNode(wasm), bytes: wasm.length },
                 { path: 'downloads/engine/master/w64/octave.data', sha256: sha256OfNode(data), bytes: data.length },
+                { path: 'downloads/engine/master/w64/octave.js', sha256: sha256OfNode(js), bytes: js.length },
+                { path: 'downloads/engine/master/w64/octave.build.json', sha256: sha256OfNode(build), bytes: build.length },
+                { path: 'downloads/engine/master/w64/assets-manifest.json', sha256: sha256OfNode(assetsManifest), bytes: assetsManifest.length },
               ],
               downloadedAt: '2026-10-22T00:00:00.000Z',
             },
@@ -375,6 +438,23 @@ describe('EngineAssetResolver Deep Module', () => {
     // octave.data 物理不在 ⇒ downloaded=false（存在语义）；此时不猜完整性
     expect(status.downloaded).toBe(false);
     expect(status.integrity).toBe('unchecked');
+  });
+
+  it('integrity: #6 五件指纹——缓存 verified 后手删 assets-manifest.json（wasm/data size 不变）⇒ 缓存不命中 ⇒ corrupted', async () => {
+    // 复跑方式：五件齐 + 记账先验一次（缓存进 verified），再删 assets-manifest.json。
+    // 旧指纹只拼 wasm/data 的 stat size ⇒ 此处会误命中缓存报 verified（#6 最大隐藏坑）；
+    // 修法是指纹面与记账面同宽（五件全 stat，缺件 size 记 -1 ⇒ 指纹必变）。
+    const five = await writeVerifiedEngine();
+
+    expect((await resolver.checkPhysicalStatus('master')).integrity).toBe('verified');
+
+    // 手删 assets-manifest.json：wasm 与 data 的 stat size 分毫未动
+    await memoryStore.remove('downloads/engine/master/w64/assets-manifest.json');
+
+    const status = await resolver.checkPhysicalStatus('master');
+    expect(status.downloaded).toBe(true); // wasm/data 仍在：存在语义保持
+    expect(status.integrity).toBe('corrupted'); // 记账五条盘上四条 ⇒ 缓存必须失活并报坏
+    expect(status.totalBytes).toBe(five.wasm.length + five.data.length);
   });
 
   it('integrity: OMC 车道同走 manifest 对账（其文件也在 manifest files[] 里）', async () => {
