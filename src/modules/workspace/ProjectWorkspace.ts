@@ -12,6 +12,7 @@ import type { WorkspaceStorageManager } from '../storage/WorkspaceStorageManager
 import type { DownloadStore } from '../storage/DownloadStore';
 import type { DownloadRecord, DownloadProgressCallback } from '../storage/downloadTypes';
 import { p5FigureOverlayPlugin } from '../plugins';
+import { EngineAssetResolver, type EngineAssetStatus } from '../engine/EngineAssetResolver';
 
 export type WorkbenchMode = 'notebook' | 'terminal';
 
@@ -220,7 +221,6 @@ export class ProjectWorkspace {
       return;
     }
     this._supervisor.setLane(lane);
-    this._activeLane = lane;
     this._notify();
   }
 
@@ -230,8 +230,11 @@ export class ProjectWorkspace {
       return;
     }
     this._supervisor.setLane(lane);
-    this._activeLane = lane;
     this._notify();
+  }
+
+  async checkPhysicalEngineStatus(lane: EngineLane): Promise<EngineAssetStatus> {
+    return EngineAssetResolver.getInstance().checkPhysicalStatus(lane);
   }
 
   get isOmcEnabled(): boolean {

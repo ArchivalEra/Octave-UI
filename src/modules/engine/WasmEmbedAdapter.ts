@@ -13,6 +13,7 @@ import type {
 } from './types';
 
 import { toastService } from '../ui/ToastService.svelte';
+import { EngineAssetResolver, type EngineLane, type EngineVariant } from './EngineAssetResolver';
 
 declare global {
   interface Window {
@@ -60,7 +61,23 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
           s.src = scriptUrl;
           s.setAttribute('data-lane', scriptKey);
           s.onload = () => resolve();
-          s.onerror = () => reject(new Error(`Failed to load engine runtime script from ${scriptUrl}`));
+          s.onerror = async () => {
+            // 离线环境降级：从 OPFS 本地资产读取 octave.js 注入脚本
+            try {
+              const resolver = EngineAssetResolver.getInstance();
+              const jsPath = `downloads/engine/${laneFolder}/${isW64 ? 'w64' : 'w32'}/octave.js`;
+              const legacyJsPath = `downloads/engine/${laneFolder}/octave.js`;
+              const jsBlob = await resolver.getBlob(jsPath).catch(() => resolver.getBlob(legacyJsPath));
+              const jsText = await jsBlob.text();
+              const fallbackScript = document.createElement('script');
+              fallbackScript.setAttribute('data-lane', scriptKey);
+              fallbackScript.textContent = jsText;
+              document.head.appendChild(fallbackScript);
+              resolve();
+            } catch {
+              reject(new Error(`Failed to load engine runtime script from ${scriptUrl}`));
+            }
+          };
           document.head.appendChild(s);
         });
       }
@@ -76,27 +93,36 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
       manifest: isW64 ? 'assets/manifest.w64.json' : 'assets/manifest.json',
     };
 
-    const bootPromise = window.OctaveEmbed.create({
-      base,
-      mount: opts.mount || '#octave-raw-output',
-      home: opts.home,
-      id: opts.id || 'default',
-      lane: lanePlan,
-    });
+    const variant: EngineVariant = isW64 ? 'w64' : 'w32';
+    const octaveLane: EngineLane = (lane === 'omc' ? 'wasm32-final' : lane) as EngineLane;
 
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`Octave 引擎 (${lane}) 启动超时 (30 秒)。请检查网络或控制台。`));
-      }, 30000);
-    });
+    return await EngineAssetResolver.getInstance().withLocalAssets(
+      octaveLane,
+      variant,
+      async () => {
+        const bootPromise = window.OctaveEmbed!.create({
+          base,
+          mount: opts.mount || '#octave-raw-output',
+          home: opts.home,
+          id: opts.id || 'default',
+          lane: lanePlan,
+        });
 
-    const embed = await Promise.race([bootPromise, timeoutPromise]);
-    window.octave = embed;
-    WasmEmbedAdapter.alignDocstringsPaths(embed);
-    if (lane === 'omc' || opts.enableOmc) {
-      await WasmEmbedAdapter.setupOmcBridge(embed, lane);
-    }
-    return new WasmEmbedAdapter(embed);
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`Octave 引擎 (${lane}) 启动超时 (30 秒)。请检查网络或控制台。`));
+          }, 30000);
+        });
+
+        const embed = await Promise.race([bootPromise, timeoutPromise]);
+        window.octave = embed;
+        WasmEmbedAdapter.alignDocstringsPaths(embed);
+        if (lane === 'omc' || opts.enableOmc) {
+          await WasmEmbedAdapter.setupOmcBridge(embed, lane as EngineLane);
+        }
+        return new WasmEmbedAdapter(embed);
+      }
+    );
   }
 
   /**
@@ -117,32 +143,57 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
 
       if (typeof window !== 'undefined' && !(window as any).__omc) {
         try {
-          const globalBase = (document.querySelector('meta[name="site-base"]')?.getAttribute('content') || (window as any).__siteBase) || '/';
-          const normalizedBase = globalBase.endsWith('/') ? globalBase : `${globalBase}/`;
-          const omcScriptUrl = `${normalizedBase}omc/OpenModelicaCompiler.js`;
-          const omcMod = await (import(/* @vite-ignore */ omcScriptUrl).catch((err) => {
-            console.warn('[WasmEmbedAdapter] OMC import failed:', err);
-            return null;
-          }));
-          if (omcMod) {
-            if (typeof omcMod.default === 'function') {
-              await omcMod.default();
+          await EngineAssetResolver.getInstance().withLocalAssets('omc', 'w32', async () => {
+            const globalBase = (document.querySelector('meta[name="site-base"]')?.getAttribute('content') || (window as any).__siteBase) || '/';
+            const normalizedBase = globalBase.endsWith('/') ? globalBase : `${globalBase}/`;
+            const omcScriptUrl = `${normalizedBase}omc/OpenModelicaCompiler.js`;
+            const omcWasmUrl = `${normalizedBase}omc/OpenModelicaCompiler_bg.wasm`;
+            let omcMod: any = null;
+            let blobUrl: string | null = null;
+
+            try {
+              omcMod = await import(/* @vite-ignore */ omcScriptUrl);
+            } catch (netErr) {
+              // 离线环境降级：若网络/同源加载失败，从 OPFS 本地资产读取 js 胶水
+              try {
+                const resolver = EngineAssetResolver.getInstance();
+                const jsBlob = await resolver.getBlob('downloads/engine/omc/w32/OpenModelicaCompiler.js')
+                  .catch(() => resolver.getBlob('downloads/engine/omc/OpenModelicaCompiler.js'));
+                blobUrl = URL.createObjectURL(new Blob([jsBlob], { type: 'text/javascript' }));
+                omcMod = await import(/* @vite-ignore */ blobUrl);
+              } catch (opfsErr) {
+                console.warn('[WasmEmbedAdapter] OMC import failed from network and OPFS:', netErr, opfsErr);
+                omcMod = null;
+              }
             }
-            if (typeof omcMod.omc_set_env === 'function') {
-              omcMod.omc_set_env('OPENMODELICAHOME', '/usr');
+
+            try {
+              if (omcMod) {
+                if (typeof omcMod.default === 'function') {
+                  // 显式传参 wasmUrl：防范 blob: 作用域下 new URL(bg, import.meta.url) 抛出 Invalid URL
+                  await omcMod.default(omcWasmUrl);
+                }
+                if (typeof omcMod.omc_set_env === 'function') {
+                  omcMod.omc_set_env('OPENMODELICAHOME', '/usr');
+                }
+                if (typeof omcMod.omc_init === 'function') {
+                  omcMod.omc_init();
+                }
+                if (typeof omcMod.omc_set_inwasm_driver === 'function') {
+                  omcMod.omc_set_inwasm_driver(1);
+                }
+                (window as any).__omc = omcMod;
+              } else {
+                const err = new Error('OpenModelica compiler runtime unavailable');
+                (err as any).code = 'FLAVOR_UNAVAILABLE';
+                throw err;
+              }
+            } finally {
+              if (blobUrl) {
+                URL.revokeObjectURL(blobUrl);
+              }
             }
-            if (typeof omcMod.omc_init === 'function') {
-              omcMod.omc_init();
-            }
-            if (typeof omcMod.omc_set_inwasm_driver === 'function') {
-              omcMod.omc_set_inwasm_driver(1);
-            }
-            (window as any).__omc = omcMod;
-          } else {
-            const err = new Error('OpenModelica compiler runtime unavailable');
-            (err as any).code = 'FLAVOR_UNAVAILABLE';
-            throw err;
-          }
+          });
         } catch (err: any) {
           (err as any).code = (err as any).code || 'FLAVOR_UNAVAILABLE';
           if (lane === 'omc') {

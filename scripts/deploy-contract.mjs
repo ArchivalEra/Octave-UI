@@ -63,7 +63,7 @@ function walk(dir, ext) {
  * /lanes/… → 命中 SPA 兜底页（text/html）→ 脚本不执行 → "缺 OCTAVE 工厂"。
  * 契约在构建后统一补前缀（只认字面量起始处，不碰其它字符串）。
  */
-const JS_ASSET_PREFIXES = ["/lanes/", "/w64/", "/bridge/", "/assets/", "/_astro/"];
+const JS_ASSET_PREFIXES = ["/lanes/", "/w64/", "/bridge/", "/assets/", "/_astro/", "/omc/"];
 
 function rewriteJsLiterals(code) {
   let n = 0;

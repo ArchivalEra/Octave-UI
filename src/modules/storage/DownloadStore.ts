@@ -21,6 +21,7 @@ import {
 import type { FetchPort } from './FetchPort';
 import { BrowserFetchAdapter, computeSha256 } from './FetchPort';
 import type { ForgeCatalog, ForgePackageItem, PackageVersionCandidate } from '../plugins/package/types';
+import { EngineAssetResolver } from '../engine/EngineAssetResolver';
 
 export interface DownloadStoreOptions {
   storage?: Store;
@@ -40,6 +41,30 @@ export const KNOWN_RUNTIME_METADATA: Record<string, { bytes: number; sha256: str
   'pyodide@314.0.7': {
     bytes: 13742761,
     sha256: '6a4976babd0cb34c8906e4847405614db92c70588b42f27d7612898c3debbd76',
+  },
+};
+
+export const KNOWN_ENGINE_METADATA: Record<
+  string,
+  {
+    bytes: number;
+    sha256: string;
+    files: Record<string, { bytes: number; sha256: string }>;
+  }
+> = {
+  'omc@1.25.0': {
+    bytes: 74635990,
+    sha256: '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d00156c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17',
+    files: {
+      'OpenModelicaCompiler_bg.wasm': {
+        bytes: 74579404,
+        sha256: '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001',
+      },
+      'OpenModelicaCompiler.js': {
+        bytes: 56586,
+        sha256: '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17',
+      },
+    },
   },
 };
 
@@ -105,42 +130,77 @@ export class DownloadStore {
     return this.activeDownloads.has(key);
   }
 
-  getEngineRecord(lane: string): DownloadRecord | null {
-    const ref: DownloadRef = lane === 'omc'
+  getEngineRecord(lane: string, variant?: 'w64' | 'w32'): DownloadRecord | null {
+    const is64 = lane === 'master' || lane === 'IllegalPerformance';
+    const v = variant || (is64 ? 'w64' : 'w32');
+    const refWithVariant: DownloadRef = lane === 'omc'
+      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: `omc/${v}` }
+      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: `${lane}/${v}` };
+    const rec = this.getRecord(refWithVariant);
+    if (rec) return rec;
+
+    const refSimple: DownloadRef = lane === 'omc'
       ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
       : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
-    return this.getRecord(ref);
+    return this.getRecord(refSimple);
   }
 
-  isEngineDownloaded(lane: string): boolean {
-    const ref: DownloadRef = lane === 'omc'
+  isEngineDownloaded(lane: string, variant?: 'w64' | 'w32'): boolean {
+    const is64 = lane === 'master' || lane === 'IllegalPerformance';
+    const v = variant || (is64 ? 'w64' : 'w32');
+    const refWithVariant: DownloadRef = lane === 'omc'
+      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: `omc/${v}` }
+      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: `${lane}/${v}` };
+    const refSimple: DownloadRef = lane === 'omc'
       ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
       : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
-    return this.has(ref);
+    return this.has(refWithVariant) || this.has(refSimple);
   }
 
-  isEngineDownloading(lane: string): boolean {
-    const ref: DownloadRef = lane === 'omc'
+  isEngineDownloading(lane: string, variant?: 'w64' | 'w32'): boolean {
+    const is64 = lane === 'master' || lane === 'IllegalPerformance';
+    const v = variant || (is64 ? 'w64' : 'w32');
+    const refWithVariant: DownloadRef = lane === 'omc'
+      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: `omc/${v}` }
+      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: `${lane}/${v}` };
+    const refSimple: DownloadRef = lane === 'omc'
       ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
       : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
-    return this.isDownloading(ref);
+    return this.isDownloading(refWithVariant) || this.isDownloading(refSimple);
   }
 
   async downloadEngine(
     lane: string,
-    options?: { onProgress?: DownloadProgressCallback; signal?: AbortSignal }
+    options?: { variant?: 'w64' | 'w32'; onProgress?: DownloadProgressCallback; signal?: AbortSignal }
   ): Promise<DownloadRecord> {
+    const is64 = lane === 'master' || lane === 'IllegalPerformance';
+    const v = options?.variant || (is64 ? 'w64' : 'w32');
+    const arch = options?.variant ? `${lane}/${v}` : (lane === 'omc' ? 'wasm32' : lane);
     const ref: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
-      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
+      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch }
+      : { kind: 'engine', name: 'octave', version: '11.3.0', arch };
     return this.download(ref, options);
   }
 
-  async removeEngine(lane: string): Promise<void> {
-    const ref: DownloadRef = lane === 'omc'
+  async removeEngine(lane: string, variant?: 'w64' | 'w32'): Promise<void> {
+    const is64 = lane === 'master' || lane === 'IllegalPerformance';
+    const v = variant || (is64 ? 'w64' : 'w32');
+    const refWithVariant: DownloadRef = lane === 'omc'
+      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: `omc/${v}` }
+      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: `${lane}/${v}` };
+    const refSimple: DownloadRef = lane === 'omc'
       ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
       : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
-    await this.remove(ref);
+    await this.remove(refWithVariant);
+    await this.remove(refSimple);
+
+    // 物理清理：即使清单未记录或损坏，也彻底物理清除存储中的残留文件
+    try {
+      const resolver = new EngineAssetResolver(this.storage);
+      await resolver.evict(lane as any, v);
+    } catch {
+      // 容错处理
+    }
   }
 
   async init(): Promise<void> {
@@ -627,52 +687,72 @@ export class DownloadStore {
   }
 
   private async resolveEngineTarget(ref: DownloadRef) {
-    const lane = ref.arch || this.laneProvider?.() || 'master';
+    const rawArch = ref.arch || this.laneProvider?.() || 'master';
+    let lane = rawArch;
+    let variant: 'w64' | 'w32';
+    if (rawArch.includes('/')) {
+      const parts = rawArch.split('/');
+      lane = parts[0];
+      variant = parts[1] as 'w64' | 'w32';
+    } else {
+      variant = (lane === 'master' || lane === 'IllegalPerformance') ? 'w64' : 'w32';
+    }
 
     if (ref.name === 'omc' || lane === 'omc') {
-      // OpenModelica 第二引擎档 (mail/016, 017)
+      // 优先从 catalogProvider 动态读取 omc 引擎条目 (mail/053 §二)
+      let omcMeta = KNOWN_ENGINE_METADATA['omc@1.25.0'];
+      if (this.catalogProvider) {
+        try {
+          const cat = await this.catalogProvider();
+          const pkg = (cat.packs || []).find((p) => p.name === 'omc');
+          if (pkg && (pkg as any).sha256 && (pkg as any).size) {
+            omcMeta = {
+              bytes: (pkg as any).size,
+              sha256: (pkg as any).sha256,
+              files: (pkg as any).files || omcMeta.files,
+            };
+          }
+        } catch {}
+      }
+
       const filenameWasm = 'OpenModelicaCompiler_bg.wasm';
       const filenameJs = 'OpenModelicaCompiler.js';
       const urlWasm = this.resolveUrl(`/omc/${filenameWasm}`);
       const urlJs = this.resolveUrl(`/omc/${filenameJs}`);
 
-      // 真实测算：74,579,404 B wasm + 56,586 B js = 74,635,990 B (~71.2 MiB)
-      const bytes = 74635990;
-      const shaWasm = '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001';
-      const shaJs = '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17';
+      const files = omcMeta.files;
+      const shaWasm = files[filenameWasm]?.sha256 || '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001';
+      const shaJs = files[filenameJs]?.sha256 || '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17';
+
       return {
-        sha256: `${shaWasm}${shaJs}`,
-        bytes,
+        sha256: omcMeta.sha256 || `${shaWasm}${shaJs}`,
+        bytes: omcMeta.bytes,
         provenanceUrl: urlWasm,
         items: [
           {
             filename: filenameWasm,
             url: urlWasm,
-            destPath: `downloads/engine/omc/${filenameWasm}`,
+            destPath: `downloads/engine/omc/${variant}/${filenameWasm}`,
             sha256: shaWasm,
           },
           {
             filename: filenameJs,
             url: urlJs,
-            destPath: `downloads/engine/omc/${filenameJs}`,
+            destPath: `downloads/engine/omc/${variant}/${filenameJs}`,
             sha256: shaJs,
           },
         ],
       };
     }
 
-    // Octave 引擎档：从 <site>/lanes/<lane>/octave.build.json 的 measured.files 拿取权威 sha (host-007 §①)
-    // 候选路径列表：先尝试多车道同步目录 (lanes/<lane>)，再按 host-007 规范回退到同源随档部署位置 (<site>/octave.build.json 或 <site>/w64/...)
+    // Octave 引擎档：统一按 downloads/engine/${lane}/${variant}/ 布局存储
     const candidateFolders: string[] = [];
     candidateFolders.push(`lanes/${lane}`);
-
-    if (lane === 'wasm32-final' || lane === 'base') {
-      candidateFolders.push('');
-    } else if (lane === 'master' || lane === 'w64' || lane === 'IllegalPerformance') {
-      candidateFolders.push('w64');
+    if (variant === 'w64') {
       candidateFolders.push(`lanes/${lane}/w64`);
-      candidateFolders.push('');
+      candidateFolders.push('w64');
     }
+    candidateFolders.push('');
 
     let chosenFolder = '';
     let buildManifest: any = null;
@@ -713,7 +793,7 @@ export class DownloadStore {
     for (const [filename, meta] of Object.entries(files)) {
       const fileSubPath = chosenFolder ? `${chosenFolder}/${filename}` : filename;
       const url = this.resolveUrl(fileSubPath);
-      const destPath = `downloads/engine/${lane}/${filename}`;
+      const destPath = `downloads/engine/${lane}/${variant}/${filename}`;
       items.push({ filename, url, destPath, sha256: meta.sha256 });
       totalBytes += meta.bytes;
       combinedSha += meta.sha256;

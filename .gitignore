@@ -70,6 +70,7 @@
 !/scripts/**
 
 # 6. 二次排除构建产物、依赖和系统/缓存文件（防止上述目录通配符误带入）
+# 注意：*.wasm 排除大文件进 git 树；OMC wasm (74.5MB) 遵循同源托管契约 (mail/053)，由 pages.yml / sync-lanes.sh 构建期从 site-omc 同步
 *.wasm
 *.data
 *.oct

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { supervisor, themeManager, projectWorkspace, i18n, t, toastService } from '../modules/appContext';
   import type { SupervisorState, EngineLane } from '../modules/engine/types';
+  import { EngineAssetResolver } from '../modules/engine/EngineAssetResolver';
   import type { Locale } from '../modules/i18n/types';
   import type { WorkbenchMode } from '../modules/workspace/ProjectWorkspace';
 
@@ -28,10 +29,31 @@
   let directoryName = $state<string | null>(projectWorkspace.directoryName);
   let isCoiAvailable = $state(true);
   let downloadRevision = $state(0);
+  let physicalDownloaded = $state<Record<string, boolean>>({});
+
+  async function checkAllPhysicalStatus() {
+    const lanes: EngineLane[] = ['wasm32-final', 'master', 'IllegalPerformance', 'omc'];
+    const results = await Promise.all(
+      lanes.map(async (l) => {
+        try {
+          const res = await EngineAssetResolver.getInstance().checkPhysicalStatus(l);
+          return { lane: l, downloaded: res.downloaded };
+        } catch {
+          return { lane: l, downloaded: false };
+        }
+      })
+    );
+    const updated: Record<string, boolean> = {};
+    for (const r of results) {
+      updated[r.lane] = r.downloaded;
+    }
+    physicalDownloaded = updated;
+  }
 
   function isEngineDownloaded(lane: string): boolean {
     if (downloadRevision < 0) return false;
-    return projectWorkspace.isEngineDownloaded(lane);
+    // 物理存在为唯一对账事实（Physical Stat Invariant）：仅当物理对账通过时才为 true
+    return physicalDownloaded[lane] === true;
   }
 
   function isEngineDownloading(lane: string): boolean {
@@ -69,6 +91,7 @@
       isDirectoryMounted = projectWorkspace.isDirectoryMounted;
       directoryName = projectWorkspace.directoryName;
       downloadRevision++;
+      void checkAllPhysicalStatus();
     });
     const unsubI18n = i18n.subscribe((loc) => {
       currentLocale = loc;
@@ -82,10 +105,17 @@
       }
     }
 
+    function handleDownloadChanged() {
+      void checkAllPhysicalStatus();
+    }
+
     if (typeof window !== 'undefined') {
       window.addEventListener('click', handleClickOutside);
+      window.addEventListener('octave:download-changed', handleDownloadChanged);
       isCoiAvailable = window.crossOriginIsolated === true;
     }
+
+    void checkAllPhysicalStatus();
 
     return () => {
       unsubState();
@@ -94,6 +124,7 @@
       unsubI18n();
       if (typeof window !== 'undefined') {
         window.removeEventListener('click', handleClickOutside);
+        window.removeEventListener('octave:download-changed', handleDownloadChanged);
       }
     };
   });
@@ -113,6 +144,7 @@
     e.stopPropagation();
     try {
       await projectWorkspace.downloadEngine(lane);
+      await checkAllPhysicalStatus();
       toastService.success(t('header.engine_download_success') || `Engine ${lane} downloaded`);
     } catch (err: any) {
       toastService.error(err?.message || String(err), err?.code);
@@ -123,6 +155,7 @@
     e.stopPropagation();
     try {
       await projectWorkspace.removeEngine(lane);
+      await checkAllPhysicalStatus();
       toastService.info(t('header.engine_remove_success') || `Engine ${lane} removed`);
     } catch (err: any) {
       toastService.error(err?.message || String(err), err?.code);
