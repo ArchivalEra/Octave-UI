@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "_comment": "wayfinder 决策票的 gate: 锚点登记表（本仓维护，零网络）。anchors（A 面）：每张已关 wayfinder 工单的判据锚点——kind=ledger 指向事实台账键（必须在 FACTS.json 真实存在）；kind=gate 指向闸门文件（必须存在）。assertions（B 面）：各票已落地的静态形状断言，全部本地文件读取判。断言的增删改都在本表做，闸门代码不感知具体票号；pending=true = 票未执行、断言先登记不生效（闸门跳过执行并如实注明），#10/#12 执行时删掉 pending 即生效。",
+  "anchors": [
+    {"ticket": 7,  "key": "integrity_check_physical",    "kind": "ledger", "check": null},
+    {"ticket": 8,  "key": "get_assets_port_alive",       "kind": "ledger", "check": null},
+    {"ticket": 9,  "key": "supervisor_no_mock_fallback", "kind": "ledger", "check": null},
+    {"ticket": 5,  "key": "plot_panel_figure_chain",     "kind": "ledger", "check": null},
+    {"ticket": 11, "key": "engine_layer_no_ui_import",   "kind": "ledger", "check": null},
+    {"ticket": 13, "key": "check_wayfinder_selftest",    "kind": "gate",   "check": "zreflect/check_wayfinder.py"}
+  ],
+  "assertions": [
+    {"ticket": 9,  "desc": "EngineSupervisor 生产路径零 MockEmbedAdapter 引用", "file": "src/modules/engine/EngineSupervisor.ts", "must_not_contain": "MockEmbedAdapter"},
+    {"ticket": 8,  "desc": "getAssetsPort() 定义存在", "file": "src/modules/plugins/package/PackageManagerPlugin.ts", "must_contain": "getAssetsPort"},
+    {"ticket": 5,  "desc": "GraphicsSink 事件面 onFigure 存在", "file": "src/modules/figure/GraphicsSink.ts", "must_contain": "onFigure"},
+    {"ticket": 11, "desc": "engine 层所有 .ts 不含 toastService（无 UI 旁路）", "dir": "src/modules/engine", "ext": ".ts", "must_not_contain": "toastService"},
+    {"ticket": 11, "desc": "appContext 经 onOmcFlavorError 通道订阅（已知缝收编）", "file": "src/modules/appContext.ts", "must_contain": "onOmcFlavorError"},
+    {"ticket": 10, "desc": "src/lib/engine 壳不存在（迁移落地面）", "path_must_not_exist": "src/lib/engine", "pending": true},
+    {"ticket": 12, "desc": "DownloadStore 无 128 位连续 hex 字面量（intake 预防面）", "file": "src/modules/storage/DownloadStore.ts", "must_not_contain_re": "[0-9a-f]{128}", "pending": true}
+  ]
+}

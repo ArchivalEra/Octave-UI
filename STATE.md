@@ -46,19 +46,19 @@
 
 | 键 | 值 | 测于 | 复跑命令 |
 |---|---|---|---|
-| `astro_files` | **2** | 2026-10-22T20:24:03+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
-| `engine_layer_no_ui_import` | **engine 层 6 个 ts 文件中含 toastService 的文件数 = 0（应为 0；（OmcBridge 抽离 + 三条 UI 旁路拔除；tests/engine/OmcBridge.test.ts 11 用例，2026-10-22 实测 322/322 绿）** | 2026-10-22T20:24:03+0800 | `awk 'FNR==1{if(n)print n; n=0} /toastService/{n++} END{if(n)print n}' /dev/null src/modules/engine/*.ts | wc -l` |
-| `get_assets_port_alive` | **getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）** | 2026-10-22T20:24:03+0800 | `grep -c 'getAssetsPort' src/modules/plugins/package/PackageManagerPlugin.ts` |
-| `integrity_check_physical` | **integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）** | 2026-10-22T20:24:03+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts` |
-| `md_files` | **46** | 2026-10-22T20:24:03+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `md_lines` | **3229** | 2026-10-22T20:24:03+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
-| `plot_panel_figure_chain` | **GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）** | 2026-10-22T20:24:03+0800 | `grep -c 'onFigure' src/modules/figure/GraphicsSink.ts` |
-| `py_files` | **30** | 2026-10-22T20:24:03+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `py_lines` | **6587** | 2026-10-22T20:24:03+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
-| `supervisor_no_mock_fallback` | **EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）** | 2026-10-22T20:24:03+0800 | `grep -c 'MockEmbedAdapter' src/modules/engine/EngineSupervisor.ts || true` |
-| `svelte_files` | **20** | 2026-10-22T20:24:03+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
-| `test_files` | **34** | 2026-10-22T20:24:03+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
-| `ts_files` | **97** | 2026-10-22T20:24:03+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
+| `astro_files` | **2** | 2026-10-22T22:06:52+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
+| `engine_layer_no_ui_import` | **engine 层 6 个 ts 文件中含 toastService 的文件数 = 0（应为 0；（OmcBridge 抽离 + 三条 UI 旁路拔除；tests/engine/OmcBridge.test.ts 11 用例，2026-10-22 实测 322/322 绿）** | 2026-10-22T22:06:52+0800 | `awk 'FNR==1{if(n)print n; n=0} /toastService/{n++} END{if(n)print n}' /dev/null src/modules/engine/*.ts | wc -l` |
+| `get_assets_port_alive` | **getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）** | 2026-10-22T22:06:52+0800 | `grep -c 'getAssetsPort' src/modules/plugins/package/PackageManagerPlugin.ts` |
+| `integrity_check_physical` | **integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）** | 2026-10-22T22:06:52+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts` |
+| `md_files` | **46** | 2026-10-22T22:06:52+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `md_lines` | **3229** | 2026-10-22T22:06:52+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
+| `plot_panel_figure_chain` | **GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）** | 2026-10-22T22:06:52+0800 | `grep -c 'onFigure' src/modules/figure/GraphicsSink.ts` |
+| `py_files` | **31** | 2026-10-22T22:06:52+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `py_lines` | **7021** | 2026-10-22T22:06:52+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
+| `supervisor_no_mock_fallback` | **EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）** | 2026-10-22T22:06:52+0800 | `grep -c 'MockEmbedAdapter' src/modules/engine/EngineSupervisor.ts || true` |
+| `svelte_files` | **20** | 2026-10-22T22:06:52+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
+| `test_files` | **34** | 2026-10-22T22:06:52+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
+| `ts_files` | **97** | 2026-10-22T22:06:52+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
 
 13 条事实。
 <!-- /AUTO:FACTS -->
@@ -83,8 +83,9 @@
 | `check_retractions.py`（翻案重现检测） | commit | 被推翻的断言不许悄悄回来当现状 | `REFLECT_RETRACTIONS`, `REFLECT_DOCS`, `REFLECT_HISTORY_SECS` |
 | `check_stale.py`（陈旧断言检测） | commit | sha 出处 / 退役名 / 测龄 | `REFLECT_DOCS`, `REFLECT_FACTS`, `REFLECT_HISTORY_SECS`, `REFLECT_RETIRED`, `REFLECT_STALE_DAYS` |
 | `check_theme_tokens.py`（主题变量与硬编码颜色闸门） | commit | 检查 Svelte 组件中的 CSS 变量合法性与禁止硬编码十六进制颜色 | — |
+| `check_wayfinder.py`（wayfinder 闸门） | commit | 决策票 gate: 锚点对账（台账键/闸门文件存在性）+ 形状断言收编（零网络） | `REFLECT_FACTS` |
 | `check_world.py`（world 闸门） | commit | 声明式验证对象：多线仓库共享验证环境的世界对账 | `REFLECT_WORLD`, `REFLECT_WORLD_LINE` |
 | `doctor.py`（开工预检 doctor） | start-of-work | 进程 / 端口活性（查会死的东西 ⇒ runs_at=start-of-work，不进 pre-commit） | `REFLECT_DOCTOR`, `REFLECT_DOCTOR_TIMEOUT` |
 
-16 道闸门（发现式名录派生 —— 手写清单会漂，加闸门 = 落一个声明行，这里自动长出来）。
+17 道闸门（发现式名录派生 —— 手写清单会漂，加闸门 = 落一个声明行，这里自动长出来）。
 <!-- /AUTO:GATES -->
