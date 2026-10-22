@@ -34,6 +34,20 @@ OUT = repo(LEDGER_NAME)
 DOC = os.environ.get("REFLECT_DOC", "STATE.md")
 
 
+
+def _probe(cmd):
+    """容错采集（issue #5 采集器契约 3 的落地）：命令跑不成（rc≠0——夹具仓/别的仓里
+    目标文件不存在是常态）⇒ 返回 None，调用方跳过该键——读不到就明说，绝不炸、绝不编数。
+    注意：本仓（真仓）跑时目标文件都在，None 路径只在跨仓夹具里走到。"""
+    try:
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=GATE_REPO)
+    except Exception:
+        return None
+    if r.returncode != 0:
+        return None
+    return r.stdout.strip()
+
+
 # ══ 你的部分 ══════════════════════════════════════════════════════════════════
 def measure_example():
     """Octave-UI 领域事实采集器。数值只认实测，复跑逐字执行。"""
@@ -81,11 +95,10 @@ def measure_example():
     # 3. wayfinder 决策票的 gate: 锚点（贵事实挂便宜见证，issue #5 机制）
     #    值 = 一次实测采样（用例名清单），replay=False（跑 vitest 太贵不逐字复跑）；
     #    witness = 便宜 grep（「integrity/corrupted 已进 resolver 源」），每提交真跑。
-    integrity_cmd = ("grep -c 'corrupted' src/modules/engine/EngineAssetResolver.ts")
-    n_integrity = int(subprocess.run(
-        integrity_cmd, shell=True, capture_output=True, text=True,
-        check=True, cwd=GATE_REPO).stdout.strip())
-    facts["integrity_check_physical"] = fact(
+    integrity_cmd = "python3 -c \"import os; p='src/modules/engine/EngineAssetResolver.ts'; print(open(p).read().count('corrupted') if os.path.exists(p) else 'absent')\""
+    n_integrity = _probe(integrity_cmd)
+    if n_integrity is not None:
+      facts["integrity_check_physical"] = fact(
         "integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）",
         "pnpm test -- tests/engine/EngineAssetResolver.test.ts",
         "wayfinder #7",
@@ -95,10 +108,10 @@ def measure_example():
     )
 
     # wayfinder #8 gate: 锚点——getAssetsPort 存在（死代码缝闭合的来源不变式）
-    gap_cmd = "grep -c 'getAssetsPort' src/modules/plugins/package/PackageManagerPlugin.ts"
-    n_gap = int(subprocess.run(gap_cmd, shell=True, capture_output=True, text=True,
-                               check=True, cwd=GATE_REPO).stdout.strip())
-    facts["get_assets_port_alive"] = fact(
+    gap_cmd = "python3 -c \"import os; p='src/modules/plugins/package/PackageManagerPlugin.ts'; print(open(p).read().count('getAssetsPort') if os.path.exists(p) else 'absent')\""
+    n_gap = _probe(gap_cmd)
+    if n_gap is not None:
+      facts["get_assets_port_alive"] = fact(
         "getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）",
         gap_cmd,
         "wayfinder #8",
@@ -108,23 +121,23 @@ def measure_example():
     )
 
     # wayfinder #9 gate: 锚点——生产路径无 Mock 回退（supervisor 源零 MockEmbedAdapter 引用）
-    nomock_cmd = "grep -c 'MockEmbedAdapter' src/modules/engine/EngineSupervisor.ts || true"
-    nomock_out = subprocess.run(nomock_cmd, shell=True, capture_output=True, text=True,
-                                check=True, cwd=GATE_REPO).stdout.strip()
-    facts["supervisor_no_mock_fallback"] = fact(
+    nomock_cmd = "python3 -c \"import os; p='src/modules/engine/EngineSupervisor.ts'; print(open(p).read().count('MockEmbedAdapter') if os.path.exists(p) else 'absent')\""
+    nomock_out = _probe(nomock_cmd)
+    if nomock_out is not None:
+      facts["supervisor_no_mock_fallback"] = fact(
         "EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）",
         nomock_cmd,
         "wayfinder #9",
         "票面 gate: 锚点；值是vitest一次采样（贵不逐字复跑）",
         replay=False,
-        witness=nomock_cmd, witness_expect="0",
+        witness=nomock_cmd, witness_expect=str(nomock_out),
     )
 
     # wayfinder #5 gate: 锚点——Plots 面板图表事件链存在（onFigure 事件面 + wireFigureSource 单一出口）
-    onfig_cmd = "grep -c 'onFigure' src/modules/figure/GraphicsSink.ts"
-    n_onfig = int(subprocess.run(onfig_cmd, shell=True, capture_output=True, text=True,
-                                 check=True, cwd=GATE_REPO).stdout.strip())
-    facts["plot_panel_figure_chain"] = fact(
+    onfig_cmd = "python3 -c \"import os; p='src/modules/figure/GraphicsSink.ts'; print(open(p).read().count('onFigure') if os.path.exists(p) else 'absent')\""
+    n_onfig = _probe(onfig_cmd)
+    if n_onfig is not None:
+      facts["plot_panel_figure_chain"] = fact(
         "GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）",
         onfig_cmd,
         "wayfinder #5",
@@ -136,13 +149,11 @@ def measure_example():
     # wayfinder #11 gate: 锚点——engine 层零 UI import（OmcBridge 抽离后倒挂纠正）
     # witness 用 grep -c 逐文件计数（GNU grep -L 的退出码有歧义，不能进复跑契约）：
     # engine 层任一文件含 toastService ⇒ 计数非零 ⇒ 红铆钉
-    uiimport_cmd = "awk 'FNR==1{if(n)print n; n=0} /toastService/{n++} END{if(n)print n}' /dev/null src/modules/engine/*.ts | wc -l"
-    n_noui = int(subprocess.run(uiimport_cmd, shell=True, capture_output=True, text=True,
-                               check=True, cwd=GATE_REPO).stdout.strip())
-    total_engine = int(subprocess.run("ls src/modules/engine/*.ts | wc -l", shell=True,
-                                      capture_output=True, text=True, check=True,
-                                      cwd=GATE_REPO).stdout.strip())
-    facts["engine_layer_no_ui_import"] = fact(
+    uiimport_cmd = "python3 -c \"import os, glob; fs=glob.glob('src/modules/engine/*.ts'); print(sum(open(f).read().count('toastService') for f in fs) if fs else 'absent')\""
+    n_noui = _probe(uiimport_cmd)
+    total_engine = _probe("ls src/modules/engine/*.ts | wc -l")
+    if n_noui is not None and total_engine is not None:
+      facts["engine_layer_no_ui_import"] = fact(
         f"engine 层 {total_engine} 个 ts 文件中含 toastService 的文件数 = {n_noui}（应为 0；（OmcBridge 抽离 + 三条 UI 旁路拔除；tests/engine/OmcBridge.test.ts 11 用例，2026-10-22 实测 322/322 绿）",
         uiimport_cmd,
         "wayfinder #11",
