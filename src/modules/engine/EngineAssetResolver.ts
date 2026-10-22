@@ -8,17 +8,29 @@ import { MemoryStore } from '../storage/MemoryStore';
 export type EngineLane = 'master' | 'wasm32-final' | 'IllegalPerformance' | 'omc';
 export type EngineVariant = 'w64' | 'w32';
 
+/**
+ * 物理对账三态（对账单一真源 = downloads/manifest.json 的 files[] 记账）：
+ * - verified   盘上字节与记账逐项对上（size 硬判 + SHA-256 复验）；
+ * - corrupted  文件物理在但字节对不上（截断被 size 硬判拦、同尺寸篡改被 sha 复验拦）；
+ * - unchecked  无账可对（manifest 缺失/损坏/无该车道条目）或未下载。
+ * downloaded 保持纯存在语义，corrupted 是独立维度——坏盘不自动 evict，重下是用户显式动作。
+ */
+export type EngineIntegrity = 'verified' | 'corrupted' | 'unchecked';
+
 export interface EngineAssetStatus {
   readonly lane: EngineLane;
   readonly downloaded: boolean;
   readonly variant: EngineVariant;
   readonly totalBytes: number;
   readonly verifiedAt: number;
+  readonly integrity: EngineIntegrity;
 }
 
 export interface IEngineAssetResolver {
   /**
-   * 物理对账检查目标引擎是否已完整持久化于 OPFS
+   * 物理对账检查目标引擎是否已完整持久化于 OPFS：
+   * stat 查文件在 → size 硬判（与 manifest 记账 bytes 逐一相等；无记账退回 size>0 旧判）→
+   * 盘上字节重算 SHA-256 与记账 sha 比对。OMC 车道同走这套（其文件同样在 manifest files[] 里）。
    */
   checkPhysicalStatus(lane: EngineLane, variant?: EngineVariant): Promise<EngineAssetStatus>;
 
@@ -38,6 +50,20 @@ export interface IEngineAssetResolver {
    * 清理损坏或陈旧的本地引擎缓存
    */
   evict(lane: EngineLane, variant?: EngineVariant): Promise<void>;
+
+  /**
+   * 显式失效会话内 integrity 缓存：
+   * evict() 内部必须调用；DownloadStore download() 成功后、removeEngine()（经 evict 覆盖）
+   * 也应调用——不用事件监听（engine 层订阅 UI 事件是倒挂形状）。
+   */
+  invalidateCache(lane: EngineLane, variant?: EngineVariant): void;
+
+  /**
+   * boot 前置拦截：已下载但未通过完整性对账（corrupted / unchecked）⇒ throw
+   * ENGINE_CORRUPTED（引擎层错误，普通 Error 带 code 字段，不进 DownloadError 的 7 码闭集）；
+   * 未下载 ⇒ 返回 false 不 throw（未下载走网络下载是合法路径）。
+   */
+  assertBootable(lane: EngineLane, variant?: EngineVariant): Promise<boolean>;
 }
 
 export function getDefaultVariant(lane: EngineLane): EngineVariant {
@@ -105,6 +131,11 @@ export class EngineAssetResolver implements IEngineAssetResolver {
   private static _instance: EngineAssetResolver | null = null;
   private _store: Store;
 
+  // 会话内 integrity 缓存：key = `${lane}/${variant}`，值为该车道全部文件验毕的指纹与时间。
+  // 已验且盘未变（stat size 与缓存时一致）⇒ 不再重算哈希（一次 30MB 哈希数百 ms，会话内复用）。
+  // 失效只走显式 invalidateCache() / evict()，不用事件监听。
+  private _integrityCache = new Map<string, { sha: string; at: number }>();
+
   constructor(store?: Store) {
     if (store) {
       this._store = store;
@@ -152,6 +183,14 @@ export class EngineAssetResolver implements IEngineAssetResolver {
 
   static async evict(lane: EngineLane, variant?: EngineVariant): Promise<void> {
     return EngineAssetResolver.getInstance().evict(lane, variant);
+  }
+
+  static invalidateCache(lane: EngineLane, variant?: EngineVariant): void {
+    EngineAssetResolver.getInstance().invalidateCache(lane, variant);
+  }
+
+  static async assertBootable(lane: EngineLane, variant?: EngineVariant): Promise<boolean> {
+    return EngineAssetResolver.getInstance().assertBootable(lane, variant);
   }
 
   matchRequest(
@@ -300,12 +339,20 @@ export class EngineAssetResolver implements IEngineAssetResolver {
       const downloaded = wasmOk && jsOk;
       const totalBytes = downloaded ? (wasmStat!.size ?? 0) + (jsStat!.size ?? 0) : 0;
 
+      const integrity = downloaded
+        ? await this._checkLaneIntegrity('omc', v, [
+            { stat: wasmStat!, path: wasmStat!.path },
+            { stat: jsStat!, path: jsStat!.path },
+          ])
+        : 'unchecked';
+
       return {
         lane,
         downloaded,
         variant: v,
         totalBytes,
         verifiedAt: Date.now(),
+        integrity,
       };
     }
 
@@ -330,13 +377,175 @@ export class EngineAssetResolver implements IEngineAssetResolver {
     const downloaded = wasmOk && dataOk;
     const totalBytes = downloaded ? (wasmStat!.size ?? 0) + (dataStat!.size ?? 0) : 0;
 
+    const integrity = downloaded
+      ? await this._checkLaneIntegrity(lane, v, [
+          { stat: wasmStat!, path: wasmStat!.path },
+          { stat: dataStat!, path: dataStat!.path },
+        ])
+      : 'unchecked';
+
     return {
       lane,
       downloaded,
       variant: v,
       totalBytes,
       verifiedAt: Date.now(),
+      integrity,
     };
+  }
+
+  /**
+   * 车道级三步对账（stat 已由调用方完成，这里收全部 stat 结果）：
+   * 1. size 硬判：盘上 size === manifest files[] 记账 bytes（逐文件）；
+   * 2. sha 复验：盘上字节重算 SHA-256 与记账 sha256 比对；
+   * 3. 会话缓存：全文件验毕后记指纹；盘未变（stat size 与缓存时一致）⇒ 不再重算哈希，
+   *    也不重读 manifest——缓存命中路径只花 stat 的钱。
+   * 无 manifest 记账（manifest 缺失/损坏/无该车道条目）⇒ 'unchecked'（退回 size>0 旧存在语义）。
+   */
+  private async _checkLaneIntegrity(
+    lane: EngineLane,
+    variant: EngineVariant,
+    physicals: Array<{ stat: { size?: number }; path: string }>
+  ): Promise<EngineIntegrity> {
+    const cacheKey = `${lane}/${variant}`;
+    const fingerprint = this._fingerprintOf(physicals);
+
+    // 缓存命中：已验过且每个文件 stat size 与缓存时一致 ⇒ 盘未变（stat size 是唯一便宜的变更信号）
+    const cached = this._integrityCache.get(cacheKey);
+    if (cached && cached.sha === fingerprint) {
+      return 'verified';
+    }
+
+    const entries = await this._readManifestFilesForLane(lane, variant);
+    if (!entries || entries.length === 0) {
+      // 无账可对：不猜好坏，如实标记 unchecked（downloaded 仍是 size>0 的存在语义）
+      return 'unchecked';
+    }
+
+    // 记账与物理文件按 path 精确对齐；任意记账文件盘上缺席 ⇒ corrupted
+    const byPath = new Map(entries.map((e) => [e.path, e]));
+    for (const phys of physicals) {
+      const record = byPath.get(phys.path);
+      if (!record) {
+        return 'corrupted';
+      }
+      // size 硬判：截断/膨胀在算哈希前就拦下
+      if ((phys.stat.size ?? 0) !== record.bytes) {
+        return 'corrupted';
+      }
+    }
+
+    // sha 复验：盘上字节重算与记账比对（记账里的每个文件都要对，盘变账没变即红）
+    for (const entry of entries) {
+      let data: Uint8Array;
+      try {
+        data = await this._store.read(entry.path);
+      } catch {
+        return 'corrupted';
+      }
+      const sha = await this._computeSha256(data);
+      if (sha !== entry.sha256) {
+        return 'corrupted';
+      }
+    }
+
+    this._integrityCache.set(cacheKey, { sha: fingerprint, at: Date.now() });
+    return 'verified';
+  }
+
+  /**
+   * 盘状态的便宜指纹：全部文件 stat size 的拼接。
+   * 只用 stat 可得的量——缓存命中判据绝不读盘内容，否则缓存就失去意义。
+   * 局限（如实写明）：stat size 只能看见截断/膨胀；等长 XOR 篡改盘未变时命中缓存
+   * 是设计行为——篡改后必须走 invalidateCache()（DownloadStore download() 成功后的挂点）。
+   */
+  private _fingerprintOf(physicals: Array<{ stat: { size?: number } }>): string {
+    return physicals.map((p) => String(p.stat.size ?? 0)).join(',');
+  }
+
+  /**
+   * 读 downloads/manifest.json，按 destPath 前缀匹配取该 lane/variant 的 files[] 记账。
+   * 不解析 ref 键形状（items 键是 `engine:octave@11.3.0:arch` 一类，形状会漂）；
+   * 引擎文件固定落在 downloads/engine/${lane}/${variant}/ 前缀下，按 files[].path 前缀匹配最稳。
+   * manifest 读不出 / 无匹配条目 ⇒ null（调用方按无账可对处理）。
+   */
+  private async _readManifestFilesForLane(
+    lane: EngineLane,
+    variant: EngineVariant
+  ): Promise<Array<{ path: string; sha256: string; bytes: number }> | null> {
+    try {
+      const stat = await this._store.stat('downloads/manifest.json');
+      if (!stat) return null;
+      const data = await this._store.read('downloads/manifest.json');
+      const parsed = JSON.parse(new TextDecoder().decode(data));
+      if (!parsed || parsed.schema !== 1 || typeof parsed.items !== 'object' || !parsed.items) {
+        return null;
+      }
+      const prefix = `downloads/engine/${lane}/${variant}/`;
+      const collected: Array<{ path: string; sha256: string; bytes: number }> = [];
+      for (const record of Object.values(parsed.items as Record<string, any>)) {
+        if (!record || !Array.isArray(record.files)) continue;
+        for (const f of record.files) {
+          if (
+            f &&
+            typeof f.path === 'string' &&
+            f.path.startsWith(prefix) &&
+            typeof f.sha256 === 'string' &&
+            typeof f.bytes === 'number'
+          ) {
+            collected.push({ path: f.path, sha256: f.sha256, bytes: f.bytes });
+          }
+        }
+      }
+      return collected.length > 0 ? collected : null;
+    } catch {
+      // manifest 坏 / 读失败：无账可对，不是盘坏——降级 unchecked 而非 corrupted
+      return null;
+    }
+  }
+
+  /**
+   * SHA-256 计算（私有封装）：浏览器走 crypto.subtle.digest；
+   * Node 测试环境无 crypto.subtle 时动态 import node:crypto 兜底——同一输入两种路径必须同值。
+   */
+  private async _computeSha256(data: Uint8Array): Promise<string> {
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data as unknown as BufferSource);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    const nodeCrypto = await import('node:crypto');
+    return nodeCrypto.createHash('sha256').update(data).digest('hex');
+  }
+
+  invalidateCache(lane: EngineLane, variant?: EngineVariant): void {
+    if (variant) {
+      this._integrityCache.delete(`${lane}/${variant}`);
+      return;
+    }
+    const prefix = `${lane}/`;
+    for (const key of Array.from(this._integrityCache.keys())) {
+      if (key.startsWith(prefix)) {
+        this._integrityCache.delete(key);
+      }
+    }
+  }
+
+  async assertBootable(lane: EngineLane, variant?: EngineVariant): Promise<boolean> {
+    const status = await this.checkPhysicalStatus(lane, variant);
+    if (!status.downloaded) {
+      // 未下载走网络下载是合法路径，不拦
+      return false;
+    }
+    if (status.integrity !== 'verified') {
+      // fail fast：绝不把坏字节送进 WebAssembly.compile；不自动 evict，重下是用户显式动作
+      const err = new Error(
+        `引擎 ${lane}/${status.variant} 本地文件完整性校验未通过（${status.integrity}），拒绝启动——请重新下载修复`
+      ) as Error & { code: string };
+      err.code = 'ENGINE_CORRUPTED';
+      throw err;
+    }
+    return true;
   }
 
   async withLocalAssets<T>(
@@ -375,6 +584,9 @@ export class EngineAssetResolver implements IEngineAssetResolver {
     await this._store.init();
     const variantsToClean: EngineVariant[] = variant ? [variant] : ['w64', 'w32'];
     const filesToEvict: string[] = [];
+
+    // 物理删除 ⇒ 对账结论必然失效：evict 内部必须显式失效缓存（决议 3 的挂点）
+    this.invalidateCache(lane, variant);
 
     if (lane === 'omc') {
       for (const varName of variantsToClean) {
