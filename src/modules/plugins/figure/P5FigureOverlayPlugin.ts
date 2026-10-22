@@ -29,6 +29,9 @@ export class P5FigureOverlayPlugin implements OctavePlugin {
   private _lastFigureCount = 0;
   private _originalShow: ((path: string) => boolean) | null = null;
   private _hookInstalled = false;
+  // staging 生命周期管 URL：新图事件 emit 前记录旧 url，新事件到达时 revoke 上一张的
+  // Blob URL；同 url 不重复 revoke。卸载钩子时不动 URL——图还显示着就 revoke 是破坏行为
+  private _lastEmittedUrl: string | null = null;
 
   get lastFigure(): P5FigureRenderEvent | null {
     return this._lastFigure;
@@ -45,6 +48,7 @@ export class P5FigureOverlayPlugin implements OctavePlugin {
   destroy(): void {
     this.uninstallHook();
     this._listeners.clear();
+    // 不 revoke _lastEmittedUrl：卸载时图可能还显示着（见字段注释）
   }
 
   /**
@@ -87,6 +91,7 @@ export class P5FigureOverlayPlugin implements OctavePlugin {
 
               self._lastFigure = evt;
               self._lastFigureCount = last.count;
+              self._releaseStaleUrl(evt.url);
               self._notify(evt);
             }
           }
@@ -181,9 +186,25 @@ export class P5FigureOverlayPlugin implements OctavePlugin {
    * 手动注入图表捕获（主要供测试或 mock 使用）
    */
   captureFigure(evt: P5FigureRenderEvent): void {
+    this._releaseStaleUrl(evt.url);
     this._lastFigure = evt;
     this._lastFigureCount = evt.count;
     this._notify(evt);
+  }
+
+  // 新图 URL 到手后，revoke「上一张已 emit 的 Blob URL」。
+  // 空 url / 同 url 重复 / URL API 不存在 ⇒ 静默跳过
+  private _releaseStaleUrl(nextUrl: string): void {
+    const prev = this._lastEmittedUrl;
+    this._lastEmittedUrl = nextUrl || null;
+    if (!prev || prev === nextUrl) return;
+    try {
+      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(prev);
+      }
+    } catch {
+      // revoke 失败不阻断事件分发
+    }
   }
 
   subscribe(listener: FigureRenderListener): () => void {
