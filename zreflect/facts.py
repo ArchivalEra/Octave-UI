@@ -133,6 +133,24 @@ def measure_example():
         witness=onfig_cmd, witness_expect=str(n_onfig),
     )
 
+    # wayfinder #11 gate: 锚点——engine 层零 UI import（OmcBridge 抽离后倒挂纠正）
+    # witness 用 grep -c 逐文件计数（GNU grep -L 的退出码有歧义，不能进复跑契约）：
+    # engine 层任一文件含 toastService ⇒ 计数非零 ⇒ 红铆钉
+    uiimport_cmd = "awk 'FNR==1{if(n)print n; n=0} /toastService/{n++} END{if(n)print n}' /dev/null src/modules/engine/*.ts | wc -l"
+    n_noui = int(subprocess.run(uiimport_cmd, shell=True, capture_output=True, text=True,
+                               check=True, cwd=GATE_REPO).stdout.strip())
+    total_engine = int(subprocess.run("ls src/modules/engine/*.ts | wc -l", shell=True,
+                                      capture_output=True, text=True, check=True,
+                                      cwd=GATE_REPO).stdout.strip())
+    facts["engine_layer_no_ui_import"] = fact(
+        f"engine 层 {total_engine} 个 ts 文件中含 toastService 的文件数 = {n_noui}（应为 0；（OmcBridge 抽离 + 三条 UI 旁路拔除；tests/engine/OmcBridge.test.ts 11 用例，2026-10-22 实测 322/322 绿）",
+        uiimport_cmd,
+        "wayfinder #11",
+        "票面 gate: 锚点；值是源码形状一次采样（贵不逐字复跑）",
+        replay=False,
+        witness=uiimport_cmd, witness_expect=str(n_noui),
+    )
+
     return facts
 
 
