@@ -94,6 +94,19 @@ def measure_example():
         witness=integrity_cmd, witness_expect=str(n_integrity),
     )
 
+    # wayfinder #8 gate: 锚点——getAssetsPort 存在（死代码缝闭合的来源不变式）
+    gap_cmd = "grep -c 'getAssetsPort' src/modules/plugins/package/PackageManagerPlugin.ts"
+    n_gap = int(subprocess.run(gap_cmd, shell=True, capture_output=True, text=True,
+                               check=True, cwd=GATE_REPO).stdout.strip())
+    facts["get_assets_port_alive"] = fact(
+        "getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）",
+        gap_cmd,
+        "wayfinder #8",
+        "票面 gate: 锚点；值是vitest+tsc一次采样（贵不逐字复跑）",
+        replay=False,
+        witness=gap_cmd, witness_expect=str(n_gap),
+    )
+
     return facts
 
 
