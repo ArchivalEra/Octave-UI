@@ -12,7 +12,8 @@ describe('WorkbenchController', () => {
   beforeEach(async () => {
     controller = new WorkbenchController();
     adapter = new MockEmbedAdapter();
-    supervisor = new EngineSupervisor({ adapter, skipPreflight: true });
+    // 合法注入：生产路径已禁 Mock 回退，测试替身必须经 factory 显式进入
+    supervisor = new EngineSupervisor({ adapter, adapterFactory: () => adapter, skipPreflight: true });
     await supervisor.boot();
   });
 
