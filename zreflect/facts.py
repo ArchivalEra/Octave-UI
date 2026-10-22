@@ -78,6 +78,22 @@ def measure_example():
         md_lines_cmd, "repo",
         "不含机器块：块就渲染在文档里，数进去会让渲染一遍值就过期")
 
+    # 3. wayfinder 决策票的 gate: 锚点（贵事实挂便宜见证，issue #5 机制）
+    #    值 = 一次实测采样（用例名清单），replay=False（跑 vitest 太贵不逐字复跑）；
+    #    witness = 便宜 grep（「integrity/corrupted 已进 resolver 源」），每提交真跑。
+    integrity_cmd = ("grep -c 'corrupted' src/modules/engine/EngineAssetResolver.ts")
+    n_integrity = int(subprocess.run(
+        integrity_cmd, shell=True, capture_output=True, text=True,
+        check=True, cwd=GATE_REPO).stdout.strip())
+    facts["integrity_check_physical"] = fact(
+        "integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）",
+        "pnpm test -- tests/engine/EngineAssetResolver.test.ts",
+        "wayfinder #7",
+        "票面 gate: 锚点；值是 vitest 用例面的一次采样（跑全测太贵不逐字复跑）",
+        replay=False,
+        witness=integrity_cmd, witness_expect=str(n_integrity),
+    )
+
     return facts
 
 
