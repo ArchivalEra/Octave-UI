@@ -8,7 +8,7 @@ import { WorkspaceStore } from './workspace/WorkspaceStore';
 import { FilesystemStore } from './filesystem/FilesystemStore';
 import { ThemeManager } from './theme/ThemeManager';
 import { CapabilityPolicy } from './figure/CapabilityPolicy';
-import { GraphicsSink, wireFigureSource } from './figure/GraphicsSink';
+import { GraphicsSink, wireFigureSource, wireFigureBusToSink } from './figure/GraphicsSink';
 import { i18n, t } from './i18n/I18nManager.svelte';
 
 import { WorkbenchController } from './workbench/WorkbenchController';
@@ -75,9 +75,14 @@ import { packageManagerPlugin, p5FigureOverlayPlugin } from './plugins';
 packageManagerPlugin.setDownloadStore(downloadStore);
 
 // 转发 P5 图表事件到 GraphicsSink 的 onFigure 面：面板订阅 sink 即可拿到
-// {imageDataUrl,...}（evt.url 是 Blob URL——PNG 渲染就绪）。单一出口收敛为
-// wireFigureSource，解绑函数留在模块级（模块生命周期 = 应用生命周期，不主动解）
+// {imageDataUrl,...}（evt.url 是 Blob URL——PNG 渲染就绪）。
+// 两条通道都接（spec #19 决策 1）：
+// ① 页面级总线——不绑插件实例身份，模块被求值出两个实例也不失聪（056 红线 1 的根因）；
+// ② 实例内 subscribe——插件实例与这里同一个时照常工作（兼容旧路径；同一次渲染
+//    两条通道都会到 sink，emitFigure 的幂等由面板状态赋值天然吸收）。
+// 解绑函数留在模块级（模块生命周期 = 应用生命周期，不主动解）。
 wireFigureSource(p5FigureOverlayPlugin, graphicsSink);
+wireFigureBusToSink(graphicsSink);
 
 // 启用图形外挂补丁策略：允许绘图指令出队交由原生 WebGL toolkit 处理
 capabilityPolicy.setSafePolyfillActive(true);

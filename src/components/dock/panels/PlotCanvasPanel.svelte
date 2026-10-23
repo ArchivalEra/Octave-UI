@@ -5,6 +5,12 @@
   let currentFigure = $state<string | null>(null);
 
   $effect(() => {
+    // 回放兜底（spec #19 决策 5）：面板 mount 可能晚于首次图事件——订阅时先把
+    // sink 记着的最近一张补上。主修是事件真的发出来（页面级总线），这里只补窗口。
+    const last = graphicsSink.lastFigure;
+    if (last?.imageDataUrl) {
+      currentFigure = last.imageDataUrl;
+    }
     const unsub = graphicsSink.onFigure((fig) => {
       if (fig?.imageDataUrl) {
         currentFigure = fig.imageDataUrl;

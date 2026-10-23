@@ -18,6 +18,46 @@ export interface P5FigureRenderEvent {
 
 export type FigureRenderListener = (event: P5FigureRenderEvent) => void;
 
+// 页面级图表事件总线（spec #19 决策 1）：把「谁装了钩」与「谁收事件」解耦。
+// 为什么必须有它：钩子的幂等标记挂在 window.OctaveP5 上，模块若被求值出两个实例
+// （Vite dev 的模块图重复实例），第二个实例会静默跳过安装 ⇒ 它自己的 _listeners
+// 永远收不到事件，而 sink 订阅的恰好可能是那个没装钩的实例（056 复钓的红线 1）。
+// ⇒ 事件发到页面级总线上，任何实例的钩子捕获到图都往这里发，订阅方不再依赖实例身份。
+const FIGURE_BUS_EVENT = 'octave:figure-rendered';
+
+export function emitFigureOnBus(evt: P5FigureRenderEvent): void {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  try {
+    window.dispatchEvent(new CustomEvent(FIGURE_BUS_EVENT, { detail: evt }));
+  } catch {
+    // 非浏览器环境（或 CustomEvent 缺席）静默跳过：总线是补充通道，不阻断实例内分发
+  }
+}
+
+export function onFigureBus(listener: FigureRenderListener): () => void {
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+    return () => {};
+  }
+  const handler = (e: Event) => {
+    const detail = (e as CustomEvent).detail;
+    if (detail) listener(detail as P5FigureRenderEvent);
+  };
+  window.addEventListener(FIGURE_BUS_EVENT, handler);
+  return () => window.removeEventListener(FIGURE_BUS_EVENT, handler);
+}
+
+// 从 __p5_last 与 DOM 两侧取图源 URL（spec #19 决策 3）。
+// 权威源是 __p5_last（p5canvas 写的路径/字节/序号），URL 只能从 DOM 的 img 拿——
+// 但 img 可能尚未就位（实测：钩子在 img 挂载前读到空串，空 URL 一路传到面板 ⇒ 静默不更新）。
+// ⇒ 优先 dataset.url / src；两处都空时**再查一次**（同一次 tick 内 img 可能刚插入）。
+function resolveFigureUrl(): string {
+  if (typeof document === 'undefined') return '';
+  const containerEl = document.getElementById('p5figure');
+  const imgEl = containerEl?.querySelector('img') as HTMLImageElement | null;
+  if (!imgEl) return '';
+  return (imgEl.dataset?.url || imgEl.src || '').trim();
+}
+
 export class P5FigureOverlayPlugin implements OctavePlugin {
   readonly id = 'p5-figure-overlay';
   readonly name = 'P5 Figure Graphics Overlay';
@@ -53,62 +93,57 @@ export class P5FigureOverlayPlugin implements OctavePlugin {
 
   /**
    * 拦截与代理 window.OctaveP5.show，捕获原生图片并阻断落入 document.body
+   *
+   * 两个必须扛住的现实（056 复钓红线 1 的断点）：
+   * ① 上游 p5canvas.js 会**重新赋值** `window.OctaveP5`（每次都是一份新对象 + 裸 show）——
+   *    去重标记若挂在 window.OctaveP5 上，新对象上就没有它，但旧实例的 `_hookInstalled`
+   *    仍为 true ⇒ 新对象永远不被包装。⇒ 标记挂在**包装函数自身**（`__overlay_hooked`
+   *    放函数上），且「已装过」的判断按**当前对象**判，不用实例级布尔短路。
+   * ② 钩子读 URL 时 img 可能还没插进 DOM（实测读到空串，空 URL 传到面板 ⇒ 面板静默不更新）。
+   *    ⇒ 取不到 URL 时在同一 tick 后重试一次（微任务），仍取不到才发空事件
+   *    （空事件由 sink 侧丢弃，见 GraphicsSink.emitFigure 的守卫）。
    */
   installHook(): void {
-    if (typeof window === 'undefined' || this._hookInstalled) return;
+    if (typeof window === 'undefined') return;
 
     this._ensureStagingAnchor();
 
     const hookTarget = () => {
       const p5 = (window as any).OctaveP5;
-      if (p5 && typeof p5.show === 'function' && !p5.__overlay_hooked) {
-        this._originalShow = p5.show;
-        const self = this;
-
-        p5.show = function (path: string) {
-          // 确保 staging anchor 存在
-          self._ensureStagingAnchor();
-
-          // 执行原生 show（从 MEMFS 读取字节并生成 Blob URL）
-          const ret = self._originalShow ? self._originalShow.apply(this, arguments as any) : false;
-
-          if (self.enabled && ret) {
-            const last = (window as any).__p5_last;
-            if (last) {
-              // 读出生成的图片信息
-              const containerEl = document.getElementById('p5figure');
-              const imgEl = containerEl?.querySelector('img');
-              const activeUrl = imgEl?.dataset?.url || imgEl?.src || '';
-
-              const evt: P5FigureRenderEvent = {
-                path: last.path || path,
-                bytes: last.bytes || 0,
-                type: last.type || 'image/png',
-                url: activeUrl,
-                count: last.count,
-                timestamp: Date.now(),
-              };
-
-              self._lastFigure = evt;
-              self._lastFigureCount = last.count;
-              self._releaseStaleUrl(evt.url);
-              self._notify(evt);
-            }
-          }
-          return ret;
-        };
-
-        p5.__overlay_hooked = true;
+      if (!p5 || typeof p5.show !== 'function') return;
+      // 去重看**这个函数**是否已被包装，不看实例字段也不看对象字段
+      if ((p5.show as any).__overlay_hooked) {
         this._hookInstalled = true;
+        return;
       }
+      const self = this;
+      const original = p5.show;
+
+      const wrapped = function (this: any, path: string) {
+        self._ensureStagingAnchor();
+        // 执行原生 show（从 MEMFS 读取字节并生成 Blob URL / 插 img）
+        const ret = original.apply(this, arguments as any);
+        if (self.enabled && ret) {
+          self._captureAndEmit(path, 0);
+        }
+        return ret;
+      };
+      (wrapped as any).__overlay_hooked = true;
+
+      p5.show = wrapped;
+      this._originalShow = original;
+      this._hookInstalled = true;
     };
 
     hookTarget();
 
-    // 如果 window.OctaveP5 尚未加载，通过 getter/setter 劫持
-    if (!(window as any).OctaveP5) {
-      let _val: any = undefined;
-      try {
+    // window.OctaveP5 可能尚未加载，或**之后被整体替换**（p5canvas 的赋值点）——
+    // 用 getter/setter 劫持，每次赋值都重新尝试包装。
+    // ⚠️ 若上游已用普通属性赋值过，这里改写成访问器不会丢值（先读现值再接管）。
+    try {
+      const desc = Object.getOwnPropertyDescriptor(window, 'OctaveP5');
+      if (!desc || desc.configurable) {
+        let _val: any = desc?.value;
         Object.defineProperty(window, 'OctaveP5', {
           configurable: true,
           enumerable: true,
@@ -118,18 +153,51 @@ export class P5FigureOverlayPlugin implements OctavePlugin {
             hookTarget();
           },
         });
-      } catch {
-        // 环境不支持 defineProperty 时忽略
+        // 接管前已有值 ⇒ 补一次包装
+        if (_val) hookTarget();
       }
+    } catch {
+      // 环境不支持 defineProperty 时忽略：至少首次 hookTarget 的包装仍有效
     }
+  }
+
+  /**
+   * 从 __p5_last + DOM 组装事件并分发；URL 取不到时延一微任务重试一次
+   * （img 插入与 show 返回在同一 tick 的常见形状）。
+   */
+  private _captureAndEmit(path: string, attempt: number): void {
+    const last = (window as any).__p5_last;
+    if (!last) return;
+
+    const activeUrl = resolveFigureUrl();
+    if (!activeUrl && attempt === 0) {
+      // 图刚生成、img 可能还没挂上：延一微任务再取（不引 setTimeout——那会让事件顺序漂）
+      Promise.resolve().then(() => this._captureAndEmit(path, 1));
+      return;
+    }
+
+    const evt: P5FigureRenderEvent = {
+      path: last.path || path,
+      bytes: last.bytes || 0,
+      type: last.type || 'image/png',
+      url: activeUrl,
+      count: last.count,
+      timestamp: Date.now(),
+    };
+
+    this._lastFigure = evt;
+    this._lastFigureCount = last.count;
+    this._releaseStaleUrl(evt.url);
+    this._notify(evt);
+    // 页面级总线（决策 1）：实例可能不是 sink 订阅的那一个，总线是跨实例的同一出口
+    emitFigureOnBus(evt);
   }
 
   uninstallHook(): void {
     if (typeof window === 'undefined') return;
     const p5 = (window as any).OctaveP5;
-    if (p5 && this._originalShow) {
+    if (p5 && this._originalShow && typeof p5.show === 'function' && (p5.show as any).__overlay_hooked) {
       p5.show = this._originalShow;
-      p5.__overlay_hooked = false;
       this._originalShow = null;
     }
     this._hookInstalled = false;
