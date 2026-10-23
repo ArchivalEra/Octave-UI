@@ -84,6 +84,9 @@ capabilityPolicy.setSafePolyfillActive(true);
 
 i18n.subscribe((locale) => {
   projectWorkspace.syncLocale(locale);
+  // R1（wayfinder #14）：终端错误净化跟随界面语言切换（TerminalController 内部
+  // 错误通道过 ErrorSanitizer，locale 由这里单一产地下发）
+  terminalController.setLocale(locale);
 });
 
 // 当引擎达到 idle 状态时，自动将工作区文件推送到 Wasm MEMFS 并配置 addpath

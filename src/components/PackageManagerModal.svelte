@@ -1,6 +1,6 @@
 <!-- src/components/PackageManagerModal.svelte -->
 <script lang="ts">
-  import { packageManagerPlugin, downloadStore, projectWorkspace, i18n, t } from '../modules/appContext';
+  import { packageManagerPlugin, downloadStore, projectWorkspace, i18n, t, toastService } from '../modules/appContext';
   import type { ForgePackageItem, InstallPlan } from '../modules/plugins/package/types';
   import type { Locale } from '../modules/i18n/types';
   import type { DownloadRef } from '../modules/storage/downloadTypes';
@@ -28,7 +28,10 @@
   let activePlanItem = $state<ForgePackageItem | null>(null);
   let planLoading = $state(false);
   let errorMsg = $state<string | null>(null);
+  let errorCode = $state<string | null>(null);
   let catalogLoaded = $state(false);
+  let catalogLoading = $state(false);
+  let retrying = $state(false);
   let hasLLVM = $state(false);
 
   // A4 / A5 下载体量预演与配额确认
@@ -46,6 +49,29 @@
   let diagnosticsLogs = $state<string[]>([]);
   let diagnosticsStatus = $state<'idle' | 'compiling' | 'success' | 'failed'>('idle');
   let copiedLogs = $state(false);
+
+  // DX1（wayfinder #14）：banner + code 双呈现的错误出口统一封装。
+  // banner 保留人读消息；同时 toast 一条带 code 的短消息（toast-code-badge 组件消费 code）。
+  // code 取值优先级：显式入参 > err.code > err.__verdict__.cause > res.why/res.cause。
+  function reportError(message: string, code?: string | null, human?: string) {
+    errorMsg = message;
+    errorCode = code || null;
+    if (code) {
+      // 短消息走 errors.<code> 键（三语已补齐）；键缺文案时回退人读消息
+      const codeKey = `errors.${code}`;
+      const short = t(codeKey) !== codeKey ? t(codeKey) : (human || message);
+      toastService.error(short, code);
+    }
+  }
+
+  // 从错误对象 / 结果对象里抠稳定错误码（assets-loader 的 errCode() 与 __verdict__.cause 同词表）
+  function errCodeOf(err: any): string | null {
+    if (!err) return null;
+    if (typeof err.code === 'string') return err.code;
+    if (err.__verdict__ && typeof err.__verdict__.cause === 'string') return err.__verdict__.cause;
+    if (typeof err.cause === 'string') return err.cause;
+    return null;
+  }
 
   async function refreshStatuses() {
     const packs = packageManagerPlugin.getAllPackages();
@@ -69,6 +95,36 @@
     } catch {}
   }
 
+  // DX2（wayfinder #14）：目录装载统一入口——互斥（有 error ⇒ loading 必须停）
+  // + 重试按钮复用同一条路（#8 已救活的 loadCatalog()）。
+  async function loadCatalogWithMutex() {
+    errorMsg = null;
+    errorCode = null;
+    catalogLoading = true;
+    retrying = true;
+    try {
+      await packageManagerPlugin.loadCatalog();
+      catalogLoaded = true;
+      // 装载成功才清错误与重试态——失败路径保持 error 可见、spinner 停转
+      errorMsg = null;
+      errorCode = null;
+      await refreshStatuses();
+    } catch (err: any) {
+      // 互斥转移：error 态下 catalogLoading 必须为 false（模板层再加一道 &&
+      // 双保险），坏 catalog 不许让 loading 永转
+      catalogLoading = false;
+      const code = errCodeOf(err);
+      const codeKey = code ? `errors.${code}` : '';
+      const human = (codeKey && t(codeKey) !== codeKey)
+        ? t(codeKey)
+        : t('package_manager.err_load_catalog', { error: err?.message || String(err) });
+      reportError(human, code, err?.message || String(err));
+    } finally {
+      catalogLoading = false;
+      retrying = false;
+    }
+  }
+
   $effect(() => {
     const unsubI18n = i18n.subscribe((loc) => {
       currentLocale = loc;
@@ -76,18 +132,7 @@
 
     if (isOpen) {
       if (!packageManagerPlugin.getCatalog()) {
-        packageManagerPlugin.loadCatalog()
-          .then(() => {
-            catalogLoaded = true;
-            refreshStatuses();
-          })
-          .catch((err) => {
-            const errCode = err?.code;
-            const codeKey = errCode ? `errors.${errCode}` : '';
-            errorMsg = (codeKey && t(codeKey) !== codeKey)
-              ? t(codeKey)
-              : t('package_manager.err_load_catalog', { error: err?.message || String(err) });
-          });
+        loadCatalogWithMutex();
       } else {
         catalogLoaded = true;
         refreshStatuses();
@@ -218,7 +263,13 @@
       const nextDl = { ...downloadingState };
       delete nextDl[item.name];
       downloadingState = nextDl;
-      errorMsg = err.message || String(err);
+      // DX1：下载失败双呈现（banner 人读 + toast 带 code）
+      const code = errCodeOf(err);
+      const codeKey = code ? `errors.${code}` : '';
+      const human = (codeKey && t(codeKey) !== codeKey)
+        ? t(codeKey)
+        : (err.message || String(err));
+      reportError(human, code, err.message || String(err));
     }
   }
 
@@ -253,7 +304,13 @@
       const nextDl = { ...downloadingState };
       delete nextDl['llvm-wasm'];
       downloadingState = nextDl;
-      errorMsg = err.message || String(err);
+      // DX1：LLVM 下载失败双呈现（banner 人读 + toast 带 code）
+      const code = errCodeOf(err);
+      const codeKey = code ? `errors.${code}` : '';
+      const human = (codeKey && t(codeKey) !== codeKey)
+        ? t(codeKey)
+        : (err.message || String(err));
+      reportError(human, code, err.message || String(err));
     }
   }
 
@@ -282,24 +339,30 @@
     }
     const version = selectedVersions[item.name] || item.version;
     errorMsg = null;
+    errorCode = null;
     try {
       const res = await packageManagerPlugin.installPackage(item.name, { version });
       if (res.state !== 'ok') {
-        const errKey = res.why ? `errors.${res.why}` : res.cause ? `errors.${res.cause}` : '';
-        errorMsg = (errKey && t(errKey) !== errKey)
-          ? `${t(errKey)} (${res.message || res.cause || res.why})`
+        // DX1：装载失败双呈现——code 取 res.why / res.cause（与 __verdict__.cause 同词表）
+        const code = res.why || res.cause || null;
+        const codeKey = code ? `errors.${code}` : '';
+        const human = (codeKey && t(codeKey) !== codeKey)
+          ? `${t(codeKey)} (${res.message || res.cause || res.why})`
           : t('package_manager.err_install_failed', { error: res.message || res.cause || res.state });
+        reportError(human, code, res.message || String(errCodeOf(res)));
       } else {
         activePlan = null;
         activePlanItem = null;
         await refreshStatuses();
       }
     } catch (err: any) {
-      const errCode = err?.code || err?.cause;
-      const codeKey = errCode ? `errors.${errCode}` : '';
-      errorMsg = (codeKey && t(codeKey) !== codeKey)
-        ? `${t(codeKey)} (${err?.message || errCode})`
+      // DX1：异常路径双呈现——code 从 err.code 或 __verdict__.cause 取
+      const code = errCodeOf(err);
+      const codeKey = code ? `errors.${code}` : '';
+      const human = (codeKey && t(codeKey) !== codeKey)
+        ? `${t(codeKey)} (${err?.message || code})`
         : t('package_manager.err_install_generic', { error: err.message || String(err) });
+      reportError(human, code, err.message || String(err));
     }
   }
 
@@ -452,18 +515,33 @@
       </div>
 
       {#if errorMsg}
-        <div class="error-banner">
-          <span>⚠️ {errorMsg}</span>
-          <button class="btn-dismiss" onclick={() => (errorMsg = null)} aria-label="Dismiss error">✕</button>
+        <!-- DX1/DX2（wayfinder #14）：banner 保留人读消息 + code 徽标；重试按钮只在 error 可见 -->
+        <div class="error-banner" data-testid="pkg-error-banner">
+          <span>⚠️ {errorMsg}{#if errorCode}<code class="error-code-badge" data-testid="error-code-badge">{errorCode}</code>{/if}</span>
+          <span class="error-banner-actions">
+            {#if !catalogLoaded}
+              <!-- DX2：目录装载失败的重试路径——复用同一条互斥装载路 -->
+              <button class="btn-retry" onclick={loadCatalogWithMutex} data-action="retry-catalog" data-testid="retry-catalog-btn">
+                ⟳ {t('package_manager.btn_retry')}
+              </button>
+            {/if}
+            <button class="btn-dismiss" onclick={() => { errorMsg = null; errorCode = null; }} aria-label="Dismiss error">✕</button>
+          </span>
         </div>
       {/if}
 
       <!-- 包列表展示区 -->
       <div class="modal-body">
-        {#if !catalogLoaded}
-          <div class="loading-state">
+        {#if !catalogLoaded && catalogLoading && !errorMsg}
+          <!-- DX2：loading/error 互斥——有 error 时 spinner 绝不渲染（!errorMsg 双保险） -->
+          <div class="loading-state" data-testid="catalog-spinner">
             <span class="spinner"></span>
             <span>{t('package_manager.loading_catalog')}</span>
+          </div>
+        {:else if !catalogLoaded && errorMsg}
+          <!-- DX2：错误态占位（替代永转 spinner 的空态） -->
+          <div class="empty-state">
+            <p>{t('package_manager.catalog_error_empty')}</p>
           </div>
         {:else if filteredPackages.length === 0}
           <div class="empty-state">
@@ -977,6 +1055,36 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+  .error-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  /* DX1：机器码徽标——ToastContainer 的 toast-code-badge 同款视觉语义 */
+  .error-code-badge {
+    margin-left: 8px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--accent-danger);
+    background: var(--bg-canvas);
+    font-family: monospace;
+    font-size: 0.65rem;
+    font-weight: 600;
+  }
+  /* DX2：重试按钮（只在 error banner 可见时渲染） */
+  .btn-retry {
+    padding: 3px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--accent-danger);
+    background: var(--bg-surface);
+    color: var(--accent-danger);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .btn-retry:hover {
+    background: var(--bg-surface-hover);
   }
   .btn-dismiss {
     background: none;

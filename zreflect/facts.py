@@ -223,6 +223,28 @@ def measure_example():
         witness=twoshot_cmd, witness_expect=str(n_twoshot),
       )
 
+    # wayfinder #14 gate: 锚点——包管理器错误呈现链（DX1 toast 双呈现 + DX2 互斥重试 + R1 终端净化）。
+    # 值 = 一次实测采样（用例面叙述），replay=False（跑 vitest 太贵不逐字复跑）；
+    # witness = 便宜计数（模态组件源内 toastService 调用计数非零——toast 接线若被
+    # 拔掉，计数归零 ⇒ 见证当场红），每提交真跑。
+    pkgtoast_cmd = ("python3 -c \"import os; p='src/components/PackageManagerModal.svelte'; "
+                    "print(open(p).read().count('toastService') if os.path.exists(p) else 'absent')\"")
+    n_pkgtoast = _probe(pkgtoast_cmd)
+    if n_pkgtoast is not None:
+      facts["pkg_error_toast_chain"] = fact(
+        "包管理器错误呈现链（wayfinder #14）：DX1 banner+code 双呈现（错误同时 toastService.error(短消息, code)"
+        "——toast-code-badge 消费 code；errors.* 键表三语补齐 7 码全 + assets-loader 14 码子集）；"
+        "DX2 loading/error 互斥（有 error ⇒ spinner 零命中）+ 重试按钮调 loadCatalog()（#8 已救活）"
+        "re-fetch 计数+1；R1 终端 onError 通道接 ErrorSanitizer（bridge 硬编码中文在消费端拦，三语各测）"
+        "（tests/ui/PackageManagerModal.svelte.test.ts 7 用例 + tests/terminal/TerminalController.test.ts "
+        "R1 扩展 4 用例，2026-10-23 实测 347/347 绿）",
+        "pnpm test -- tests/ui/PackageManagerModal.svelte.test.ts tests/terminal/TerminalController.test.ts",
+        "wayfinder #14",
+        "票面 gate: 锚点；值是 vitest 用例面的一次采样（跑全测太贵不逐字复跑）",
+        replay=False,
+        witness=pkgtoast_cmd, witness_expect=str(n_pkgtoast),
+      )
+
     return facts
 
 

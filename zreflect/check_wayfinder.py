@@ -247,7 +247,7 @@ def _cases():
     import tempfile                                      # noqa: PLC041
     d = tempfile.mkdtemp()
     atexit.register(shutil.rmtree, d, True)
-    # 夹具源码树：5 条生效断言的目标全造好（形状与真仓一致）。
+    # 夹具源码树：生效断言的目标全造好（形状与真仓一致）。
     # ⚠️ 这是**干净基底**——用例②的坏形状全部在各自 lambda 内就地改写、
     # 查完即恢复（装载期改共享文件 = 用例执行序依赖，重排即红，那种
     # 「正好绿」不是证据）。
@@ -255,12 +255,18 @@ def _cases():
     os.makedirs(os.path.join(d, "src/modules/plugins/package"))
     os.makedirs(os.path.join(d, "src/modules/figure"))
     os.makedirs(os.path.join(d, "src/modules/storage"))
+    os.makedirs(os.path.join(d, "src/modules/terminal"))
+    os.makedirs(os.path.join(d, "src/components"))
+    os.makedirs(os.path.join(d, "scripts"))
     SUPERVISOR = os.path.join(d, "src/modules/engine/EngineSupervisor.ts")
     PACKAGE = os.path.join(d, "src/modules/plugins/package/PackageManagerPlugin.ts")
     APPCTX = os.path.join(d, "src/modules/appContext.ts")
     DOWNLOAD = os.path.join(d, "src/modules/storage/DownloadStore.ts")
     BADLANE = os.path.join(d, "src/modules/engine/BadLane.ts")
     LIBDIR = os.path.join(d, "src/lib/engine")
+    MODAL = os.path.join(d, "src/components/PackageManagerModal.svelte")
+    TERMC = os.path.join(d, "src/modules/terminal/TerminalController.ts")
+    SYNCLANES = os.path.join(d, "scripts/sync-lanes.sh")
 
     def _w(path, text):
         open(path, "w", encoding="utf-8").write(text)
@@ -290,12 +296,24 @@ def _cases():
     _w(DOWNLOAD, DOWNLOAD and open(DOWNLOAD, encoding="utf-8").read()
        + "// download() 内 finally 零 broadcastChange\n"
          "EngineAssetResolver.getInstance().invalidateCache(lane as any);\n")
+    # #14 包管理器错误呈现链断言的夹具目标（形状与真仓一致：DX3 forge 复制行 +
+    # DX1 toast 双呈现 + DX2 互斥/重试 + R1 终端净化接线）
+    _w(SYNCLANES, "# 夹具 sync-lanes.sh\n"
+                  "cp -f forge-catalog.json lane/assets/forge-catalog.json\n"
+                  "cp -rf assets/forge/ lane/assets/forge/\n"
+                  "cp -rf assets/pkg/ lane/assets/pkg/\n")
+    _w(MODAL, "toastService.error(short, code);\n"
+              "await packageManagerPlugin.loadCatalog();\n"
+              "{#if !catalogLoaded && catalogLoading && !errorMsg}\n")
+    _w(TERMC, "import { ErrorSanitizer } from '../semantic/ErrorSanitizer';\n"
+              "const sanitized = ErrorSanitizer.sanitize(String(err), this._locale);\n")
     # 夹具台账键集（A 面）。gate 锚点在夹具里指向不存在的文件（zreflect/ 不在
     # 夹具根）⇒ 良好用例须先把该锚点换成夹具内在册的路径。
     keys = {"integrity_check_physical", "get_assets_port_alive",
             "supervisor_no_mock_fallback", "plot_panel_figure_chain",
             "engine_layer_no_ui_import", "offline_boot_five_piece",
-            "sha_ledger_no_decoration", "download_event_two_shot"}
+            "sha_ledger_no_decoration", "download_event_two_shot",
+            "pkg_error_toast_chain"}
     # 基底登记表 = 真登记表（含 pending 两条）；gate 锚点的 check 指向夹具里
     # 真实存在的文件（闸门自己），保持 A/B 两面在夹具上完整可判。
     good_reg = json.load(open(os.path.join(
@@ -422,6 +440,33 @@ def _cases():
                          "let omcMeta = KNOWN_ENGINE_METADATA['omc'];\n"
                          "// download() 内 finally 零 broadcastChange\n",
                          good_reg, "invalidateCache(lane as any)")),
+        ("★ #14 DX3 forge 复制行没了 ⇒ 必须报（缺 forge-catalog.json 片段）",
+         lambda: _mutate(SYNCLANES,
+                         "# 夹具 sync-lanes.sh（forge 行被拔掉）\n"
+                         "cp -rf other/ lane/other/\n",
+                         good_reg, "forge-catalog.json")),
+        ("★ #14 DX1 toast 双呈现接线没了 ⇒ 必须报（缺 toastService.error 片段）",
+         lambda: _mutate(MODAL,
+                         "toastService.info('nothing');\n"
+                         "await packageManagerPlugin.loadCatalog();\n"
+                         "{#if !catalogLoaded && catalogLoading && !errorMsg}\n",
+                         good_reg, "toastService.error")),
+        ("★ #14 DX2 互斥双保险没了 ⇒ 必须报（缺 !errorMsg 模板片段）",
+         lambda: _mutate(MODAL,
+                         "toastService.error(short, code);\n"
+                         "await packageManagerPlugin.loadCatalog();\n"
+                         "{#if !catalogLoaded && catalogLoading}\n",
+                         good_reg, "!catalogLoaded && catalogLoading && !errorMsg")),
+        ("★ #14 DX2 重试路径没了 ⇒ 必须报（缺 loadCatalog() 调用）",
+         lambda: _mutate(MODAL,
+                         "toastService.error(short, code);\n"
+                         "await somethingElse();\n"
+                         "{#if !catalogLoaded && catalogLoading && !errorMsg}\n",
+                         good_reg, "packageManagerPlugin.loadCatalog()")),
+        ("★ #14 R1 终端净化接线没了 ⇒ 必须报（缺 ErrorSanitizer.sanitize）",
+         lambda: _mutate(TERMC,
+                         "const text = String(err);\n",
+                         good_reg, "ErrorSanitizer.sanitize")),
         ("★ src/lib/engine 壳存在 ⇒ 必须报（pending 翻生效后真的会红）",
          lambda: _lib_case()),
         ("★ 断言无判据字段 ⇒ 必须报（登记了却不查 = 装饰）",

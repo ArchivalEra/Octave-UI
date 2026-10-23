@@ -389,6 +389,8 @@ const _zhHans = {
   'package_manager.err_compute_plan': '无法计算安装计划: {error}',
   'package_manager.err_install_failed': '安装失败: {error}',
   'package_manager.err_install_generic': '安装发生异常: {error}',
+  'package_manager.btn_retry': '重试',
+  'package_manager.catalog_error_empty': '货架目录装载失败。可点重试，或查看控制台详情。',
 
   // 7 错误码封闭集 (Closed error codes from host-007 & mail/012)
   'errors.NOT_DOWNLOADED': '资产尚未下载至本地存储',
@@ -401,6 +403,23 @@ const _zhHans = {
   'errors.CATALOG_UNREADABLE': '货架目录丢失或无法解析',
   'errors.NOT_INSTALLABLE': '该条目为工具链能力，不走解释器装载',
   'errors.LAYER_NOT_IMPLEMENTED': '能力层尚未在当前构建中实现',
+
+  // assets-loader errCode 词表（DX1，wayfinder #14）：UI 会遇到的 code 子集——
+  // 消费端 t('errors.' + code) 翻译；toast-code-badge 呈现原始 code 串
+  'errors.FS_NOT_READY': '引擎文件系统尚未就绪',
+  'errors.MODULE_NOT_READY': '引擎模块尚未就绪',
+  'errors.ASSET_FETCH_FAILED': '站点资产拉取失败',
+  'errors.MANIFEST_FETCH_FAILED': '资产清单拉取失败',
+  'errors.LAYER_UNREACHABLE': '能力层不可达',
+  'errors.SHA_MISMATCH': '资产完整性校验失败（sha256 不匹配）',
+  'errors.ASSET_NO_MOUNT': '资产缺少挂载路径',
+  'errors.JS_BUNDLE_NO_META': 'JS 包未声明资产元数据',
+  'errors.UNKNOWN_ASSET_KIND': '未知资产类型',
+  'errors.UNPACK_FAILED': '资产解包失败',
+  'errors.NOT_IN_ANY_LIST': '货架上没有这个包（目录或清单缺失）',
+  'errors.ENGINE_NOT_READY': '引擎尚未就绪，无法执行该操作',
+  'errors.ARCH_MISMATCH': '包架构与当前车道不匹配',
+  'errors.COMPILE_FAILED': '源码包编译失败',
 
   // Package Manager & Download additions
   'package_manager.btn_download': '下载',

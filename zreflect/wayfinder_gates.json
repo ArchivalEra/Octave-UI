@@ -10,6 +10,7 @@
     {"ticket": 11, "key": "engine_layer_no_ui_import",   "kind": "ledger", "check": null},
     {"ticket": 12, "key": "sha_ledger_no_decoration",    "kind": "ledger", "check": null},
     {"ticket": 15, "key": "download_event_two_shot",     "kind": "ledger", "check": null},
+    {"ticket": 14, "key": "pkg_error_toast_chain",       "kind": "ledger", "check": null},
     {"ticket": 13, "key": "check_wayfinder_selftest",    "kind": "gate",   "check": "zreflect/check_wayfinder.py"}
   ],
   "assertions": [
@@ -27,6 +28,13 @@
     {"ticket": 12, "desc": "combinedSha 拼接产地删除（三产地归一）", "file": "src/modules/storage/DownloadStore.ts", "must_not_contain": "combinedSha"},
     {"ticket": 12, "desc": "KNOWN_ENGINE_METADATA 瘦身：键 omc（版本语义除名）", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "KNOWN_ENGINE_METADATA['omc']"},
     {"ticket": 15, "desc": "两发定档形状：download() 的 finally 块不再发 broadcastChange（第三声删除）", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "download() 内 finally 零 broadcastChange"},
-    {"ticket": 15, "desc": "失效挂点形状：download() 终态显式调 invalidateCache（#7 显式方法）", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "EngineAssetResolver.getInstance().invalidateCache(lane as any)"}
+    {"ticket": 15, "desc": "失效挂点形状：download() 终态显式调 invalidateCache（#7 显式方法）", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "EngineAssetResolver.getInstance().invalidateCache(lane as any)"},
+    {"ticket": 14, "desc": "DX3 forge 族复制行：sync-lanes.sh 铺 lane 时物理复制根 assets 的 forge-catalog.json", "file": "scripts/sync-lanes.sh", "must_contain": "forge-catalog.json"},
+    {"ticket": 14, "desc": "DX3 forge 族复制行：sync-lanes.sh 复制 assets/forge/ 目录进 lane", "file": "scripts/sync-lanes.sh", "must_contain": "assets/forge/"},
+    {"ticket": 14, "desc": "DX3 forge 族复制行：sync-lanes.sh 复制 assets/pkg/ 目录进 lane", "file": "scripts/sync-lanes.sh", "must_contain": "assets/pkg/"},
+    {"ticket": 14, "desc": "DX1 toast 双呈现接线：模态组件调 toastService.error（errors.* 键完整性归 i18n 闸门）", "file": "src/components/PackageManagerModal.svelte", "must_contain": "toastService.error"},
+    {"ticket": 14, "desc": "DX2 重试路径：模态组件调 packageManagerPlugin.loadCatalog()（#8 已救活）", "file": "src/components/PackageManagerModal.svelte", "must_contain": "packageManagerPlugin.loadCatalog()"},
+    {"ticket": 14, "desc": "DX2 loading/error 互斥：模板层 spinner 渲染挂 !errorMsg 双保险", "file": "src/components/PackageManagerModal.svelte", "must_contain": "!catalogLoaded && catalogLoading && !errorMsg"},
+    {"ticket": 14, "desc": "R1 终端净化接线：TerminalController onError 通道过 ErrorSanitizer", "file": "src/modules/terminal/TerminalController.ts", "must_contain": "ErrorSanitizer.sanitize"}
   ]
 }

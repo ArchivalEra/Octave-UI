@@ -42,6 +42,23 @@ for LANE in "${LANES[@]}"; do
     mkdir -p "${LANE_DIR}/assets/m"
     cp -f "${UPSTREAM_REPO}/site/assets/m/plotbridge.js" "${LANE_DIR}/assets/m/plotbridge.js"
   fi
+
+  # DX3（wayfinder #14）：forge 族三缺补齐——根 assets 的 forge 族物理复制进 lane 目录。
+  # 引擎侧 assets-loader 的 withBase 机制读 lane 相对路径（assets/forge-catalog.json、
+  # assets/forge/、assets/pkg/），lane 目录里没有这三件 ⇒ dev 形态装任何包必 404。
+  # 双源收敛 = 根 assets 单源：副本与根同源由本处复制保证（不软链——静态交付物无软链语义）。
+  if [ -f "${REPO_ROOT}/public/assets/forge-catalog.json" ]; then
+    echo "    --> [DX3] 铺 forge 族进 lane: forge-catalog.json + forge/ + pkg/"
+    cp -f "${REPO_ROOT}/public/assets/forge-catalog.json" "${LANE_DIR}/assets/forge-catalog.json"
+    if [ -d "${REPO_ROOT}/public/assets/forge" ]; then
+      mkdir -p "${LANE_DIR}/assets/forge"
+      cp -rf "${REPO_ROOT}/public/assets/forge/"* "${LANE_DIR}/assets/forge/"
+    fi
+  fi
+  if [ -d "${REPO_ROOT}/public/assets/pkg" ]; then
+    mkdir -p "${LANE_DIR}/assets/pkg"
+    cp -rf "${REPO_ROOT}/public/assets/pkg/"* "${LANE_DIR}/assets/pkg/"
+  fi
 done
 
 # 同步 w64 最新多线程二进制

@@ -118,4 +118,64 @@ describe('TerminalController Deep Module', () => {
 
     expect(evaledCode).toBe('plot(1:10);\ndrawnow;');
   });
+
+  // ── R1（wayfinder #14，自 #11 移入）：终端 onError 通道接 ErrorSanitizer ──────
+  // 上游 octave-embed.js:157 的硬编码中文（「eval 失败 rc=…（Octave 错误文本走
+  // on.output 通道）」）是 bridge 文件不动；净化器在消费端拦——bridge 噪音剥掉、
+  // 语义分类、按 locale 渲染。判据：终端错误输出无裸中文旁路（三语各测）。
+  describe('R1: onError channel runs through ErrorSanitizer', () => {
+    const rawBridgeError = "eval 失败 rc=2（Octave 错误文本走 on.output 通道）";
+
+    function flattenedOf(ctrl: TerminalController): string {
+      ctrl.flushOutput();
+      return ctrl.lines.map(line => line.map(s => s.text).join('')).join('\n');
+    }
+
+    it('strips bridge noise (octave-embed.js:157 hard-coded Chinese bypass) from terminal error output', () => {
+      adapter.emitError(rawBridgeError);
+      const text = flattenedOf(controller);
+      // bridge 噪音前缀必须被剥掉——不许「eval 失败 rc=2」裸出现在终端面
+      expect(text).not.toContain('eval 失败 rc=2');
+      expect(text).not.toContain('Octave 错误文本走 on.output 通道');
+      // 净化器按 locale 渲染的人读文案必须在（zh-Hans 缺省：未知错误第一行）
+      expect(text.trim().length).toBeGreaterThan(0);
+    });
+
+    it('classifies semantic errors per locale (zh-Hans / en / de 各测)', () => {
+      const cases: Array<{ locale: 'zh-Hans' | 'en' | 'de'; expectText: string }> = [
+        { locale: 'zh-Hans', expectText: '变量或函数' },
+        { locale: 'en', expectText: 'is undefined' },
+        { locale: 'de', expectText: 'ist nicht definiert' },
+      ];
+      for (const { locale, expectText } of cases) {
+        controller.clear();
+        controller.setLocale(locale);
+        adapter.emitError("error: 'foo' undefined");
+        const text = flattenedOf(controller);
+        expect(text).toContain(expectText);
+        // 原始英文错误串也已被分类渲染替换（不是原文直通）
+        expect(text).not.toContain("error: 'foo' undefined");
+      }
+      controller.setLocale('zh-Hans');
+    });
+
+    it('renders singular-matrix errors with localized suggestion path (sanitizer format consumed)', () => {
+      controller.clear();
+      controller.setLocale('en');
+      adapter.emitError('warning: matrix singular to machine precision');
+      const text = flattenedOf(controller);
+      expect(text).toContain('Matrix is singular');
+      controller.setLocale('zh-Hans');
+    });
+
+    it('keeps unknown-family errors as first-line passthrough without bridge noise (反向：无中生有的分类不许出现)', () => {
+      controller.clear();
+      adapter.emitError('some totally unknown failure xyz');
+      const text = flattenedOf(controller);
+      // 未知族：净化器取第一行原样（zh-Hans 缺省路径）——不许编造分类徽标串
+      expect(text).toContain('some totally unknown failure xyz');
+      expect(text).not.toContain('SINGULAR_MATRIX');
+      expect(text).not.toContain('UNDEFINED_VARIABLE');
+    });
+  });
 });
