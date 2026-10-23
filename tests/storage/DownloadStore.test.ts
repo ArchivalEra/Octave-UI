@@ -1,16 +1,29 @@
 // tests/storage/DownloadStore.test.ts
-import { describe, it, expect, beforeEach } from 'vitest';
-import { DownloadStore } from '../../src/modules/storage/DownloadStore';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { DownloadStore, KNOWN_ENGINE_METADATA } from '../../src/modules/storage/DownloadStore';
 import { MemoryStore } from '../../src/modules/storage/MemoryStore';
 import { MockFetchAdapter } from '../../src/modules/storage/FetchPort';
 import { DownloadError, refToKey } from '../../src/modules/storage/downloadTypes';
 import type { DownloadRef } from '../../src/modules/storage/downloadTypes';
 import type { ForgeCatalog } from '../../src/modules/plugins/package/types';
+import * as nodeCrypto from 'node:crypto';
+
+// #12 Q12.3：intake 断言只放行真 64hex 指纹 ⇒ 测试里的 catalog/manifest
+// sha 一律真算（同 EngineAssetResolver.test.ts 的 sha256OfNode 写法）。
+function sha256OfNode(data: string | Uint8Array): string {
+  return nodeCrypto.createHash('sha256').update(data).digest('hex');
+}
 
 describe('DownloadStore Deep Module', () => {
   let memoryStore: MemoryStore;
   let mockFetch: MockFetchAdapter;
   let store: DownloadStore;
+
+  const CGI_SHA = sha256OfNode('fake-tarball-cgi');
+  const SYMBOLIC_V1_SHA = sha256OfNode('symbolic-v1');
+  const SYMBOLIC_V2_SHA = sha256OfNode('symbolic-v2');
+  const SIGNAL_W32_SHA = sha256OfNode('oct-32');
+  const SIGNAL_W64_SHA = sha256OfNode('oct-64');
 
   const sampleCatalog: ForgeCatalog = {
     schema: 2,
@@ -29,7 +42,7 @@ describe('DownloadStore Deep Module', () => {
             form: 'pkg',
             content: ['m'],
             size: 1024,
-            sha256: 'sha-cgi-0.1.2-abc123',
+            sha256: CGI_SHA,
           } as any,
           {
             version: '0.1.0',
@@ -53,7 +66,7 @@ describe('DownloadStore Deep Module', () => {
             form: 'pkg',
             content: ['m'],
             size: 2048,
-            sha256: 'sha-symbolic-3.2.2',
+            sha256: SYMBOLIC_V1_SHA,
           } as any,
         ],
       },
@@ -68,15 +81,15 @@ describe('DownloadStore Deep Module', () => {
             arch: 'wasm32',
             version: '1.4.5',
             size: 5000,
-            sha256: 'sha-signal-w32',
-            files: [{ name: 'signal.oct', size: 5000, sha256: 'sha-signal-w32' }],
+            sha256: SIGNAL_W32_SHA,
+            files: [{ name: 'signal.oct', size: 5000, sha256: SIGNAL_W32_SHA }],
           },
           {
             arch: 'w64',
             version: '1.4.5',
             size: 6000,
-            sha256: 'sha-signal-w64',
-            files: [{ name: 'signal.oct', size: 6000, sha256: 'sha-signal-w64' }],
+            sha256: SIGNAL_W64_SHA,
+            files: [{ name: 'signal.oct', size: 6000, sha256: SIGNAL_W64_SHA }],
           },
         ],
       } as any,
@@ -103,8 +116,8 @@ describe('DownloadStore Deep Module', () => {
   const sampleEngineBuild = {
     measured: {
       files: {
-        'octave.js': { sha256: 'sha-js', bytes: 100 },
-        'octave.wasm': { sha256: 'sha-wasm', bytes: 500 },
+        'octave.js': { sha256: sha256OfNode('js-content'), bytes: 100 },
+        'octave.wasm': { sha256: sha256OfNode('wasm-content'), bytes: 500 },
       },
     },
   };
@@ -132,13 +145,14 @@ describe('DownloadStore Deep Module', () => {
   });
 
   it('I1: resolves SHA256 and target authoritatively from catalog', async () => {
-    const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' };
+    const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
     const url = 'https://octave.test/assets/packages/cgi-0.1.2.tar.gz';
-    mockFetch.setFile(url, 'fake-tarball-cgi', 'sha-cgi-0.1.2-abc123');
+    mockFetch.setFile(url, 'fake-tarball-cgi', CGI_SHA);
 
     const rec = await store.download(ref);
     expect(rec.ref.name).toBe('cgi');
-    expect(rec.sha256).toBe('sha-cgi-0.1.2-abc123');
+    // 单文件下载：顶层 sha = 该文件自身指纹（#12 Q12.2）
+    expect(rec.sha256).toBe(CGI_SHA);
     expect(rec.files[0].path).toBe('downloads/src/cgi/0.1.2/cgi-0.1.2.tar.gz');
 
     // 清单存在
@@ -146,15 +160,20 @@ describe('DownloadStore Deep Module', () => {
   });
 
   it('I2: atomic rollback when SHA256 mismatch or write fails', async () => {
-    const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' };
+    const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
     const url = 'https://octave.test/assets/packages/cgi-0.1.2.tar.gz';
-    // 伪造错误哈希
-    mockFetch.setFile(url, 'tampered-data', 'wrong-sha');
+    // 伪造错误哈希（仍是合法 64hex 形状——intake 断言放行，校验环拦截）
+    mockFetch.setFile(url, 'tampered-data', sha256OfNode('tampered-data'));
+    // catalog 声称的指纹与盘上字节不符 ⇒ 校验红
+    (sampleCatalog.packs[0].versions![0] as any).sha256 = sha256OfNode('fake-tarball-cgi-X');
 
     await expect(store.download(ref)).rejects.toThrow(DownloadError);
     await expect(store.download(ref)).rejects.toMatchObject({
       code: 'STORAGE_WRITE_FAILED',
     });
+
+    // 恢复 catalog 指纹供后续用例复用
+    (sampleCatalog.packs[0].versions![0] as any).sha256 = CGI_SHA;
 
     // 确认清单中没有任何残留记录 (I2)
     expect(store.has(ref)).toBe(false);
@@ -163,33 +182,40 @@ describe('DownloadStore Deep Module', () => {
   });
 
   it('I3: idempotency on unchanged SHA and drift detection when SHA changes', async () => {
-    const ref: DownloadRef = { name: 'symbolic', version: '3.2.2', kind: 'src' };
+    const ref: DownloadRef = { name: 'symbolic', version: '3.2.2', kind: 'src' } as any;
     const url = 'https://octave.test/assets/packages/symbolic-3.2.2.tar.gz';
-    mockFetch.setFile(url, 'symbolic-v1', 'sha-symbolic-3.2.2');
+    mockFetch.setFile(url, 'symbolic-v1', SYMBOLIC_V1_SHA);
 
+    const fetchSpy = vi.spyOn(mockFetch, 'fetchBytes');
     const rec1 = await store.download(ref);
-    expect(rec1.sha256).toBe('sha-symbolic-3.2.2');
+    expect(rec1.sha256).toBe(SYMBOLIC_V1_SHA);
 
-    // 第二次复跑：哈希一致，直接返回已存记录
+    // 第二次复跑：三元组一致，直接返回已存记录——零网络（#12 Q12.1）
+    const callsAfterFirst = fetchSpy.mock.calls.length;
     const rec2 = await store.download(ref);
     expect(rec2.sha256).toBe(rec1.sha256);
     expect(rec2.downloadedAt).toBe(rec1.downloadedAt);
+    expect(fetchSpy.mock.calls.length).toBe(callsAfterFirst);
+    fetchSpy.mockRestore();
 
-    // 模拟远端当日重新发布导致 SHA 漂移
-    (sampleCatalog.packs[1].versions![0] as any).sha256 = 'sha-symbolic-3.2.2-new';
-    mockFetch.setFile(url, 'symbolic-v2', 'sha-symbolic-3.2.2-new');
+    // 模拟远端当日重新发布导致 SHA 漂移（字节变 ⇒ 指纹变）
+    (sampleCatalog.packs[1].versions![0] as any).sha256 = SYMBOLIC_V2_SHA;
+    mockFetch.setFile(url, 'symbolic-v2', SYMBOLIC_V2_SHA);
 
     const rec3 = await store.download(ref);
-    expect(rec3.sha256).toBe('sha-symbolic-3.2.2-new');
+    expect(rec3.sha256).toBe(SYMBOLIC_V2_SHA);
     expect(rec3.bytes).toBe(11);
+
+    // 复原 catalog 供后续用例
+    (sampleCatalog.packs[1].versions![0] as any).sha256 = SYMBOLIC_V1_SHA;
   });
 
   it('I6: maintains independent records for different architectures', async () => {
-    const refW32: DownloadRef = { name: 'signal', version: '1.4.5', kind: 'pre', arch: 'wasm32' };
-    const refW64: DownloadRef = { name: 'signal', version: '1.4.5', kind: 'pre', arch: 'w64' };
+    const refW32: DownloadRef = { name: 'signal', version: '1.4.5', kind: 'pre', arch: 'wasm32' } as any;
+    const refW64: DownloadRef = { name: 'signal', version: '1.4.5', kind: 'pre', arch: 'w64' } as any;
 
-    mockFetch.setFile('https://octave.test/assets/packages/wasm32/signal.oct', 'oct-32', 'sha-signal-w32');
-    mockFetch.setFile('https://octave.test/assets/packages/w64/signal.oct', 'oct-64', 'sha-signal-w64');
+    mockFetch.setFile('https://octave.test/assets/packages/wasm32/signal.oct', 'oct-32', SIGNAL_W32_SHA);
+    mockFetch.setFile('https://octave.test/assets/packages/w64/signal.oct', 'oct-64', SIGNAL_W64_SHA);
 
     const recW32 = await store.download(refW32);
     const recW64 = await store.download(refW64);
@@ -216,16 +242,16 @@ describe('DownloadStore Deep Module', () => {
     await smallStore.init();
 
     // symbolic 预估大小 2048 字节 > 500 字节
-    const ref: DownloadRef = { name: 'symbolic', version: '3.2.2', kind: 'src' };
+    const ref: DownloadRef = { name: 'symbolic', version: '3.2.2', kind: 'src' } as any;
     await expect(smallStore.download(ref)).rejects.toMatchObject({
       code: 'STORAGE_QUOTA_EXHAUSTED',
     });
   });
 
   it('reconciles stat with disk deletion and cleans up missing records', async () => {
-    const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' };
+    const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
     const url = 'https://octave.test/assets/packages/cgi-0.1.2.tar.gz';
-    mockFetch.setFile(url, 'fake-tarball-cgi', 'sha-cgi-0.1.2-abc123');
+    mockFetch.setFile(url, 'fake-tarball-cgi', CGI_SHA);
 
     await store.download(ref);
     expect(store.has(ref)).toBe(true);
@@ -241,26 +267,28 @@ describe('DownloadStore Deep Module', () => {
 
   it('handles 7 closed error codes reliably', async () => {
     // 1. NOT_DOWNLOADED
-    const refUncut: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' };
+    const refUncut: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
     await expect(store.unit(refUncut)).rejects.toMatchObject({ code: 'NOT_DOWNLOADED' });
 
     // 2. VERSION_WITHHELD
-    const refWithheld: DownloadRef = { name: 'cgi', version: '0.1.0', kind: 'src' };
+    const refWithheld: DownloadRef = { name: 'cgi', version: '0.1.0', kind: 'src' } as any;
     await expect(store.download(refWithheld)).rejects.toMatchObject({ code: 'VERSION_WITHHELD' });
 
     // 3. FLAVOR_UNAVAILABLE
-    const refNoArch: DownloadRef = { name: 'signal', version: '1.4.5', kind: 'pre' };
+    const refNoArch: DownloadRef = { name: 'signal', version: '1.4.5', kind: 'pre' } as any;
     await expect(store.download(refNoArch)).rejects.toMatchObject({ code: 'FLAVOR_UNAVAILABLE' });
 
-    // 4. STORAGE_WRITE_FAILED
-    const refBad: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' };
-    mockFetch.setFile('https://octave.test/assets/packages/cgi-0.1.2.tar.gz', 'bad', 'bad-sha');
+    // 4. STORAGE_WRITE_FAILED（catalog 指纹与盘上字节不符——校验环拦截）
+    const refBad: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
+    mockFetch.setFile('https://octave.test/assets/packages/cgi-0.1.2.tar.gz', 'bad', sha256OfNode('bad'));
+    (sampleCatalog.packs[0].versions![0] as any).sha256 = sha256OfNode('other-bytes');
     await expect(store.download(refBad)).rejects.toMatchObject({ code: 'STORAGE_WRITE_FAILED' });
+    (sampleCatalog.packs[0].versions![0] as any).sha256 = CGI_SHA;
 
     // 5. DOWNLOAD_ABORTED
     const controller = new AbortController();
     controller.abort();
-    mockFetch.setFile('https://octave.test/assets/packages/cgi-0.1.2.tar.gz', 'data', 'sha-cgi-0.1.2-abc123');
+    mockFetch.setFile('https://octave.test/assets/packages/cgi-0.1.2.tar.gz', 'data', sha256OfNode('data'));
     await expect(store.download(refBad, { signal: controller.signal })).rejects.toMatchObject({
       code: 'DOWNLOAD_ABORTED',
     });
@@ -284,16 +312,19 @@ describe('DownloadStore Deep Module', () => {
   it('supports decoupled engine download and multi-engine coexistence in OPFS', async () => {
     // 1. 下载 Octave 引擎档 (master)
     //    #6 起引擎下载是「五件套」：build/manifest 两件也随档抓取（sha256: undefined 走 intake 守卫跳过校验）
-    mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', 'sha-js');
-    mockFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', 'sha-wasm');
-    mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', 'sha-build');
-    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', 'sha-assets');
+    mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', sha256OfNode('js-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
+    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
 
     expect(store.isEngineDownloaded('master')).toBe(false);
     const recOctave = await store.downloadEngine('master');
     expect(recOctave.ref.kind).toBe('engine');
     expect(recOctave.ref.name).toBe('octave');
     expect(recOctave.ref.arch).toBe('master');
+    // 多文件下载：顶层 sha = undefined（#12 Q12.2——无聚合指纹，对账走 files[]）
+    expect(recOctave.sha256).toBeUndefined();
+    expect(recOctave.files.every((f) => /^[0-9a-f]{64}$/.test(f.sha256))).toBe(true);
     expect(store.isEngineDownloaded('master')).toBe(true);
 
     // 2. 同时下载 OpenModelica 第二引擎档 (omc)
@@ -304,6 +335,9 @@ describe('DownloadStore Deep Module', () => {
     const recOmc = await store.downloadEngine('omc');
     expect(recOmc.ref.kind).toBe('engine');
     expect(recOmc.ref.name).toBe('omc');
+    // omc 也是两件套（多文件）⇒ 顶层 sha = undefined（#12 Q12.2）
+    expect(recOmc.sha256).toBeUndefined();
+    expect(recOmc.files.length).toBe(2);
     expect(store.isEngineDownloaded('omc')).toBe(true);
 
     // 3. 两档引擎独立保存在 OPFS 清单中
@@ -323,19 +357,19 @@ describe('DownloadStore Deep Module', () => {
     const rootEngineBuild = {
       measured: {
         files: {
-          'octave.js': { sha256: 'sha-root-js', bytes: 120 },
-          'octave.wasm': { sha256: 'sha-root-wasm', bytes: 600 },
+          'octave.js': { sha256: sha256OfNode('root-js'), bytes: 120 },
+          'octave.wasm': { sha256: sha256OfNode('root-wasm'), bytes: 600 },
         },
       },
     };
 
     const rootFetch = new MockFetchAdapter();
     rootFetch.setJSON('https://octave.test/octave.build.json', rootEngineBuild);
-    rootFetch.setFile('https://octave.test/octave.js', 'root-js', 'sha-root-js');
-    rootFetch.setFile('https://octave.test/octave.wasm', 'root-wasm', 'sha-root-wasm');
+    rootFetch.setFile('https://octave.test/octave.js', 'root-js', sha256OfNode('root-js'));
+    rootFetch.setFile('https://octave.test/octave.wasm', 'root-wasm', sha256OfNode('root-wasm'));
     // #6 五件套 +2：部署在站点根目录的两件清单（chosenFolder='' ⇒ url 无前缀）
-    rootFetch.setFile('https://octave.test/octave.build.json', 'root-build', 'sha-root-build');
-    rootFetch.setFile('https://octave.test/assets/manifest.json', 'root-assets', 'sha-root-assets');
+    rootFetch.setFile('https://octave.test/octave.build.json', 'root-build', sha256OfNode('root-build'));
+    rootFetch.setFile('https://octave.test/assets/manifest.json', 'root-assets', sha256OfNode('root-assets'));
 
     const realStore = new DownloadStore({
       storage: memoryStore,
@@ -373,15 +407,241 @@ describe('DownloadStore Deep Module', () => {
   });
 
   it('resolves runtime target with direct url and wasm filename when specified in catalog', async () => {
-    const ref: DownloadRef = { name: 'pyodide', version: '314.0.7', kind: 'runtime' };
+    const ref: DownloadRef = { name: 'pyodide', version: '314.0.7', kind: 'runtime' } as any;
     const url = 'https://octave.test/assets/pyodide/pyodide/pyodide.asm.wasm';
     const sha = 'cc36e3cab04fdfc9a63ff13eb52eae2b911bf46c025cc7b281f394bd3de1d5e6';
     mockFetch.setFile(url, 'wasm-data-pyodide', sha);
 
     const rec = await store.download(ref);
     expect(rec.ref.name).toBe('pyodide');
+    // 单文件下载：顶层 sha = 该文件自身指纹（#12 Q12.2）
     expect(rec.sha256).toBe(sha);
     expect(rec.files[0].path).toBe('downloads/runtime/pyodide/314.0.7/pyodide.asm.wasm');
     expect(store.has(ref)).toBe(true);
+  });
+
+  // ══ #12 Q12.5：sha 台账去装饰化的判据面 ═══════════════════════════════
+
+  it('#12 Q12.3: rejects 128hex concatenated sha in items with INDEX_UNREADABLE', async () => {
+    // mock catalog 给 omc 条目带 128hex 拼接串（顶层聚合 sha 的旧装饰形状）
+    const badOmcCatalog: ForgeCatalog = {
+      packs: [
+        {
+          name: 'omc',
+          version: '1.25.0',
+          form: 'tree',
+          content: [],
+          files: {
+            'OpenModelicaCompiler_bg.wasm': {
+              bytes: 12000,
+              sha256: '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d00156c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17',
+            },
+            'OpenModelicaCompiler.js': { bytes: 345, sha256: sha256OfNode('omc-js') },
+          },
+        } as any,
+      ],
+    };
+    const badStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: () => badOmcCatalog,
+    });
+    await badStore.init();
+
+    await expect(badStore.downloadEngine('omc')).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+    });
+  });
+
+  it('#12 Q12.3: rejects empty-string sha in items with INDEX_UNREADABLE', async () => {
+    // 空 sha（有值但不是 64hex）⇒ 同一出口断言拦下
+    const emptyShaCatalog: ForgeCatalog = {
+      packs: [
+        {
+          name: 'omc',
+          version: '1.25.0',
+          form: 'tree',
+          content: [],
+          files: {
+            'OpenModelicaCompiler_bg.wasm': { bytes: 12000, sha256: sha256OfNode('omc-wasm') },
+            'OpenModelicaCompiler.js': { bytes: 345, sha256: '' },
+          },
+        } as any,
+      ],
+    };
+    const emptyStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: () => emptyShaCatalog,
+    });
+    await emptyStore.init();
+
+    await expect(emptyStore.downloadEngine('omc')).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+    });
+  });
+
+  it('#12 Q12.3: rejects non-hex sha and uppercase hex with INDEX_UNREADABLE (intake 只认小写 64hex)', async () => {
+    // 大写 hex 也是坏形状（断言是 ^[0-9a-f]{64}$ 逐字判）
+    const upperCatalog: ForgeCatalog = {
+      packs: [
+        {
+          name: 'omc',
+          version: '1.25.0',
+          form: 'tree',
+          content: [],
+          files: {
+            'OpenModelicaCompiler_bg.wasm': { bytes: 12000, sha256: sha256OfNode('omc-wasm').toUpperCase() },
+            'OpenModelicaCompiler.js': { bytes: 345, sha256: sha256OfNode('omc-js') },
+          },
+        } as any,
+      ],
+    };
+    const upperStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: () => upperCatalog,
+    });
+    await upperStore.init();
+
+    await expect(upperStore.downloadEngine('omc')).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+    });
+  });
+
+  it('#12 Q12.1: idempotent re-download after full five-piece engine download makes zero fetchPort calls (undefined sha skips sha dimension)', async () => {
+    // 五件套形状：三条带真 sha 的 items + 两条 sha256: undefined（下载时真算型）。
+    // 第一次下载记账 files[] 五条全存真算 sha；第二次 resolved.items 两条 undefined
+    // ⇒ 三元组比对跳过 sha 维（只比 path）⇒ 幂等命中 ⇒ fetchPort 调用数 === 0。
+    mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', sha256OfNode('js-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
+    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
+
+    const first = await store.downloadEngine('master');
+    expect(first.files.length).toBe(4);
+    expect(first.sha256).toBeUndefined();
+
+    const fetchSpy = vi.spyOn(mockFetch, 'fetchBytes');
+    const second = await store.downloadEngine('master');
+    expect(fetchSpy.mock.calls.length).toBe(0);
+    expect(second.downloadedAt).toBe(first.downloadedAt);
+    expect(second.bytes).toBe(first.bytes);
+    fetchSpy.mockRestore();
+  });
+
+  it('#12 Q12.1: drift in a single file (bytes or sha) breaks idempotency and re-downloads', async () => {
+    // 反向断言：目录当日更新（build.json 的 measured.files 变了）⇒ 三元组不等 ⇒ 重拉
+    mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', sha256OfNode('js-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
+    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
+
+    await store.downloadEngine('master');
+
+    // 目录更新：octave.js 内容漂移（sha 变）
+    sampleEngineBuild.measured.files['octave.js'] = {
+      sha256: sha256OfNode('js-content-v2'),
+      bytes: 100,
+    };
+    mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content-v2', sha256OfNode('js-content-v2'));
+
+    const fetchSpy = vi.spyOn(mockFetch, 'fetchBytes');
+    const rec2 = await store.downloadEngine('master');
+    // 全量重拉（I2 原子语义：漂移即清账重下）
+    expect(fetchSpy.mock.calls.length).toBe(4);
+    expect(rec2.files.find((f) => f.path.endsWith('octave.js'))?.sha256).toBe(sha256OfNode('js-content-v2'));
+    fetchSpy.mockRestore();
+
+    // 复原目录供后续用例
+    sampleEngineBuild.measured.files['octave.js'] = {
+      sha256: sha256OfNode('js-content'),
+      bytes: 100,
+    };
+  });
+
+  it('#12 Q12.2: KNOWN_ENGINE_METADATA is slimmed — key omc, no top-level sha256/bytes, bytes derive from files', async () => {
+    // 新形状断言：键 'omc'（版本语义从键除名，Q6C）
+    expect(Object.keys(KNOWN_ENGINE_METADATA)).toEqual(['omc']);
+    const omc = KNOWN_ENGINE_METADATA['omc'];
+    // 顶层聚合字段删除（形状即断言：读不到就是 undefined）
+    expect((omc as any).sha256).toBeUndefined();
+    expect((omc as any).bytes).toBeUndefined();
+    // files 逐件仍在（离线兜底的手抄指纹）
+    expect(Object.keys(omc.files).sort()).toEqual(['OpenModelicaCompiler.js', 'OpenModelicaCompiler_bg.wasm']);
+    for (const meta of Object.values(omc.files)) {
+      expect(meta.bytes).toBeGreaterThan(0);
+      expect(meta.sha256).toMatch(/^[0-9a-f]{64}$/);
+    }
+    // bytes 从 files 累加即得（resolveEngineTarget omc 分支的真源）
+    const sum = Object.values(omc.files).reduce((s, f) => s + f.bytes, 0);
+    expect(sum).toBe(74579404 + 56586);
+
+    // 离线兜底链路（无 catalogProvider ⇒ 用 KNOWN_ENGINE_METADATA）可走完：
+    // 顶层 sha 已删 ⇒ resolved 无聚合指纹；分件 sha 真值 ⇒ 校验绿 ⇒ record 顶层 sha = undefined
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler_bg.wasm', 'omc-wasm', omc.files['OpenModelicaCompiler_bg.wasm'].sha256);
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler.js', 'omc-js', omc.files['OpenModelicaCompiler.js'].sha256);
+    const offlineStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      maxQuotaBytes: 1024 * 1024 * 1024,
+    });
+    await offlineStore.init();
+    const rec = await offlineStore.downloadEngine('omc');
+    expect(rec.sha256).toBeUndefined();
+    // record.bytes 是**实际下载字节数**（'omc-wasm' 8 + 'omc-js' 6），
+    // 不是元数据表累加值——对账真源是 files[] 逐件记账
+    expect(rec.bytes).toBe(14);
+    expect(rec.files.map((f) => f.bytes)).toEqual([8, 6]);
+    expect(rec.files.map((f) => f.sha256)).toEqual([
+      omc.files['OpenModelicaCompiler_bg.wasm'].sha256,
+      omc.files['OpenModelicaCompiler.js'].sha256,
+    ]);
+  });
+
+  it('#12 Q12.4: catalog values override the handwritten KNOWN_ENGINE_METADATA fallback', async () => {
+    // catalog 带真 64hex 分件指纹 ⇒ 覆盖手抄表值（#8 已有类似用例，这里补
+    // 新形状侧：catalog 条目只取 files[]，顶层 sha/size 不再消费——聚合 sha 产地已删）
+    const catWasmSha = sha256OfNode('catalog-omc-wasm');
+    const catJsSha = sha256OfNode('catalog-omc-js');
+    const omcCatalog: ForgeCatalog = {
+      packs: [
+        {
+          name: 'omc',
+          version: '1.25.0',
+          form: 'tree',
+          content: [],
+          // 顶层 sha256/size 给的是旧装饰形状（128hex）——必须被忽略（只取 files）
+          sha256: 'f'.repeat(128),
+          size: 999,
+          files: {
+            'OpenModelicaCompiler_bg.wasm': { bytes: 12000, sha256: catWasmSha },
+            'OpenModelicaCompiler.js': { bytes: 345, sha256: catJsSha },
+          },
+        } as any,
+      ],
+    };
+    const catStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: () => omcCatalog,
+      maxQuotaBytes: 1024 * 1024,
+    });
+    await catStore.init();
+
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler_bg.wasm', 'a'.repeat(12000), catWasmSha);
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler.js', 'b'.repeat(345), catJsSha);
+
+    const rec = await catStore.downloadEngine('omc');
+    // 分件 sha / bytes 用 catalog 真值，不是 KNOWN_ENGINE_METADATA 手抄值
+    expect(rec.files.map((f) => f.sha256)).toEqual([catWasmSha, catJsSha]);
+    expect(rec.bytes).toBe(12000 + 345);
+    // 顶层聚合 sha 不再从 catalog 顶层 sha256 取（Q7A：删顶层 sha ⇒ undefined）
+    expect(rec.sha256).toBeUndefined();
   });
 });

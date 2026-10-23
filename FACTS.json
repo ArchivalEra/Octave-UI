@@ -1,13 +1,13 @@
 {
  "schema": 1,
- "generated": "2026-10-23T07:52:18+0800",
+ "generated": "2026-10-23T11:02:11+0800",
  "_why": "事实台账：每条 = 一个**测出来**的值 + 复跑命令 + 出处。别手改，跑 zreflect/facts.py。",
  "facts": {
   "ts_files": {
    "value": 97,
    "cmd": "find . \\( -path './src/*' -o -path './tests/*' \\) -name '*.ts' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-22",
    "note": "TypeScript 源码与测试文件数"
   },
@@ -15,7 +15,7 @@
    "value": 20,
    "cmd": "find . -path './src/*' -name '*.svelte' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-19",
    "note": "Svelte 5 组件与 Islands 数量"
   },
@@ -23,7 +23,7 @@
    "value": 2,
    "cmd": "find . -path './src/*' -name '*.astro' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-04",
    "note": "Astro 静态页面与布局数"
   },
@@ -31,7 +31,7 @@
    "value": 34,
    "cmd": "find . -path './tests/*' -name '*.test.ts' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-22",
    "note": "Vitest 单元测试套件数"
   },
@@ -39,14 +39,14 @@
    "value": 31,
    "cmd": "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-22"
   },
   "py_lines": {
-   "value": 7055,
+   "value": 7091,
    "cmd": "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-23",
    "note": "刻意 ≥100，用来示范裸数字判据"
   },
@@ -54,14 +54,14 @@
    "value": 47,
    "cmd": "find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-23"
   },
   "md_lines": {
    "value": 3277,
    "cmd": "find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l",
    "source": "repo",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-23",
    "note": "不含机器块：块就渲染在文档里，数进去会让渲染一遍值就过期"
   },
@@ -69,7 +69,7 @@
    "value": "integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）",
    "cmd": "pnpm test -- tests/engine/EngineAssetResolver.test.ts",
    "source": "wayfinder #7",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-22",
    "note": "票面 gate: 锚点；值是 vitest 用例面的一次采样（跑全测太贵不逐字复跑）",
    "replay": false,
@@ -80,7 +80,7 @@
    "value": "getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）",
    "cmd": "python3 -c \"import os; p='src/modules/plugins/package/PackageManagerPlugin.ts'; print(open(p).read().count('getAssetsPort') if os.path.exists(p) else 'absent')\"",
    "source": "wayfinder #8",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-22",
    "note": "票面 gate: 锚点；值是vitest+tsc一次采样（贵不逐字复跑）",
    "replay": false,
@@ -91,7 +91,7 @@
    "value": "EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）",
    "cmd": "python3 -c \"import os; p='src/modules/engine/EngineSupervisor.ts'; print(open(p).read().count('MockEmbedAdapter') if os.path.exists(p) else 'absent')\"",
    "source": "wayfinder #9",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-22",
    "note": "票面 gate: 锚点；值是vitest一次采样（贵不逐字复跑）",
    "replay": false,
@@ -102,7 +102,7 @@
    "value": "GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）",
    "cmd": "python3 -c \"import os; p='src/modules/figure/GraphicsSink.ts'; print(open(p).read().count('onFigure') if os.path.exists(p) else 'absent')\"",
    "source": "wayfinder #5",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-22",
    "note": "票面 gate: 锚点；值是vitest一次采样（贵不逐字复跑）",
    "replay": false,
@@ -113,7 +113,7 @@
    "value": "engine 层 6 个 ts 文件中含 toastService 的文件数 = 0（应为 0；（OmcBridge 抽离 + 三条 UI 旁路拔除；tests/engine/OmcBridge.test.ts 11 用例，2026-10-22 实测 322/322 绿）",
    "cmd": "python3 -c \"import os, glob; fs=glob.glob('src/modules/engine/*.ts'); print(sum(open(f).read().count('toastService') for f in fs) if fs else 'absent')\"",
    "source": "wayfinder #11",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-22",
    "note": "票面 gate: 锚点；值是源码形状一次采样（贵不逐字复跑）",
    "replay": false,
@@ -124,12 +124,23 @@
    "value": "boot OPFS 优先（verified ⇒ getBlob 读 octave.js 注入，未下载走网络，corrupted ⇒ throw ENGINE_CORRUPTED）+ matchRequest 两拦截键（assets/manifest.json 映射平铺名 assets-manifest.json、octave.build.json；w64 档 manifest.w64.json 不拦）+ 五件指纹（删 assets-manifest 后缓存不命中 ⇒ corrupted）（tests/engine/ 两文件 + DownloadStore 五件套记账，2026-10-23 实测 326/326 绿）",
    "cmd": "pnpm test -- tests/engine/EngineAssetResolver.test.ts tests/engine/WasmEmbedAdapter.test.ts",
    "source": "wayfinder #6",
-   "measured_at": "2026-10-23T07:52:18+0800",
+   "measured_at": "2026-10-23T11:02:11+0800",
    "first_seen": "2026-10-23",
    "note": "票面 gate: 锚点；值是 vitest 用例面的一次采样（跑全测太贵不逐字复跑）",
    "replay": false,
    "witness": "python3 -c \"import os; p='src/modules/engine/EngineAssetResolver.ts'; print(open(p).read().count('assets-manifest.json') if os.path.exists(p) else 'absent')\"",
    "witness_expect": "4"
+  },
+  "sha_ledger_no_decoration": {
+   "value": "DownloadStore sha 台账去装饰化：源内 128hex 字面量 = 0 + combinedSha 拼接产地 = 0（三产地归一）；幂等比对换逐文件三元组（path/sha/bytes，undefined sha 跳 sha 维）⇒ 五件套重下 fetchPort 调用 = 0；intake 出口 64hex 断言（128hex/空串/大写 ⇒ INDEX_UNREADABLE）；KNOWN_ENGINE_METADATA 瘦身（键 omc、无顶层 bytes/sha256，bytes 从 files 累加）+ 多文件 record 顶层 sha = undefined（tests/storage/DownloadStore.test.ts + tests/plugins/PackageManagerPlugin.test.ts，2026-10-23 实测 333/333 绿）",
+   "cmd": "pnpm test -- tests/storage/DownloadStore.test.ts tests/plugins/PackageManagerPlugin.test.ts",
+   "source": "wayfinder #12",
+   "measured_at": "2026-10-23T11:02:11+0800",
+   "first_seen": "2026-10-23",
+   "note": "票面 gate: 锚点；值是 vitest 用例面的一次采样（跑全测太贵不逐字复跑）",
+   "replay": false,
+   "witness": "python3 -c \"import os,re; p='src/modules/storage/DownloadStore.ts'; t=open(p).read() if os.path.exists(p) else ''; print('%d,%d' % (len(re.findall(r'[0-9a-f]{128}', t)), t.count('combinedSha')))\"",
+   "witness_expect": "0,0"
   }
  }
 }

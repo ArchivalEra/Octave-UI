@@ -44,17 +44,15 @@ export const KNOWN_RUNTIME_METADATA: Record<string, { bytes: number; sha256: str
   },
 };
 
+// #12 Q12.2 手抄表瘦身：顶层 bytes/sha256 删除（bytes 从 files 累加即得，
+// 顶层聚合 sha 是「装饰」不是对账真源——128hex 拼接串曾在此产地出现）；
+// 键 omc@1.25.0 → omc（版本语义从键除名，Q6C）。
+// 表值与 catalog 不可达时的离线兜底：陈旧 ⇒ 下载时 sha 校验红（fail fast）。
 export const KNOWN_ENGINE_METADATA: Record<
   string,
-  {
-    bytes: number;
-    sha256: string;
-    files: Record<string, { bytes: number; sha256: string }>;
-  }
+  { files: Record<string, { bytes: number; sha256: string }> }
 > = {
-  'omc@1.25.0': {
-    bytes: 74635990,
-    sha256: '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d00156c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17',
+  omc: {
     files: {
       'OpenModelicaCompiler_bg.wasm': {
         bytes: 74579404,
@@ -398,13 +396,20 @@ export class DownloadStore {
       const resolved = await this.resolveTarget(ref);
 
     // 2. 检查当日对账与幂等性 (I3)
+    //    #12 Q12.1：幂等判据从「顶层 sha 全等」改为**逐文件三元组比对**——
+    //    existing.files 与 resolved.items 的 (destPath, sha256, bytes) 全等 + 文件数相等。
+    //    顶层聚合 sha 从比对面退场（多文件无单值，单文件时 files[0] 三元组即原语义）。
+    //    sha 维的 undefined 语义：#6 五件套里两条 items（build.json/assets-manifest.json）
+    //    是「下载时真算」型（sha256: undefined）；记账侧 files[] 存的是真算值。
+    //    ⇒ 比对时**记账有值而 items 无值 ⇒ 跳过 sha 维只比 path+bytes**（undefined
+    //    表示「下载时真算」，不是「没有指纹」）；两侧都有值时照常逐字比对。
     const existing = await this.stat(ref);
     if (existing) {
-      if (existing.sha256 === resolved.sha256) {
-        // 幂等：哈希完全一致且磁盘文件在，直接返回已有记录（零网络开销）
+      if (this.filesMatch(existing.files, resolved.items)) {
+        // 幂等：逐文件三元组全等且磁盘文件在，直接返回已有记录（零网络开销）
         return existing;
       }
-      // 哈希漂移：当日目录已更新，清除旧记录重新下载
+      // 目标漂移（字节/路径/可用指纹任一变）：当日目录已更新，清除旧记录重新下载
       delete this.manifest.items[refToKey(ref)];
       await this.saveManifest();
     }
@@ -466,9 +471,12 @@ export class DownloadStore {
     }
 
     // 5. 核验即发布 (I2)：全部成功后才登记至 manifest.json
+    //    #12 Q12.2：顶层 sha 只在**单文件**下载时有真值（该文件自身指纹）；
+    //    多文件无聚合 sha（拼接串是装饰不是指纹）⇒ undefined。
+    //    消费面（幂等比对 / resolver 对账）一律走 files[] 逐件记账。
     const record: DownloadRecord = {
       ref,
-      sha256: resolved.sha256,
+      sha256: downloadedFiles.length === 1 ? downloadedFiles[0].sha256 : undefined,
       bytes: accumulatedBytes,
       files: downloadedFiles,
       downloadedAt: new Date().toISOString(),
@@ -512,26 +520,85 @@ export class DownloadStore {
 
   /**
    * 权威产地解析 (I1：绝不接受调用方传参的 url/sha)
+   *
+   * #12 Q12.3：出口统一过 **64hex intake 断言**——三个分支 return 的 items
+   * 都在此逐条验「有值的 sha256 必须 ^[0-9a-f]{64}$」。非 64hex（128hex
+   * 拼接串、空串）⇒ throw INDEX_UNREADABLE（坏哈希是记账层污染，归 INDEX
+   * 语义）。落点在出口不在 catalog 读入侧：一处拦全部来源（catalog /
+   * 手抄表 / 未来新源都过这道门；读入侧拦会漏手抄表路径）。
+   * undefined 条目跳过（#6 五件套的「下载时真算」型：intake 守卫跳过
+   * 校验，记账存 fetchBytes 真算值）。
    */
   private async resolveTarget(ref: DownloadRef): Promise<{
-    sha256: string;
+    sha256: string | undefined;
     bytes: number;
     provenanceUrl: string;
     items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
   }> {
+    let resolved: {
+      sha256: string | undefined;
+      bytes: number;
+      provenanceUrl: string;
+      items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+    };
     if (ref.kind === 'src') {
-      return this.resolveSrcTarget(ref);
+      resolved = await this.resolveSrcTarget(ref);
     } else if (ref.kind === 'pre') {
-      return this.resolvePreTarget(ref);
+      resolved = await this.resolvePreTarget(ref);
     } else if (ref.kind === 'engine') {
-      return this.resolveEngineTarget(ref);
+      resolved = await this.resolveEngineTarget(ref);
     } else if (ref.kind === 'runtime') {
-      return this.resolveRuntimeTarget(ref);
+      resolved = await this.resolveRuntimeTarget(ref);
+    } else {
+      throw new DownloadError('FLAVOR_UNAVAILABLE', `Unknown download kind: ${ref.kind}`);
     }
-    throw new DownloadError('FLAVOR_UNAVAILABLE', `Unknown download kind: ${ref.kind}`);
+    // 出口断言（#12 Q12.3）：只判有值条目；undefined = 「下载时真算」型，合法
+    for (const item of resolved.items) {
+      if (item.sha256 === undefined) continue;
+      if (!/^[0-9a-f]{64}$/.test(item.sha256)) {
+        throw new DownloadError(
+          'INDEX_UNREADABLE',
+          `下载目标 ${item.filename} 的 sha256 不是 64 位十六进制指纹（得到 ${item.sha256.length} 位）：` +
+            `坏哈希是记账层污染（如 128 位拼接串），拒绝入库`
+        );
+      }
+    }
+    return resolved;
   }
 
-  private async resolveRuntimeTarget(ref: DownloadRef) {
+  /**
+   * #12 Q12.1 幂等三元组比对：existing.files 与 resolved.items 的
+   * (destPath, sha256, bytes) 全等 + 文件数相等。
+   * sha 维规则：记账有值而 items 无值 ⇒ 跳过 sha 维（undefined 表示
+   * 「下载时真算」，见 download() 里的注释）；两侧都有值 ⇒ 逐字比对；
+   * 记账无值（老坏账）⇒ 不等（重下修账）。
+   */
+  private filesMatch(
+    files: DownloadFileMeta[],
+    items: Array<{ destPath: string; sha256?: string }>
+  ): boolean {
+    if (files.length !== items.length) return false;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const item = items[i];
+      // path 维（destPath 对记账 path）：逐字比对
+      if (f.path !== item.destPath) return false;
+      // sha 维：items 侧 undefined = 「下载时真算」型（#6 五件套两件）——
+      // 记账有值 ⇒ 视为相等（跳过 sha 维）；两侧都有值 ⇒ 逐字比对；
+      // 记账无值而 items 有值 ⇒ 老坏账，判不等（重下修账）。
+      if (item.sha256 !== undefined && f.sha256 !== item.sha256) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private async resolveRuntimeTarget(ref: DownloadRef): Promise<{
+    sha256: string | undefined;
+    bytes: number;
+    provenanceUrl: string;
+    items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+  }> {
     let filename = `${ref.name}-${ref.version}.tar.gz`;
     const known = KNOWN_RUNTIME_METADATA[`${ref.name}@${ref.version}`];
 
@@ -590,7 +657,12 @@ export class DownloadStore {
     };
   }
 
-  private async resolveSrcTarget(ref: DownloadRef) {
+  private async resolveSrcTarget(ref: DownloadRef): Promise<{
+    sha256: string | undefined;
+    bytes: number;
+    provenanceUrl: string;
+    items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+  }> {
     if (!this.catalogProvider) {
       throw new DownloadError('INDEX_UNREADABLE', 'Catalog provider not configured');
     }
@@ -635,7 +707,12 @@ export class DownloadStore {
     };
   }
 
-  private async resolvePreTarget(ref: DownloadRef) {
+  private async resolvePreTarget(ref: DownloadRef): Promise<{
+    sha256: string | undefined;
+    bytes: number;
+    provenanceUrl: string;
+    items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+  }> {
     if (!this.catalogProvider) {
       throw new DownloadError('INDEX_UNREADABLE', 'Catalog provider not configured');
     }
@@ -666,7 +743,6 @@ export class DownloadStore {
 
     const items: Array<{ filename: string; url: string; destPath: string; sha256?: string }> = [];
     let totalBytes = 0;
-    let combinedSha = '';
 
     const files = matched.files || [{ name: `${ref.name}.oct`, size: matched.size, sha256: matched.sha256 }];
     for (const f of files) {
@@ -675,18 +751,24 @@ export class DownloadStore {
       const destPath = `downloads/pre/${ref.name}/${ref.version}/${ref.arch}/${filename}`;
       items.push({ filename, url, destPath, sha256: f.sha256 });
       totalBytes += f.size || 0;
-      combinedSha += f.sha256 || '';
     }
 
+    // #12 Q12.2：顶层聚合 sha（拼接串）产地删除——多文件无单值指纹，
+    // 对账真源是 items[] 逐件 sha（出口 64hex 断言 + 记账 files[]）。
     return {
-      sha256: combinedSha,
+      sha256: undefined,
       bytes: totalBytes,
       provenanceUrl: items[0]?.url || '',
       items,
     };
   }
 
-  private async resolveEngineTarget(ref: DownloadRef) {
+  private async resolveEngineTarget(ref: DownloadRef): Promise<{
+    sha256: string | undefined;
+    bytes: number;
+    provenanceUrl: string;
+    items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+  }> {
     const rawArch = ref.arch || this.laneProvider?.() || 'master';
     let lane = rawArch;
     let variant: 'w64' | 'w32';
@@ -699,18 +781,17 @@ export class DownloadStore {
     }
 
     if (ref.name === 'omc' || lane === 'omc') {
-      // 优先从 catalogProvider 动态读取 omc 引擎条目 (mail/053 §二)
-      let omcMeta = KNOWN_ENGINE_METADATA['omc@1.25.0'];
+      // 优先从 catalogProvider 动态读取 omc 引擎条目 (mail/053 §二)；
+      // #12 Q12.4：KNOWN_ENGINE_METADATA 仅在 catalog 不可达/缺条目时离线兜底。
+      // #12 Q12.2：表形状瘦身——顶层 bytes/sha256 删除，bytes 从 files 累加；
+      // catalog 条目同样只取 files[]（顶层聚合 sha 不再消费）。
+      let omcMeta = KNOWN_ENGINE_METADATA['omc'];
       if (this.catalogProvider) {
         try {
           const cat = await this.catalogProvider();
           const pkg = (cat.packs || []).find((p) => p.name === 'omc');
-          if (pkg && (pkg as any).sha256 && (pkg as any).size) {
-            omcMeta = {
-              bytes: (pkg as any).size,
-              sha256: (pkg as any).sha256,
-              files: (pkg as any).files || omcMeta.files,
-            };
+          if (pkg && (pkg as any).files) {
+            omcMeta = { files: (pkg as any).files };
           }
         } catch (err: any) {
           // 吞错分级：降级到静态元数据是合法路径，但代码级缺陷（"is not a function"）不许无声——
@@ -732,25 +813,37 @@ export class DownloadStore {
       const urlJs = this.resolveUrl(`/omc/${filenameJs}`);
 
       const files = omcMeta.files;
-      const shaWasm = files[filenameWasm]?.sha256 || '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001';
-      const shaJs = files[filenameJs]?.sha256 || '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17';
+      const metaWasm = files[filenameWasm];
+      const metaJs = files[filenameJs];
+      if (!metaWasm || !metaJs) {
+        // 表缺件 = 手抄表/catalog 都没有完整两件指纹：如实报，不猜
+        throw new DownloadError(
+          'FLAVOR_UNAVAILABLE',
+          `omc engine metadata incomplete: missing ${!metaWasm ? filenameWasm : filenameJs}`
+        );
+      }
+      // bytes 从 files 累加（顶层聚合字段已删，重复产地退役）
+      const totalBytes = metaWasm.bytes + metaJs.bytes;
 
+      // #12 Q12.2：顶层聚合 sha 产地删除（曾有 128hex 拼接串）——
+      // 多文件无单值指纹，resolved.sha256 = undefined（Q7A）；
+      // 逐件 sha 由 items[] 携带，出口过 64hex 断言，对账走记账 files[]。
       return {
-        sha256: omcMeta.sha256 || `${shaWasm}${shaJs}`,
-        bytes: omcMeta.bytes,
+        sha256: undefined,
+        bytes: totalBytes,
         provenanceUrl: urlWasm,
         items: [
           {
             filename: filenameWasm,
             url: urlWasm,
             destPath: `downloads/engine/omc/${variant}/${filenameWasm}`,
-            sha256: shaWasm,
+            sha256: metaWasm.sha256,
           },
           {
             filename: filenameJs,
             url: urlJs,
             destPath: `downloads/engine/omc/${variant}/${filenameJs}`,
-            sha256: shaJs,
+            sha256: metaJs.sha256,
           },
         ],
       };
@@ -799,7 +892,6 @@ export class DownloadStore {
     const files = buildManifest.measured.files as Record<string, { sha256: string; bytes: number }>;
     const items: Array<{ filename: string; url: string; destPath: string; sha256?: string }> = [];
     let totalBytes = 0;
-    let combinedSha = '';
 
     for (const [filename, meta] of Object.entries(files)) {
       const fileSubPath = chosenFolder ? `${chosenFolder}/${filename}` : filename;
@@ -807,7 +899,6 @@ export class DownloadStore {
       const destPath = `downloads/engine/${lane}/${variant}/${filename}`;
       items.push({ filename, url, destPath, sha256: meta.sha256 });
       totalBytes += meta.bytes;
-      combinedSha += meta.sha256;
     }
 
     // 离线五件套 +2（#6 Q6.1）：octave.build.json 与 assets/manifest.json 也随引擎下载，
@@ -833,11 +924,14 @@ export class DownloadStore {
       destPath: `downloads/engine/${lane}/${variant}/assets-manifest.json`,
       sha256: undefined,
     });
-    // 清单类文件不计入 combinedSha（它是内容指纹聚合，口径漂移归 #12 处理，此处不动）
+    // 清单类文件不计入 totalBytes（它们是元数据不是引擎内容，bytes 以
+    // build.json 的 measured.files 累加为真源——#7 裁定维持）
 
     const provenanceSubPath = chosenFolder ? `${chosenFolder}/octave.build.json` : 'octave.build.json';
+    // #12 Q12.2：顶层聚合 sha（拼接串）产地删除——多文件无单值指纹，
+    // resolved.sha256 = undefined（Q7A）；对账真源是 items[] 逐件 sha。
     return {
-      sha256: combinedSha,
+      sha256: undefined,
       bytes: totalBytes,
       provenanceUrl: this.resolveUrl(provenanceSubPath),
       items,

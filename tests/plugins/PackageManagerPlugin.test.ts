@@ -441,10 +441,13 @@ describe('PackageManagerPlugin Deep Module', () => {
       // catalog 无 omc 条目（合成目录 packs 不含 omc）⇒ 回退 KNOWN_ENGINE_METADATA 静态侧
       expect(rec.ref.name).toBe('omc');
       expect(rec.bytes).toBeGreaterThan(0);
-      // 静态回退侧的 sha：KNOWN_ENGINE_METADATA['omc@1.25.0'].sha256
-      expect(rec.sha256).toBe(
-        '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d00156c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17'
-      );
+      // #12 Q12.2：静态回退侧无顶层聚合 sha（拼接串产地已删）——多文件
+      // record 的顶层 sha = undefined；分件 sha = KNOWN_ENGINE_METADATA['omc'].files 真值
+      expect(rec.sha256).toBeUndefined();
+      expect(rec.files.map((f) => f.sha256)).toEqual([
+        '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001',
+        '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17',
+      ]);
     } finally {
       brokenCalls = errSpy.mock.calls.filter(
         (c) => typeof c[0] === 'string' && c[0].includes('catalog provider is broken')
@@ -456,7 +459,14 @@ describe('PackageManagerPlugin Deep Module', () => {
   });
 
   it('resolves omc engine metadata from catalog真值 when the pack entry exists (issue #8 Q8.4)', async () => {
-    // 合成 catalog 携带 omc 条目（含 size/sha256/files），动态 catalog 必须覆盖静态坏串侧
+    // 合成 catalog 携带 omc 条目（含 size/sha256/files），动态 catalog 必须覆盖静态手抄侧
+    // #12 Q12.3：intake 断言只放行真 64hex ⇒ mock 分件 sha 真算
+    function sha256OfNode(data: string): string {
+      const nodeCrypto = require('node:crypto') as typeof import('node:crypto');
+      return nodeCrypto.createHash('sha256').update(data).digest('hex');
+    }
+    const catWasmSha = sha256OfNode('a'.repeat(12000));
+    const catJsSha = sha256OfNode('b'.repeat(345));
     const omcCatalog: ForgeCatalog = {
       packs: [
         {
@@ -465,10 +475,11 @@ describe('PackageManagerPlugin Deep Module', () => {
           form: 'tree',
           content: [],
           size: 12345,
+          // 顶层 sha256 不再被消费（#12 Q12.2：聚合 sha 产地删除，只取 files）
           sha256: 'catalog-omc-combined-sha',
           files: {
-            'OpenModelicaCompiler_bg.wasm': { bytes: 12000, sha256: 'catalog-wasm-sha' },
-            'OpenModelicaCompiler.js': { bytes: 345, sha256: 'catalog-js-sha' },
+            'OpenModelicaCompiler_bg.wasm': { bytes: 12000, sha256: catWasmSha },
+            'OpenModelicaCompiler.js': { bytes: 345, sha256: catJsSha },
           },
         } as any,
       ],
@@ -480,8 +491,8 @@ describe('PackageManagerPlugin Deep Module', () => {
     await memoryStore.init();
     const mockFetch = new MockFetchAdapter();
     // 分件按 catalog files 的 sha256 抓取校验——mock 文件必须带同一 sha 才能走完链路
-    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler_bg.wasm', 'a'.repeat(12000), 'catalog-wasm-sha');
-    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler.js', 'b'.repeat(345), 'catalog-js-sha');
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler_bg.wasm', 'a'.repeat(12000), catWasmSha);
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler.js', 'b'.repeat(345), catJsSha);
     const store = new DownloadStore({
       storage: memoryStore,
       fetchPort: mockFetch,
@@ -492,11 +503,13 @@ describe('PackageManagerPlugin Deep Module', () => {
     await store.init();
 
     const rec = await store.downloadEngine('omc');
-    // record 的总 sha / 总字节必须来自 catalog 真值，不是 KNOWN_ENGINE_METADATA
-    expect(rec.sha256).toBe('catalog-omc-combined-sha');
+    // record 的总字节必须来自 catalog files 累加真值，不是 KNOWN_ENGINE_METADATA
     expect(rec.bytes).toBe(12345);
+    // #12 Q12.2：顶层聚合 sha 删除 ⇒ 多文件 record 顶层 sha = undefined
+    // （catalog 顶层的 'catalog-omc-combined-sha' 装饰值不再被消费）
+    expect(rec.sha256).toBeUndefined();
     // 文件级 sha 也必须用 catalog 值：分件下载项按 catalog files 的 sha256 抓取校验
-    expect(rec.files.map((f) => f.sha256)).toEqual(['catalog-wasm-sha', 'catalog-js-sha']);
+    expect(rec.files.map((f) => f.sha256)).toEqual([catWasmSha, catJsSha]);
     expect(rec.files.map((f) => f.bytes)).toEqual([12000, 345]);
   });
 

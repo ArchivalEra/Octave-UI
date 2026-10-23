@@ -177,6 +177,28 @@ def measure_example():
         witness=five_cmd, witness_expect=str(n_five),
       )
 
+    # wayfinder #12 gate: 锚点——sha 台账去装饰化（128hex 拼接串产地删除 + 三元组幂等比对）。
+    # 值 = 一次实测采样（用例面叙述），replay=False（跑 vitest 太贵不逐字复跑）；
+    # witness = 便宜双见证（源内 128hex 连续 hex 字面量数 = 0 且 combinedSha 计数 = 0），
+    # 每提交真跑——聚合 sha 拼接串若悄悄回来，见证当场红。
+    deco_cmd = ("python3 -c \"import os,re; p='src/modules/storage/DownloadStore.ts'; "
+                "t=open(p).read() if os.path.exists(p) else ''; "
+                "print('%d,%d' % (len(re.findall(r'[0-9a-f]{128}', t)), t.count('combinedSha')))\"")
+    n_deco = _probe(deco_cmd)
+    if n_deco is not None:
+      facts["sha_ledger_no_decoration"] = fact(
+        "DownloadStore sha 台账去装饰化：源内 128hex 字面量 = 0 + combinedSha 拼接产地 = 0（三产地归一）；"
+        "幂等比对换逐文件三元组（path/sha/bytes，undefined sha 跳 sha 维）⇒ 五件套重下 fetchPort 调用 = 0；"
+        "intake 出口 64hex 断言（128hex/空串/大写 ⇒ INDEX_UNREADABLE）；KNOWN_ENGINE_METADATA 瘦身"
+        "（键 omc、无顶层 bytes/sha256，bytes 从 files 累加）+ 多文件 record 顶层 sha = undefined"
+        "（tests/storage/DownloadStore.test.ts + tests/plugins/PackageManagerPlugin.test.ts，2026-10-23 实测 333/333 绿）",
+        "pnpm test -- tests/storage/DownloadStore.test.ts tests/plugins/PackageManagerPlugin.test.ts",
+        "wayfinder #12",
+        "票面 gate: 锚点；值是 vitest 用例面的一次采样（跑全测太贵不逐字复跑）",
+        replay=False,
+        witness=deco_cmd, witness_expect=n_deco,
+      )
+
     return facts
 
 

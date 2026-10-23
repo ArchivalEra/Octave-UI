@@ -52,10 +52,14 @@ export interface DownloadFileMeta {
 
 /**
  * 已下载并过账的资产单项记录
+ *
+ * #12 Q12.2：顶层 sha256 仅单文件下载有真值（该文件自身指纹）；
+ * 多文件下载无聚合指纹（拼接串是装饰不是对账真源）⇒ undefined。
+ * 对账一律走 files[] 逐件三元组（path/sha256/bytes）。
  */
 export interface DownloadRecord {
   ref: DownloadRef;
-  sha256: string;
+  sha256: string | undefined;
   bytes: number;
   files: DownloadFileMeta[];
   downloadedAt: string;

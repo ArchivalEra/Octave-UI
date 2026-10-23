@@ -280,13 +280,17 @@ def _cases():
     _w(RESOLVER, "const STORAGE_NAME = 'assets-manifest.json';"
                  " const INTERCEPT = 'octave.build.json';\n")
     _w(EMBED, "const gate = 'assertBootable';\n")
+    # #12 去装饰化断言的夹具目标（形状与真仓一致：平铺存储名 + 瘦身后的
+    # KNOWN_ENGINE_METADATA 键 omc——combinedSha / 128hex 都不在，断言该绿）
     _w(DOWNLOAD, DOWNLOAD and open(DOWNLOAD, encoding="utf-8").read()
-       + "const FLAT = 'assets-manifest.json';\n")
+       + "const FLAT = 'assets-manifest.json';\n"
+         "let omcMeta = KNOWN_ENGINE_METADATA['omc'];\n")
     # 夹具台账键集（A 面）。gate 锚点在夹具里指向不存在的文件（zreflect/ 不在
     # 夹具根）⇒ 良好用例须先把该锚点换成夹具内在册的路径。
     keys = {"integrity_check_physical", "get_assets_port_alive",
             "supervisor_no_mock_fallback", "plot_panel_figure_chain",
-            "engine_layer_no_ui_import", "offline_boot_five_piece"}
+            "engine_layer_no_ui_import", "offline_boot_five_piece",
+            "sha_ledger_no_decoration"}
     # 基底登记表 = 真登记表（含 pending 两条）；gate 锚点的 check 指向夹具里
     # 真实存在的文件（闸门自己），保持 A/B 两面在夹具上完整可判。
     good_reg = json.load(open(os.path.join(
@@ -385,10 +389,20 @@ def _cases():
         ("★ appContext 缺订阅 ⇒ 必须报（已知缝收编面）",
          lambda: _mutate(APPCTX, "export function boot() {}\n",
                          good_reg, "onOmcFlavorError")),
-        ("★ 128hex 字面量 ⇒ 必须报（pending 翻生效后真的会红）",
+        ("★ 128hex 字面量 ⇒ 必须报（#12 已生效：真的会红）",
          lambda: _mutate(DOWNLOAD,
                          "const KNOWN_ENGINE_METADATA = '%s';\n" % ("ab" * 64),
                          hex_reg, "被禁模式")),
+        ("★ combinedSha 拼接产地回潮 ⇒ 必须报（#12 已生效：三产地归一断言）",
+         lambda: _mutate(DOWNLOAD,
+                         DOWNLOAD and open(DOWNLOAD, encoding="utf-8").read()
+                         + "let combinedSha = '';\n",
+                         good_reg, "combinedSha")),
+        ("★ KNOWN_ENGINE_METADATA 键改形（omc 键没了）⇒ 必须报（#12 已生效：瘦身形状断言）",
+         lambda: _mutate(DOWNLOAD,
+                         "const meta = { sha256: 'ab'.repeat(8) };\n"
+                         "const FLAT = 'assets-manifest.json';\n",
+                         good_reg, "KNOWN_ENGINE_METADATA")),
         ("★ src/lib/engine 壳存在 ⇒ 必须报（pending 翻生效后真的会红）",
          lambda: _lib_case()),
         ("★ 断言无判据字段 ⇒ 必须报（登记了却不查 = 装饰）",

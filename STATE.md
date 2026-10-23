@@ -46,22 +46,23 @@
 
 | 键 | 值 | 测于 | 复跑命令 |
 |---|---|---|---|
-| `astro_files` | **2** | 2026-10-23T07:52:18+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
-| `engine_layer_no_ui_import` | **engine 层 6 个 ts 文件中含 toastService 的文件数 = 0（应为 0；（OmcBridge 抽离 + 三条 UI 旁路拔除；tests/engine/OmcBridge.test.ts 11 用例，2026-10-22 实测 322/322 绿）** | 2026-10-23T07:52:18+0800 | `python3 -c "import os, glob; fs=glob.glob('src/modules/engine/*.ts'); print(sum(open(f).read().count('toastService') for f in fs) if fs else 'absent')"` |
-| `get_assets_port_alive` | **getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）** | 2026-10-23T07:52:18+0800 | `python3 -c "import os; p='src/modules/plugins/package/PackageManagerPlugin.ts'; print(open(p).read().count('getAssetsPort') if os.path.exists(p) else 'absent')"` |
-| `integrity_check_physical` | **integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）** | 2026-10-23T07:52:18+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts` |
-| `md_files` | **47** | 2026-10-23T07:52:18+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `md_lines` | **3277** | 2026-10-23T07:52:18+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
-| `offline_boot_five_piece` | **boot OPFS 优先（verified ⇒ getBlob 读 octave.js 注入，未下载走网络，corrupted ⇒ throw ENGINE_CORRUPTED）+ matchRequest 两拦截键（assets/manifest.json 映射平铺名 assets-manifest.json、octave.build.json；w64 档 manifest.w64.json 不拦）+ 五件指纹（删 assets-manifest 后缓存不命中 ⇒ corrupted）（tests/engine/ 两文件 + DownloadStore 五件套记账，2026-10-23 实测 326/326 绿）** | 2026-10-23T07:52:18+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts tests/engine/WasmEmbedAdapter.test.ts` |
-| `plot_panel_figure_chain` | **GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）** | 2026-10-23T07:52:18+0800 | `python3 -c "import os; p='src/modules/figure/GraphicsSink.ts'; print(open(p).read().count('onFigure') if os.path.exists(p) else 'absent')"` |
-| `py_files` | **31** | 2026-10-23T07:52:18+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `py_lines` | **7055** | 2026-10-23T07:52:18+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
-| `supervisor_no_mock_fallback` | **EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）** | 2026-10-23T07:52:18+0800 | `python3 -c "import os; p='src/modules/engine/EngineSupervisor.ts'; print(open(p).read().count('MockEmbedAdapter') if os.path.exists(p) else 'absent')"` |
-| `svelte_files` | **20** | 2026-10-23T07:52:18+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
-| `test_files` | **34** | 2026-10-23T07:52:18+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
-| `ts_files` | **97** | 2026-10-23T07:52:18+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
+| `astro_files` | **2** | 2026-10-23T11:02:11+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
+| `engine_layer_no_ui_import` | **engine 层 6 个 ts 文件中含 toastService 的文件数 = 0（应为 0；（OmcBridge 抽离 + 三条 UI 旁路拔除；tests/engine/OmcBridge.test.ts 11 用例，2026-10-22 实测 322/322 绿）** | 2026-10-23T11:02:11+0800 | `python3 -c "import os, glob; fs=glob.glob('src/modules/engine/*.ts'); print(sum(open(f).read().count('toastService') for f in fs) if fs else 'absent')"` |
+| `get_assets_port_alive` | **getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）** | 2026-10-23T11:02:11+0800 | `python3 -c "import os; p='src/modules/plugins/package/PackageManagerPlugin.ts'; print(open(p).read().count('getAssetsPort') if os.path.exists(p) else 'absent')"` |
+| `integrity_check_physical` | **integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）** | 2026-10-23T11:02:11+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts` |
+| `md_files` | **47** | 2026-10-23T11:02:11+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `md_lines` | **3277** | 2026-10-23T11:02:11+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
+| `offline_boot_five_piece` | **boot OPFS 优先（verified ⇒ getBlob 读 octave.js 注入，未下载走网络，corrupted ⇒ throw ENGINE_CORRUPTED）+ matchRequest 两拦截键（assets/manifest.json 映射平铺名 assets-manifest.json、octave.build.json；w64 档 manifest.w64.json 不拦）+ 五件指纹（删 assets-manifest 后缓存不命中 ⇒ corrupted）（tests/engine/ 两文件 + DownloadStore 五件套记账，2026-10-23 实测 326/326 绿）** | 2026-10-23T11:02:11+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts tests/engine/WasmEmbedAdapter.test.ts` |
+| `plot_panel_figure_chain` | **GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）** | 2026-10-23T11:02:11+0800 | `python3 -c "import os; p='src/modules/figure/GraphicsSink.ts'; print(open(p).read().count('onFigure') if os.path.exists(p) else 'absent')"` |
+| `py_files` | **31** | 2026-10-23T11:02:11+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `py_lines` | **7091** | 2026-10-23T11:02:11+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
+| `sha_ledger_no_decoration` | **DownloadStore sha 台账去装饰化：源内 128hex 字面量 = 0 + combinedSha 拼接产地 = 0（三产地归一）；幂等比对换逐文件三元组（path/sha/bytes，undefined sha 跳 sha 维）⇒ 五件套重下 fetchPort 调用 = 0；intake 出口 64hex 断言（128hex/空串/大写 ⇒ INDEX_UNREADABLE）；KNOWN_ENGINE_METADATA 瘦身（键 omc、无顶层 bytes/sha256，bytes 从 files 累加）+ 多文件 record 顶层 sha = undefined（tests/storage/DownloadStore.test.ts + tests/plugins/PackageManagerPlugin.test.ts，2026-10-23 实测 333/333 绿）** | 2026-10-23T11:02:11+0800 | `pnpm test -- tests/storage/DownloadStore.test.ts tests/plugins/PackageManagerPlugin.test.ts` |
+| `supervisor_no_mock_fallback` | **EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）** | 2026-10-23T11:02:11+0800 | `python3 -c "import os; p='src/modules/engine/EngineSupervisor.ts'; print(open(p).read().count('MockEmbedAdapter') if os.path.exists(p) else 'absent')"` |
+| `svelte_files` | **20** | 2026-10-23T11:02:11+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
+| `test_files` | **34** | 2026-10-23T11:02:11+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
+| `ts_files` | **97** | 2026-10-23T11:02:11+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
 
-14 条事实。
+15 条事实。
 <!-- /AUTO:FACTS -->
 
 <!-- AUTO:GATES -->
