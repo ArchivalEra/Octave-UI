@@ -448,6 +448,7 @@ export const en = {
   'header.engine_octave_badge': 'Numeric',
   'header.download_btn': 'Download',
   'header.downloaded_badge': 'Downloaded',
+  'header.corrupted_badge': 'Corrupted',
   'header.downloading_badge': 'Downloading',
   'header.delete_download': 'Delete download',
   'header.omc_dual_boot_tip': 'Will boot both Octave and OpenModelica simultaneously (co-simulation)',

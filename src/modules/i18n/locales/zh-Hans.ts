@@ -450,6 +450,7 @@ const _zhHans = {
   'header.engine_octave_badge': '数值计算',
   'header.download_btn': '下载',
   'header.downloaded_badge': '已下载',
+  'header.corrupted_badge': '已损坏',
   'header.downloading_badge': '下载中',
   'header.delete_download': '删除本地缓存',
   'header.omc_dual_boot_tip': '启动时将同时装载 Octave 与 OpenModelica 双引擎 (同页协同计算)',

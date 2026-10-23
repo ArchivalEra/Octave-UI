@@ -2,6 +2,7 @@
   import { supervisor, themeManager, downloadStore, projectWorkspace, i18n, t, toastService } from '../modules/appContext';
   import type { SupervisorState, EngineLane } from '../modules/engine/types';
   import { EngineAssetResolver } from '../modules/engine/EngineAssetResolver';
+  import type { EngineIntegrity } from '../modules/engine/EngineAssetResolver';
   import type { Locale } from '../modules/i18n/types';
   import type { WorkbenchMode } from '../modules/workspace/ProjectWorkspace';
 
@@ -29,7 +30,10 @@
   let directoryName = $state<string | null>(projectWorkspace.directoryName);
   let isCoiAvailable = $state(true);
   let downloadRevision = $state(0);
-  let physicalDownloaded = $state<Record<string, boolean>>({});
+  // 徽标状态单一真源：引擎层 EngineAssetStatus 的 downloaded + integrity 三态。
+  // UI 层不得再推导「好/坏」（那会造出第二个真源）——这里只做搬运。
+  type LanePhysicalState = { downloaded: boolean; integrity: EngineIntegrity };
+  let physicalDownloaded = $state<Record<string, LanePhysicalState>>({});
 
   async function checkAllPhysicalStatus() {
     const lanes: EngineLane[] = ['wasm32-final', 'master', 'IllegalPerformance', 'omc'];
@@ -37,23 +41,36 @@
       lanes.map(async (l) => {
         try {
           const res = await EngineAssetResolver.getInstance().checkPhysicalStatus(l);
-          return { lane: l, downloaded: res.downloaded };
+          return { lane: l, downloaded: res.downloaded, integrity: res.integrity };
         } catch {
-          return { lane: l, downloaded: false };
+          // 对账失败 ⇒ 明说「没查到」：不冒充已下载，也不冒充损坏
+          return { lane: l, downloaded: false, integrity: 'unchecked' as const };
         }
       })
     );
-    const updated: Record<string, boolean> = {};
+    const updated: Record<string, LanePhysicalState> = {};
     for (const r of results) {
-      updated[r.lane] = r.downloaded;
+      updated[r.lane] = { downloaded: r.downloaded, integrity: r.integrity };
     }
     physicalDownloaded = updated;
   }
 
-  function isEngineDownloaded(lane: string): boolean {
-    if (downloadRevision < 0) return false;
+  function lanePhysicalState(lane: string): LanePhysicalState {
+    if (downloadRevision < 0) return { downloaded: false, integrity: 'unchecked' };
     // 物理存在为唯一对账事实（Physical Stat Invariant）：仅当物理对账通过时才为 true
-    return physicalDownloaded[lane] === true;
+    return physicalDownloaded[lane] ?? { downloaded: false, integrity: 'unchecked' };
+  }
+
+  function isEngineDownloaded(lane: string): boolean {
+    return lanePhysicalState(lane).downloaded;
+  }
+
+  // 徽标三态（spec #19 决策 8）：corrupted ⇒ ⚠ 已损坏；downloaded ⇒ ✓ 已下载；否则下载按钮。
+  // corrupted 判定**只看 integrity，不再叠加 downloaded 布尔**——叠加等于在 UI 层二次推导
+  // 「好/坏」（决策 7 的禁令），且存在布尔会掩盖坏盘信号，正是本轮红线要除的形态。
+  // 引擎层已保证：未下载 ⇒ integrity 必为 'unchecked'，故不存在「未下载却报损坏」。
+  function isEngineCorrupted(lane: string): boolean {
+    return lanePhysicalState(lane).integrity === 'corrupted';
   }
 
   function isEngineDownloading(lane: string): boolean {
@@ -502,7 +519,16 @@
                         <span class="choice-desc">{laneItem.desc}</span>
                         <div class="lane-meta-row">
                           <span class="size-hint">{laneItem.size}</span>
-                          {#if isEngineDownloaded(laneItem.id)}
+                          {#if isEngineCorrupted(laneItem.id)}
+                            <!-- 坏盘如实呈现：⚠ 是视觉提示，文字是可被读屏朗读的真值（不 aria-hidden） -->
+                            <span class="dl-status damaged">⚠ {t('header.corrupted_badge')}</span>
+                            <button
+                              type="button"
+                              class="btn-dl-action remove"
+                              title={t('header.delete_download')}
+                              onclick={(e) => handleRemoveEngine(laneItem.id, e)}
+                            >✕</button>
+                          {:else if isEngineDownloaded(laneItem.id)}
                             <span class="dl-status downloaded">✓ {t('header.downloaded_badge')}</span>
                             <button
                               type="button"
@@ -557,7 +583,16 @@
                       <span class="choice-desc">{t('header.lane_omc_desc')}</span>
                       <div class="lane-meta-row">
                         <span class="size-hint">~74.6MB</span>
-                        {#if isEngineDownloaded('omc')}
+                        {#if isEngineCorrupted('omc')}
+                          <!-- 坏盘如实呈现：⚠ 是视觉提示，文字是可被读屏朗读的真值（不 aria-hidden） -->
+                          <span class="dl-status damaged">⚠ {t('header.corrupted_badge')}</span>
+                          <button
+                            type="button"
+                            class="btn-dl-action remove"
+                            title={t('header.delete_download')}
+                            onclick={(e) => handleRemoveEngine('omc', e)}
+                          >✕</button>
+                        {:else if isEngineDownloaded('omc')}
                           <span class="dl-status downloaded">✓ {t('header.downloaded_badge')}</span>
                           <button
                             type="button"
@@ -1036,6 +1071,12 @@
 
   .dl-status.downloaded {
     color: var(--accent-success);
+  }
+
+  /* 损坏态：警示色 + 文字（不只靠 ⚠ 字形/颜色传达状态，读屏可朗读） */
+  .dl-status.damaged {
+    color: var(--accent-danger);
+    font-weight: 700;
   }
 
   .dl-status.downloading {

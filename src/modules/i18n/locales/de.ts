@@ -449,6 +449,7 @@ const _de = {
   'header.engine_octave_badge': 'Numerik',
   'header.download_btn': 'Herunterladen',
   'header.downloaded_badge': 'Heruntergeladen',
+  'header.corrupted_badge': 'Beschädigt',
   'header.downloading_badge': 'Wird geladen',
   'header.delete_download': 'Download löschen',
   'header.omc_dual_boot_tip': 'Startet Octave und OpenModelica gleichzeitig auf derselben Seite',
