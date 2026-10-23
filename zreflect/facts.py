@@ -271,6 +271,34 @@ def measure_example():
         witness=seams_cmd, witness_expect=n_seams,
       )
 
+    # spec #19 红线 2 gate: 锚点——徽标消费 integrity 三态而非布尔
+    badge_cmd = ("python3 -c \"import os; p='src/components/HeaderBar.svelte'; "
+                 "print(open(p).read().count('integrity') if os.path.exists(p) else 'absent')\"")
+    n_badge = _probe(badge_cmd)
+    if n_badge is not None:
+      facts["header_integrity_badge"] = fact(
+          f"HeaderBar 徽标三态消费引擎层 integrity（{n_badge} 处引用）；corrupted ⇒ ⚠ 已损坏、verified/unchecked ⇒ ✓、未下载 ⇒ 下载按钮；三语 header.corrupted_badge（tests/ui/HeaderBar.svelte.test.ts 6 用例，2026-10-23 实测 362/362 绿）",
+          badge_cmd,
+          "spec #19 红线 2",
+          "票面 gate: 锚点；值是vitest一次采样（贵不逐字复跑）",
+          replay=False,
+          witness=badge_cmd, witness_expect=str(n_badge),
+      )
+
+    # spec #19 红线 1 gate: 锚点——事件链有页面级总线（跨实例不失聪）
+    bus_cmd = ("python3 -c \"import os; p='src/modules/figure/GraphicsSink.ts'; "
+               "print(open(p).read().count('wireFigureBusToSink') if os.path.exists(p) else 'absent')\"")
+    n_bus = _probe(bus_cmd)
+    if n_bus is not None:
+      facts["plot_event_bus"] = fact(
+          f"页面级图表事件总线（wireFigureBusToSink {n_bus} 处）解耦装钩与收事件；钩子重赋值安全 + 空 URL 丢弃 + lastFigure 回放（tests/figure/P5FigureChain.test.ts 10 用例，其中 6 条对修复前代码全红）",
+          bus_cmd,
+          "spec #19 红线 1",
+          "票面 gate: 锚点；值是vitest一次采样（贵不逐字复跑）",
+          replay=False,
+          witness=bus_cmd, witness_expect=str(n_bus),
+      )
+
     return facts
 
 

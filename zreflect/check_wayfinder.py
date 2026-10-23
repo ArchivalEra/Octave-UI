@@ -307,13 +307,25 @@ def _cases():
               "{#if !catalogLoaded && catalogLoading && !errorMsg}\n")
     _w(TERMC, "import { ErrorSanitizer } from '../semantic/ErrorSanitizer';\n"
               "const sanitized = ErrorSanitizer.sanitize(String(err), this._locale);\n")
+    # spec #19 断言的夹具目标（形状与真仓一致：徽标消费 integrity 三态 +
+    # 页面级总线 + 函数级钩子标记）
+    _w(os.path.join(d, "src/components/HeaderBar.svelte"),
+       "const s = { downloaded: res.downloaded, integrity: res.integrity };\n")
+    _w(os.path.join(d, "src/modules/figure/GraphicsSink.ts"),
+       "export function onFigure() {}\n"
+       "export function wireFigureBusToSink(sink) {}\n")
+    os.makedirs(os.path.join(d, "src/modules/plugins/figure"), exist_ok=True)
+    _w(os.path.join(d, "src/modules/plugins/figure/P5FigureOverlayPlugin.ts"),
+       "const wrapped = () => {};\n"
+       "wrapped.__overlay_hooked = true;\n")
     # 夹具台账键集（A 面）。gate 锚点在夹具里指向不存在的文件（zreflect/ 不在
     # 夹具根）⇒ 良好用例须先把该锚点换成夹具内在册的路径。
     keys = {"integrity_check_physical", "get_assets_port_alive",
             "supervisor_no_mock_fallback", "plot_panel_figure_chain",
             "engine_layer_no_ui_import", "offline_boot_five_piece",
             "sha_ledger_no_decoration", "download_event_two_shot",
-            "pkg_error_toast_chain", "fake_seams_purged"}
+            "pkg_error_toast_chain", "fake_seams_purged",
+            "header_integrity_badge", "plot_event_bus"}
     # 基底登记表 = 真登记表（#10/#12 已执行 ⇒ 断言全生效、无 pending 原文）；
     # pending 语义的用例用合成 pending 断言的变体表考（真表里不再有 pending 条目，
     # 不能拿它考「pending 跳过执行」）。gate 锚点的 check 指向夹具里
