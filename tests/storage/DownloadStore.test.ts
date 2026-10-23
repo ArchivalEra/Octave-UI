@@ -6,6 +6,7 @@ import { MockFetchAdapter } from '../../src/modules/storage/FetchPort';
 import { DownloadError, refToKey } from '../../src/modules/storage/downloadTypes';
 import type { DownloadRef } from '../../src/modules/storage/downloadTypes';
 import type { ForgeCatalog } from '../../src/modules/plugins/package/types';
+import { EngineAssetResolver } from '../../src/modules/engine/EngineAssetResolver';
 import * as nodeCrypto from 'node:crypto';
 
 // #12 Q12.3：intake 断言只放行真 64hex 指纹 ⇒ 测试里的 catalog/manifest
@@ -643,5 +644,134 @@ describe('DownloadStore Deep Module', () => {
     expect(rec.bytes).toBe(12000 + 345);
     // 顶层聚合 sha 不再从 catalog 顶层 sha256 取（Q7A：删顶层 sha ⇒ undefined）
     expect(rec.sha256).toBeUndefined();
+  });
+
+  // ══ #15 通知通道统一的判据面（两发定档 + 失效挂点）═══════════════════════════
+
+  /** #15 事件计数器：window 上挂 'octave:download-changed' 计数监听（happy-dom 下 window 可用） */
+  function countDownloadEvents(): { count: () => number; dispose: () => void } {
+    let n = 0;
+    const listener = () => { n++; };
+    window.addEventListener('octave:download-changed', listener);
+    return { count: () => n, dispose: () => window.removeEventListener('octave:download-changed', listener) };
+  }
+
+  it('#15 Q15.1: 一次完整 download ⇒ octave:download-changed 事件数 === 2（start null + 终态 record）', async () => {
+    const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
+    const url = 'https://octave.test/assets/packages/cgi-0.1.2.tar.gz';
+    mockFetch.setFile(url, 'fake-tarball-cgi', CGI_SHA);
+
+    const counter = countDownloadEvents();
+    try {
+      const rec = await store.download(ref);
+      expect(rec.sha256).toBe(CGI_SHA);
+      // 两发定档：第一发 = 进 downloading 态（null），第二发 = 终态（record）。
+      // 旧三发形状（finally 里再发一次）⇒ 此处会是 3 —— 那是本断言要拦的坏形状。
+      expect(counter.count()).toBe(2);
+    } finally {
+      counter.dispose();
+    }
+  });
+
+  it('#15 Q15.1: 失败路径 ⇒ 事件数 === 2（start null + null 终态声——失败也是终态）', async () => {
+    const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
+    // catalog 指纹与盘上字节不符 ⇒ 校验环拦 ⇒ throw（复用 I2 用例的手法）
+    mockFetch.setFile('https://octave.test/assets/packages/cgi-0.1.2.tar.gz', 'tampered', sha256OfNode('tampered'));
+    (sampleCatalog.packs[0].versions![0] as any).sha256 = sha256OfNode('other');
+
+    const counter = countDownloadEvents();
+    try {
+      await expect(store.download(ref)).rejects.toMatchObject({ code: 'STORAGE_WRITE_FAILED' });
+      // 失败终态也必须有声（null）——删掉 catch 里的终态发 ⇒ 此处是 1，
+      // 消费者（HeaderBar 重对账 / ProjectWorkspace._notify）会漏掉离开 downloading 态。
+      expect(counter.count()).toBe(2);
+    } finally {
+      counter.dispose();
+      // 复原 catalog 供后续用例
+      (sampleCatalog.packs[0].versions![0] as any).sha256 = CGI_SHA;
+    }
+  });
+
+  it('#15 Q15.2: download 终态后（成功与失败两路）单例 stat 缓存已失效（重对账重读盘，不再吃旧指纹）', async () => {
+    // 复跑方式：spy 单例 resolver 的 invalidateCache + memoryStore.read 计数——
+    // 与 EngineAssetResolver.test.ts 的「缓存失效 ⇒ 重新读盘」用例同款判据面，
+    // 但失效触发点是 DownloadStore.download() 的 finally（写路径主动调，#15 挂点），
+    // 不是测试手工调 resolver.invalidateCache。
+    // ⚠️ 幂等命中路径不重写盘面字节（三元组比对只看记账），所以「对账值反映新文件」
+    // 的观测点是：verified 进缓存 ⇒ 再跑一次 download（终态失效）⇒ 再 check ⇒
+    // 必须重新读盘（read 计数上升），而不是命中旧缓存零重算。
+    const cleanFetch = new MockFetchAdapter();
+    const localBuild = {
+      measured: {
+        files: {
+          'octave.js': { sha256: sha256OfNode('js-content'), bytes: 100 },
+          'octave.wasm': { sha256: sha256OfNode('wasm-content'), bytes: 500 },
+          'octave.data': { sha256: sha256OfNode('data-content'), bytes: 50 },
+        },
+      },
+    };
+    cleanFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', sha256OfNode('js-content'));
+    cleanFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
+    cleanFetch.setFile('https://octave.test/lanes/master/octave.data', 'data-content', sha256OfNode('data-content'));
+    cleanFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
+    cleanFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
+    const engineStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: cleanFetch,
+      baseUrl: 'https://octave.test',
+      // 与共享 store 的 beforeEach 同款：同步返回值经 as any 对齐 provider 签名
+      // （基线 49→50 的那 1 条新 tsc 噪音就是 sync 返回型 provider 的既有形状，
+      // 这里的 localBuild 与 sampleEngineBuild 同款写法）
+      engineBuildProvider: (() => localBuild) as any,
+      laneProvider: () => 'master',
+      maxQuotaBytes: 100 * 1024 * 1024,
+    });
+    await engineStore.init();
+    await engineStore.downloadEngine('master');
+
+    // 消费侧共享的单例（HeaderBar / ProjectWorkspace / OmcBridge 全走 getInstance()）
+    const resolver = EngineAssetResolver.getInstance(memoryStore);
+    EngineAssetResolver.setInstance(resolver);
+    try {
+      const readSpy = vi.spyOn(memoryStore, 'read');
+      // 第一次对账：verified 进会话缓存（真读盘——含 manifest 与各文件）
+      expect((await resolver.checkPhysicalStatus('master')).integrity).toBe('verified');
+      const readsAfterFirstCheck = readSpy.mock.calls.length;
+      expect(readsAfterFirstCheck).toBeGreaterThan(0);
+
+      // 挂点直接观测：download 终态必须调单例的 invalidateCache(lane)
+      const invSpy = vi.spyOn(resolver, 'invalidateCache');
+
+      // 成功路径（幂等重下也算 download 终态——finally 对成功/失败都跑）
+      await engineStore.downloadEngine('master');
+      expect(invSpy.mock.calls.length).toBe(1);
+      expect(invSpy.mock.calls[0][0]).toBe('master');
+      // 缓存已被挂点清掉 ⇒ 再 check 必须重新读盘（read 计数上升，零重算是坏形状）
+      expect((await resolver.checkPhysicalStatus('master')).integrity).toBe('verified');
+      expect(readSpy.mock.calls.length).toBeGreaterThan(readsAfterFirstCheck);
+
+      // 失败路径（源 sha 与清单指纹不符 ⇒ 校验红 throw）：终态同样失效。
+      // 注意先让既有记录失效成 drift——直接改 build 清单里的 wasm 指纹
+      // ⇒ 幂等三元组不等 ⇒ 全量重拉 ⇒ mock 源 sha 与清单指纹不符 ⇒ throw。
+      localBuild.measured.files['octave.wasm'] = {
+        sha256: sha256OfNode('drifted-wasm'),
+        bytes: 500,
+      };
+      cleanFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'tampered-src', sha256OfNode('tampered-src'));
+      await expect(engineStore.downloadEngine('master')).rejects.toMatchObject({
+        code: 'STORAGE_WRITE_FAILED',
+      });
+      expect(invSpy.mock.calls.length).toBe(2);
+      // 复原清单与源供后续用例
+      localBuild.measured.files['octave.wasm'] = {
+        sha256: sha256OfNode('wasm-content'),
+        bytes: 500,
+      };
+      cleanFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
+      invSpy.mockRestore();
+      readSpy.mockRestore();
+    } finally {
+      EngineAssetResolver.resetInstance();
+    }
   });
 });

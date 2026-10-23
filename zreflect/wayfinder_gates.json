@@ -9,6 +9,7 @@
     {"ticket": 6,  "key": "offline_boot_five_piece",     "kind": "ledger", "check": null},
     {"ticket": 11, "key": "engine_layer_no_ui_import",   "kind": "ledger", "check": null},
     {"ticket": 12, "key": "sha_ledger_no_decoration",    "kind": "ledger", "check": null},
+    {"ticket": 15, "key": "download_event_two_shot",     "kind": "ledger", "check": null},
     {"ticket": 13, "key": "check_wayfinder_selftest",    "kind": "gate",   "check": "zreflect/check_wayfinder.py"}
   ],
   "assertions": [
@@ -24,6 +25,8 @@
     {"ticket": 10, "desc": "src/lib/engine 壳不存在（迁移落地面）", "path_must_not_exist": "src/lib/engine", "pending": true},
     {"ticket": 12, "desc": "DownloadStore 无 128 位连续 hex 字面量（intake 预防面）", "file": "src/modules/storage/DownloadStore.ts", "must_not_contain_re": "[0-9a-f]{128}"},
     {"ticket": 12, "desc": "combinedSha 拼接产地删除（三产地归一）", "file": "src/modules/storage/DownloadStore.ts", "must_not_contain": "combinedSha"},
-    {"ticket": 12, "desc": "KNOWN_ENGINE_METADATA 瘦身：键 omc（版本语义除名）", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "KNOWN_ENGINE_METADATA['omc']"}
+    {"ticket": 12, "desc": "KNOWN_ENGINE_METADATA 瘦身：键 omc（版本语义除名）", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "KNOWN_ENGINE_METADATA['omc']"},
+    {"ticket": 15, "desc": "两发定档形状：download() 的 finally 块不再发 broadcastChange（第三声删除）", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "download() 内 finally 零 broadcastChange"},
+    {"ticket": 15, "desc": "失效挂点形状：download() 终态显式调 invalidateCache（#7 显式方法）", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "EngineAssetResolver.getInstance().invalidateCache(lane as any)"}
   ]
 }

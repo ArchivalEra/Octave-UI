@@ -199,6 +199,30 @@ def measure_example():
         witness=deco_cmd, witness_expect=n_deco,
       )
 
+    # wayfinder #15 gate: 锚点——通知通道统一（download 三发收敛两发 + 失效挂点）。
+    # 值 = 一次实测采样（用例面叙述），replay=False（跑 vitest 太贵不逐字复跑）；
+    # witness = 便宜计数（download() 方法体内 finally 块的 broadcastChange 调用数 = 0
+    # ——决议原文「finally 里那次删除」的机器可判形状；旧三发坏形状回潮 ⇒ finally
+    # 里再现调用 ⇒ 见证当场红。方法体内共 3 处调用 = start null + 成功 record +
+    # catch null，任何单次执行路径恰好发 2 声——发数判据归 vitest 事件计数用例）。
+    twoshot_cmd = ("python3 -c \"import re; p='src/modules/storage/DownloadStore.ts'; "
+                   "t=open(p).read(); s=t.index('async download('); e=t.index('async remove(', s); "
+                   "b=t[s:e]; f=b[b.index('} finally {'):]; print(f.count('this.broadcastChange('))\"")
+    n_twoshot = _probe(twoshot_cmd)
+    if n_twoshot is not None:
+      facts["download_event_two_shot"] = fact(
+        "DownloadStore.download() 通知通道统一：三发收敛两发（start null 进 downloading 态 + 终态一次"
+        "——成功 record / 失败 catch 里 null 后 rethrow，finally 中间那次删除）；"
+        "终态后显式调 EngineAssetResolver.getInstance().invalidateCache(lane)（#7 显式方法，engine ref 才挂，"
+        "lane 推法与 removeEngine 同款）⇒ 成功与失败两路单例缓存都失效（tests/storage/DownloadStore.test.ts "
+        "3 新用例：事件数===2×2 + 失效挂点 spy 双路，2026-10-23 实测 336/336 绿）",
+        "pnpm test -- tests/storage/DownloadStore.test.ts",
+        "wayfinder #15",
+        "票面 gate: 锚点；值是 vitest 用例面的一次采样（跑全测太贵不逐字复跑）",
+        replay=False,
+        witness=twoshot_cmd, witness_expect=str(n_twoshot),
+      )
+
     return facts
 
 

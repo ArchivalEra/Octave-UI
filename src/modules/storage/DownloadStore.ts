@@ -389,6 +389,9 @@ export class DownloadStore {
 
     const downloadKey = refToKey(ref);
     this.activeDownloads.add(downloadKey);
+    // #15 通知通道统一（两发定档）：第一发 = 进 downloading 态（record=null，
+    // 消费语义「进入下载中」——start 通知保留）；终态（成功 record / 失败 null）
+    // 只再发一次，见 catch 与成功路径的 broadcastChange。
     this.broadcastChange(ref, null);
 
     try {
@@ -488,12 +491,39 @@ export class DownloadStore {
     await this.saveManifest();
 
     // 广播事件 (A1)
+    // #15 两发定档：这是终态第二发（成功 record）——start 那发 null 之后
+    // 直到这里才有终态声；原 finally 里的第三发已删（start 发过、终态前又发
+    // null 是自相矛盾的第三声，消费者语义只需「进 downloading 态」+「终态」）。
     this.broadcastChange(ref, record);
 
     return record;
+    } catch (err) {
+      // #15 两发定档：失败也是终态，必须有声（null 终态声）。
+      // 成功路径已在 return 前发过 record，这里只在 throw 路径补终态声后 rethrow。
+      this.broadcastChange(ref, null);
+      throw err;
     } finally {
       this.activeDownloads.delete(downloadKey);
-      this.broadcastChange(ref, this.manifest.items[downloadKey] || null);
+      // #15 两发定档形状锚点：download() 内 finally 零 broadcastChange（第三声已删——
+      // start 发过、终态前 finally 又发 null 是自相矛盾的第三声）。
+      // #15 失效挂点：download 终态（成功或失败）后显式调 resolver.invalidateCache(lane)
+      // （#7 的显式方法，不走事件——事件只管 UI 刷新，缓存失效是写路径主动调）。
+      // 只对 engine ref 有意义；lane 推法与 removeEngine 的 refWithVariant 同款：
+      // omc 车道名即 lane，Octave 档 arch 形如 `${lane}/${variant}` 取斜杠前段。
+      // 失效必须落在**消费侧共享的单例**上（HeaderBar/ProjectWorkspace/OmcBridge
+      // 全走 getInstance()）——new 一个新实例只会失效它自己的空缓存，等于没失效；
+      // evict/removeEngine 内部已失效（#7 落过），这里补 download 写路径的缺口：
+      // 等长 XOR 重下修账后，会话内 integrity 缓存若不失效会继续吃旧指纹。
+      if (ref.kind === 'engine') {
+        const lane = ref.name === 'omc'
+          ? 'omc'
+          : (ref.arch?.split('/')?.[0] ?? ref.name);
+        try {
+          EngineAssetResolver.getInstance().invalidateCache(lane as any);
+        } catch {
+          // 容错：失效失败不改变下载结果本身（缓存最坏情况是多验一次盘）
+        }
+      }
     }
   }
 

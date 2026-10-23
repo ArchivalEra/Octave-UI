@@ -285,12 +285,17 @@ def _cases():
     _w(DOWNLOAD, DOWNLOAD and open(DOWNLOAD, encoding="utf-8").read()
        + "const FLAT = 'assets-manifest.json';\n"
          "let omcMeta = KNOWN_ENGINE_METADATA['omc'];\n")
+    # #15 通知通道统一断言的夹具目标（形状与真仓一致：finally 零广播锚点注释 +
+    # 失效挂点字面量——两条 must_contain 断言在夹具上可判，反向用例就地改写）
+    _w(DOWNLOAD, DOWNLOAD and open(DOWNLOAD, encoding="utf-8").read()
+       + "// download() 内 finally 零 broadcastChange\n"
+         "EngineAssetResolver.getInstance().invalidateCache(lane as any);\n")
     # 夹具台账键集（A 面）。gate 锚点在夹具里指向不存在的文件（zreflect/ 不在
     # 夹具根）⇒ 良好用例须先把该锚点换成夹具内在册的路径。
     keys = {"integrity_check_physical", "get_assets_port_alive",
             "supervisor_no_mock_fallback", "plot_panel_figure_chain",
             "engine_layer_no_ui_import", "offline_boot_five_piece",
-            "sha_ledger_no_decoration"}
+            "sha_ledger_no_decoration", "download_event_two_shot"}
     # 基底登记表 = 真登记表（含 pending 两条）；gate 锚点的 check 指向夹具里
     # 真实存在的文件（闸门自己），保持 A/B 两面在夹具上完整可判。
     good_reg = json.load(open(os.path.join(
@@ -403,6 +408,20 @@ def _cases():
                          "const meta = { sha256: 'ab'.repeat(8) };\n"
                          "const FLAT = 'assets-manifest.json';\n",
                          good_reg, "KNOWN_ENGINE_METADATA")),
+        ("★ #15 两发定档锚点注释没了 ⇒ 必须报（缺应有片段）",
+         lambda: _mutate(DOWNLOAD,
+                         "const meta = { sha256: 'ab'.repeat(8) };\n"
+                         "const FLAT = 'assets-manifest.json';\n"
+                         "let omcMeta = KNOWN_ENGINE_METADATA['omc'];\n"
+                         "EngineAssetResolver.getInstance().invalidateCache(lane as any);\n",
+                         good_reg, "finally 零 broadcastChange")),
+        ("★ #15 失效挂点字面量没了 ⇒ 必须报（缺应有片段）",
+         lambda: _mutate(DOWNLOAD,
+                         "const meta = { sha256: 'ab'.repeat(8) };\n"
+                         "const FLAT = 'assets-manifest.json';\n"
+                         "let omcMeta = KNOWN_ENGINE_METADATA['omc'];\n"
+                         "// download() 内 finally 零 broadcastChange\n",
+                         good_reg, "invalidateCache(lane as any)")),
         ("★ src/lib/engine 壳存在 ⇒ 必须报（pending 翻生效后真的会红）",
          lambda: _lib_case()),
         ("★ 断言无判据字段 ⇒ 必须报（登记了却不查 = 装饰）",
