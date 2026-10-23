@@ -77,10 +77,10 @@ describe('WasmEmbedAdapter alignDocstringsPaths', () => {
 });
 
 describe('WasmEmbedAdapter boot with EngineAssetResolver', () => {
-  it('canonical spec import path re-exports WasmEmbedAdapter correctly', async () => {
-    const specModule = await import('../../src/lib/engine/adapters/WasmEmbedAdapter');
-    expect(specModule.WasmEmbedAdapter).toBe(WasmEmbedAdapter);
-  });
+  // #10 Q10.1：原「canonical spec import path re-exports WasmEmbedAdapter」自证用例已删——
+  // 它是 src/lib/engine/adapters/ 重导出壳的唯一消费者（壳存在才需要自证壳存在）；
+  // 壳于 2026-10-23 物理删除（modules/ 为真模块产地），本文件其余用例早已直接
+  // import '../../src/modules/engine/WasmEmbedAdapter'（核对过，无需改动）。
 
   it('routes engine boot through EngineAssetResolver.withLocalAssets with correct octaveLane for omc', async () => {
     const interceptedCalls: Array<{ lane: string; variant: string }> = [];

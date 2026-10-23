@@ -8,7 +8,6 @@ import type {
   DownloadRef,
   DownloadRecord,
   DownloadManifest,
-  DownloadUnit,
   DownloadSnapshot,
   DownloadFileMeta,
   DownloadProgressCallback,
@@ -17,6 +16,7 @@ import {
   refToKey,
   keyToRef,
   DownloadError,
+  engineRef,
 } from './downloadTypes';
 import type { FetchPort } from './FetchPort';
 import { BrowserFetchAdapter, computeSha256 } from './FetchPort';
@@ -131,15 +131,16 @@ export class DownloadStore {
   getEngineRecord(lane: string, variant?: 'w64' | 'w32'): DownloadRecord | null {
     const is64 = lane === 'master' || lane === 'IllegalPerformance';
     const v = variant || (is64 ? 'w64' : 'w32');
+    // #10 Q10.4：ref 构造收单进 engineRef 工厂（downloadTypes.ts 唯一产地）
     const refWithVariant: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: `omc/${v}` }
-      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: `${lane}/${v}` };
+      ? engineRef('omc', `omc/${v}`)
+      : engineRef('octave', `${lane}/${v}`);
     const rec = this.getRecord(refWithVariant);
     if (rec) return rec;
 
     const refSimple: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
-      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
+      ? engineRef('omc', 'wasm32')
+      : engineRef('octave', lane);
     return this.getRecord(refSimple);
   }
 
@@ -147,11 +148,11 @@ export class DownloadStore {
     const is64 = lane === 'master' || lane === 'IllegalPerformance';
     const v = variant || (is64 ? 'w64' : 'w32');
     const refWithVariant: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: `omc/${v}` }
-      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: `${lane}/${v}` };
+      ? engineRef('omc', `omc/${v}`)
+      : engineRef('octave', `${lane}/${v}`);
     const refSimple: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
-      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
+      ? engineRef('omc', 'wasm32')
+      : engineRef('octave', lane);
     return this.has(refWithVariant) || this.has(refSimple);
   }
 
@@ -159,11 +160,11 @@ export class DownloadStore {
     const is64 = lane === 'master' || lane === 'IllegalPerformance';
     const v = variant || (is64 ? 'w64' : 'w32');
     const refWithVariant: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: `omc/${v}` }
-      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: `${lane}/${v}` };
+      ? engineRef('omc', `omc/${v}`)
+      : engineRef('octave', `${lane}/${v}`);
     const refSimple: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
-      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
+      ? engineRef('omc', 'wasm32')
+      : engineRef('octave', lane);
     return this.isDownloading(refWithVariant) || this.isDownloading(refSimple);
   }
 
@@ -175,8 +176,8 @@ export class DownloadStore {
     const v = options?.variant || (is64 ? 'w64' : 'w32');
     const arch = options?.variant ? `${lane}/${v}` : (lane === 'omc' ? 'wasm32' : lane);
     const ref: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch }
-      : { kind: 'engine', name: 'octave', version: '11.3.0', arch };
+      ? engineRef('omc', arch)
+      : engineRef('octave', arch);
     return this.download(ref, options);
   }
 
@@ -184,11 +185,11 @@ export class DownloadStore {
     const is64 = lane === 'master' || lane === 'IllegalPerformance';
     const v = variant || (is64 ? 'w64' : 'w32');
     const refWithVariant: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: `omc/${v}` }
-      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: `${lane}/${v}` };
+      ? engineRef('omc', `omc/${v}`)
+      : engineRef('octave', `${lane}/${v}`);
     const refSimple: DownloadRef = lane === 'omc'
-      ? { kind: 'engine', name: 'omc', version: '1.25.0', arch: 'wasm32' }
-      : { kind: 'engine', name: 'octave', version: '11.3.0', arch: lane };
+      ? engineRef('omc', 'wasm32')
+      : engineRef('octave', lane);
     await this.remove(refWithVariant);
     await this.remove(refSimple);
 
@@ -339,38 +340,6 @@ export class DownloadStore {
       }
     }
     return rec;
-  }
-
-  /**
-   * 装载界面取件 (Blob/Uint8Array 单元)
-   */
-  async unit(ref: DownloadRef): Promise<DownloadUnit> {
-    await this.init();
-    const rec = await this.stat(ref);
-    if (!rec) {
-      throw new DownloadError('NOT_DOWNLOADED', `Asset ${refToKey(ref)} is not downloaded`);
-    }
-
-    if (rec.files.length === 0) {
-      throw new DownloadError('INDEX_UNREADABLE', `Record ${refToKey(ref)} has no files listed`);
-    }
-
-    const primaryFile = rec.files[0];
-    const data = await this.storage.read(primaryFile.path);
-
-    const subFiles = new Map<string, Uint8Array>();
-    for (let i = 1; i < rec.files.length; i++) {
-      const f = rec.files[i];
-      const subData = await this.storage.read(f.path);
-      subFiles.set(f.path, subData);
-    }
-
-    return {
-      ref,
-      record: rec,
-      data,
-      subFiles,
-    };
   }
 
   /**

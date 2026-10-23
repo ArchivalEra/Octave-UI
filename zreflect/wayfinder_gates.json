@@ -11,6 +11,7 @@
     {"ticket": 12, "key": "sha_ledger_no_decoration",    "kind": "ledger", "check": null},
     {"ticket": 15, "key": "download_event_two_shot",     "kind": "ledger", "check": null},
     {"ticket": 14, "key": "pkg_error_toast_chain",       "kind": "ledger", "check": null},
+    {"ticket": 10, "key": "fake_seams_purged",           "kind": "ledger", "check": null},
     {"ticket": 13, "key": "check_wayfinder_selftest",    "kind": "gate",   "check": "zreflect/check_wayfinder.py"}
   ],
   "assertions": [
@@ -23,7 +24,7 @@
     {"ticket": 6,  "desc": "五件套下载形状：DownloadStore Octave 分支追加 assets/manifest.json item", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "assets-manifest.json"},
     {"ticket": 11, "desc": "engine 层所有 .ts 不含 toastService（无 UI 旁路）", "dir": "src/modules/engine", "ext": ".ts", "must_not_contain": "toastService"},
     {"ticket": 11, "desc": "appContext 经 onOmcFlavorError 通道订阅（已知缝收编）", "file": "src/modules/appContext.ts", "must_contain": "onOmcFlavorError"},
-    {"ticket": 10, "desc": "src/lib/engine 壳不存在（迁移落地面）", "path_must_not_exist": "src/lib/engine", "pending": true},
+    {"ticket": 10, "desc": "src/lib/engine 壳不存在（迁移落地面，2026-10-23 物理删除后断言生效）", "path_must_not_exist": "src/lib/engine"},
     {"ticket": 12, "desc": "DownloadStore 无 128 位连续 hex 字面量（intake 预防面）", "file": "src/modules/storage/DownloadStore.ts", "must_not_contain_re": "[0-9a-f]{128}"},
     {"ticket": 12, "desc": "combinedSha 拼接产地删除（三产地归一）", "file": "src/modules/storage/DownloadStore.ts", "must_not_contain": "combinedSha"},
     {"ticket": 12, "desc": "KNOWN_ENGINE_METADATA 瘦身：键 omc（版本语义除名）", "file": "src/modules/storage/DownloadStore.ts", "must_contain": "KNOWN_ENGINE_METADATA['omc']"},

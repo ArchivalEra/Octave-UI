@@ -23,6 +23,23 @@ export function refToKey(ref: DownloadRef): string {
   return `${ref.kind}:${ref.name}@${ref.version}${ref.arch ? `:${ref.arch}` : ''}`;
 }
 
+/**
+ * 引擎 ref 的唯一构造产地（wayfinder #10 Q10.4「ref 代数收单」）。
+ *
+ * 此前 DownloadStore 内 7 处手写 `{kind:'engine', name, version, arch}` 构造、
+ * 版本字面量散布 19 处——054 审计点名 omc 的 '1.25.0' 是编造版本号（omc 真实
+ * 返回 "-rust"，Q6C 裁定版本如实）。本工厂收单后：
+ *   · omc 车道：name='omc'，version='-rust'（如实，不编造）
+ *   · octave 档：name='octave'，version='11.3.0'
+ *   · arch 由调用方给（`${lane}/${variant}` 档位形 或 'wasm32'/lane 平铺形）
+ * 版本字面量只允许出现在这一处；`grep -c "1.25.0" src/` 必须为 0。
+ */
+export function engineRef(name: 'octave' | 'omc', arch: string): DownloadRef {
+  return name === 'omc'
+    ? { name: 'omc', version: '-rust', kind: 'engine', arch }
+    : { name: 'octave', version: '11.3.0', kind: 'engine', arch };
+}
+
 export function keyToRef(key: string): DownloadRef {
   const colonIdx = key.indexOf(':');
   const atIdx = key.indexOf('@');

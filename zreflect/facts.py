@@ -245,6 +245,32 @@ def measure_example():
         witness=pkgtoast_cmd, witness_expect=str(n_pkgtoast),
       )
 
+    # wayfinder #10 gate: 锚点——假 seam 清理（lib/ 双壳物理删 + 死接口核销 +
+    # 透传层拆除 + ref 代数收单）。值 = 一次实测采样（用例面叙述），replay=False
+    # （跑 vitest 太贵不逐字复跑）；witness = 便宜双见证合一（一行 python3 判
+    # 「src/lib/engine 目录不存在 + DownloadStore.ts 里编造版本号 1.25.0 的
+    # **构造性出现**为 0」——注释行 `键 omc@1.25.0 → omc` 是键变更的历史说明
+    # 不算编造（票面豁免），故判据取 version 构造形 `version: '1.25.0'` 而非
+    # 裸 substring；壳若回潮或编造版本号若复活进构造，见证当场红），每提交真跑。
+    seams_cmd = ("python3 -c \"import os; src=open('src/modules/storage/DownloadStore.ts').read(); "
+                 "print('%d,%d' % (os.path.exists('src/lib/engine'), src.count(\\\"version: '1.25.0'\\\")))\"")
+    n_seams = _probe(seams_cmd)
+    if n_seams is not None:
+      facts["fake_seams_purged"] = fact(
+        "假 seam 清理（wayfinder #10）：src/lib/engine 双壳物理删除（modules/ 为真产地，"
+        "壳的自证用例同步删）；DownloadStore unit() 死接口核销（生产零消费者）+ 其余公开接口逐一"
+        "grep 核销（getRecord/index/checkQuota/download/downloadEngine/removeEngine/isEngineDownloading "
+        "均有真实消费者，保留）；ProjectWorkspace 7 个 downloadStore 零逻辑透传拆除（HeaderBar 直连"
+        "appContext downloadStore 单例）+ syncFilesToEngine 直取 adapter.fs.write 改走 supervisor.fsWrite；"
+        "engineRef 工厂收 7 产地（omc version 如实 '-rust'，Q6C）（tests/engine/ 两文件 + "
+        "tests/storage/DownloadStore.test.ts + tests/workspace/ProjectWorkspace.test.ts，2026-10-23 实测 346/346 绿）",
+        "pnpm test",
+        "wayfinder #10",
+        "票面 gate: 锚点；值是 vitest 用例面的一次采样（跑全测太贵不逐字复跑）",
+        replay=False,
+        witness=seams_cmd, witness_expect=n_seams,
+      )
+
     return facts
 
 

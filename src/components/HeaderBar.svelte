@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { supervisor, themeManager, projectWorkspace, i18n, t, toastService } from '../modules/appContext';
+  import { supervisor, themeManager, downloadStore, projectWorkspace, i18n, t, toastService } from '../modules/appContext';
   import type { SupervisorState, EngineLane } from '../modules/engine/types';
   import { EngineAssetResolver } from '../modules/engine/EngineAssetResolver';
   import type { Locale } from '../modules/i18n/types';
@@ -58,7 +58,9 @@
 
   function isEngineDownloading(lane: string): boolean {
     if (downloadRevision < 0) return false;
-    return projectWorkspace.isEngineDownloading(lane);
+    // #10 Q10.3：透传层拆除后直连真源（appContext 的 downloadStore 单例），
+    // 不再走 projectWorkspace.isEngineDownloading 的零逻辑转发
+    return downloadStore.isEngineDownloading(lane);
   }
 
   let menuOpen = $state(false);
@@ -143,7 +145,9 @@
   async function handleDownloadEngine(lane: string, e: MouseEvent) {
     e.stopPropagation();
     try {
-      await projectWorkspace.downloadEngine(lane);
+      // #10 Q10.3：直连真源（downloadStore 单例）；workspace 通知由
+      // 'octave:download-changed' 事件 + subscribe 通道自行驱动，无需转发层
+      await downloadStore.downloadEngine(lane);
       await checkAllPhysicalStatus();
       toastService.success(t('header.engine_download_success') || `Engine ${lane} downloaded`);
     } catch (err: any) {
@@ -154,7 +158,8 @@
   async function handleRemoveEngine(lane: string, e: MouseEvent) {
     e.stopPropagation();
     try {
-      await projectWorkspace.removeEngine(lane);
+      // #10 Q10.3：直连真源（downloadStore 单例），同上
+      await downloadStore.removeEngine(lane);
       await checkAllPhysicalStatus();
       toastService.info(t('header.engine_remove_success') || `Engine ${lane} removed`);
     } catch (err: any) {

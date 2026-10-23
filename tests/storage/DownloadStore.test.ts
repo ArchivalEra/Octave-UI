@@ -267,9 +267,12 @@ describe('DownloadStore Deep Module', () => {
   });
 
   it('handles 7 closed error codes reliably', async () => {
-    // 1. NOT_DOWNLOADED
+    // 1. NOT_DOWNLOADED 的语义面（#10 Q10.2：unit() 死接口核销后，未下载态的
+    //    observable 行为 = stat 无账对账返回 null + has 为 false——错误码本体
+    //    仍在 downloadTypes.ts 的 7 码封闭集里，消费面在装载/对账侧）
     const refUncut: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
-    await expect(store.unit(refUncut)).rejects.toMatchObject({ code: 'NOT_DOWNLOADED' });
+    expect(await store.stat(refUncut)).toBeNull();
+    expect(store.has(refUncut)).toBe(false);
 
     // 2. VERSION_WITHHELD
     const refWithheld: DownloadRef = { name: 'cgi', version: '0.1.0', kind: 'src' } as any;

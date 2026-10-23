@@ -313,8 +313,10 @@ def _cases():
             "supervisor_no_mock_fallback", "plot_panel_figure_chain",
             "engine_layer_no_ui_import", "offline_boot_five_piece",
             "sha_ledger_no_decoration", "download_event_two_shot",
-            "pkg_error_toast_chain"}
-    # 基底登记表 = 真登记表（含 pending 两条）；gate 锚点的 check 指向夹具里
+            "pkg_error_toast_chain", "fake_seams_purged"}
+    # 基底登记表 = 真登记表（#10/#12 已执行 ⇒ 断言全生效、无 pending 原文）；
+    # pending 语义的用例用合成 pending 断言的变体表考（真表里不再有 pending 条目，
+    # 不能拿它考「pending 跳过执行」）。gate 锚点的 check 指向夹具里
     # 真实存在的文件（闸门自己），保持 A/B 两面在夹具上完整可判。
     good_reg = json.load(open(os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "wayfinder_gates.json"),
@@ -358,9 +360,15 @@ def _cases():
             anc["key"] = "no_such_key"
             break
     hex_reg = _clone()
-    _assertion(hex_reg, 12).pop("pending", None)          # pending 翻生效
+    _assertion(hex_reg, 12).pop("pending", None)          # 保险：#12 已生效，无 pending 可翻
     lib_reg = _clone()
-    _assertion(lib_reg, 10).pop("pending", None)          # pending 翻生效
+    _assertion(lib_reg, 10).pop("pending", None)          # 保险：#10 已生效，无 pending 可翻
+    # pending 语义夹具（#10/#12 执行后真表无 pending 原文 ⇒ 合成一条考「跳过执行
+    # 并如实注明」——防的是 pending 机制被无声拆掉后没人发现）
+    pending_reg = _clone()
+    pending_reg["assertions"].append(
+        {"ticket": 99, "desc": "合成 pending 断言（自证夹具）",
+         "path_must_not_exist": "src/lib/engine", "pending": True})
     empty_anc = {"schema": 1, "anchors": [],
                  "assertions": good_reg["assertions"]}
     empty_assert = {"schema": 1, "anchors": good_reg["anchors"], "assertions": []}
@@ -376,7 +384,9 @@ def _cases():
         return any(word in x for x in problems(reg, root=d, facts=keys)[0])
 
     def _lib_case():
-        """#10 pending 翻生效后的坏形状：建 src/lib/engine 壳 ⇒ 查 ⇒ 拆干净。"""
+        """#10 断言已生效（2026-10-23 壳物理删除后 pending 翻生效）：
+        建 src/lib/engine 壳 ⇒ 查 ⇒ 拆干净。lib_reg 与 good_reg 同形（保险
+        pop pending 是空操作），这条证明生效断言真的会红。"""
         os.makedirs(LIBDIR, exist_ok=True)
         p = os.path.join(LIBDIR, "EngineAssetResolver.ts")
         _w(p, "// 旧壳\n")
@@ -390,8 +400,8 @@ def _cases():
         # ① 正常不报
         ("完整良好输入（真登记表 + 夹具源树 + 夹具台账键）⇒ 问题清单空",
          lambda: problems(good_reg, root=d, facts=keys)[0] == []),
-        ("pending 断言跳过执行并如实注明（#10/#12 未执行）",
-         lambda: [n for n in problems(good_reg, root=d, facts=keys)[1]
+        ("pending 断言跳过执行并如实注明（合成 pending 变体——#10/#12 执行后真表无 pending 原文）",
+         lambda: [n for n in problems(pending_reg, root=d, facts=keys)[1]
                   if "未执行" in n] != []),
         ("pending 跳过不是永久豁免：夹具不建 src/lib/engine ⇒ 良好用例不因它红",
          lambda: not os.path.exists(os.path.join(d, "src/lib"))
@@ -467,7 +477,7 @@ def _cases():
          lambda: _mutate(TERMC,
                          "const text = String(err);\n",
                          good_reg, "ErrorSanitizer.sanitize")),
-        ("★ src/lib/engine 壳存在 ⇒ 必须报（pending 翻生效后真的会红）",
+        ("★ src/lib/engine 壳存在 ⇒ 必须报（#10 已生效：壳回潮真的会红）",
          lambda: _lib_case()),
         ("★ 断言无判据字段 ⇒ 必须报（登记了却不查 = 装饰）",
          lambda: _one(no_pred, "没有任何判据字段")),
