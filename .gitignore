@@ -20,6 +20,7 @@
 !/pins.json
 !/upstream-lock.json
 !/HANDOFF.md
+!/SITE-ADMIN-REQUEST.md
 !/gates-selftest.sh
 !/Einfacht.env
 !/reflect-hooks/

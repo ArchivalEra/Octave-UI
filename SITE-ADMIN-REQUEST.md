@@ -1,0 +1,101 @@
+# 申请书 · 请网站管理人配置边缘缓存与 Gzip 直供
+
+**致**：isui.ren 边缘中间件管理人
+**自**：Octave-UI 仓（ArchivalEra/Octave-UI）
+**日期**：2026-10-24
+**事由**：本站为纯静态站点（GitHub Pages 源站 + 边缘反代），含多个大二进制
+（`octave.wasm` 29.6MB × 三车道、`octave.data` 10MB、`OpenModelicaCompiler_bg.wasm`
+74.5MB）。现边缘策略对大文件传输慢、CPU 浪费，特申请按下述四项调整。每项附
+**验收判据**（curl 一行可验），配置后请回执。
+
+---
+
+## 申请一：Gzip 预压缩直供（gzip_static 语义）
+
+**现状（实测）**：源站对 29.6MB 的 `octave.wasm` **每次请求实时 gzip**——
+`curl -H "Accept-Encoding: gzip" -I …/lanes/wasm32-final/octave.wasm` 返回
+`content-encoding: gzip` + `content-length: 7231353`（压缩后 7.2MB）。
+本仓有 `gzip -9` 预压缩管线（`pnpm compress` 产出全量 `.gz`），但 CI 尚未
+执行该步骤（`.gz` 在线上 404）——**本仓侧自行补上**（见「本仓侧配合」①）。
+
+**申请**：边缘对带 `Accept-Encoding: gzip` 的请求，若同路径 `.gz` 存在，直接回
+`.gz` 内容并置 `Content-Encoding: gzip`（保留原文件 `Content-Type`，如
+`application/wasm`）；不要在边缘对大文件实时压缩。
+
+**收益**：边缘零压缩 CPU；大文件 TTFB 显著下降；74.5MB 的 OMC wasm 压缩后
+约 20MB 级，首屏可下载性大幅改善。
+
+**验收判据**：
+```bash
+curl -sI -H "Accept-Encoding: gzip" https://isui.ren/Octave-UI/lanes/wasm32-final/octave.wasm \
+  | grep -i content-encoding          # ⇒ gzip
+curl -sI https://isui.ren/Octave-UI/lanes/wasm32-final/octave.wasm.gz \
+  | head -1                            # ⇒ 200（.gz 可直接取到）
+```
+
+## 申请二：分层缓存策略（取代统一策略）
+
+**现状（实测）**：边缘 HTML 层 `Cache-Control: public,max-age=0,must-revalidate`
+（这个对 HTML 是对的，请保留）；但大文件与带内容哈希的资产没有区分。
+
+**申请**（三层）：
+
+| 路径类别 | 请求的 Cache-Control | 理由 |
+|---|---|---|
+| `*.html` 与入口 | `public, max-age=0, must-revalidate`（现状保留） | 部署即生效 |
+| `/_astro/*` | `public, max-age=31536000, immutable` | 文件名含内容哈希，内容变名即变，可永久缓存 |
+| `/lanes/*` `/w64/*` `/omc/*` `/assets/*` | `public, max-age=86400`（一天起，可更长） | 大二进制；内容随构建变——见下方刷新钩子 |
+
+**部署刷新钩子**：本仓产物根带 `deploy-stamp.json`（含构建源 SHA 与引擎三分支
+SHA）。若边缘支持按前缀 purge：建议监听该文件变化（或每次部署后由本仓侧通知），
+刷新 `/lanes/ /w64/ /omc/ /assets/` 四前缀；`/_astro/` 因哈希命名**永不需刷新**。
+
+**验收判据**：
+```bash
+curl -sI https://isui.ren/Octave-UI/_astro/ | grep -i cache-control   # ⇒ immutable
+curl -sI https://isui.ren/Octave-UI/lanes/wasm32-final/octave.wasm | grep -i cache-control
+                                                                      # ⇒ max-age=86400
+```
+
+## 申请三：Range → 206 保持，且大文件缓存全量体
+
+**现状**：HANDOFF.md 已载明边缘支持 `Range → 206`（约 5MB/片的分片交付依赖它）。
+
+**申请**：调整缓存策略时**不得回退 Range 支持**；且对 `octave.wasm` /
+`OpenModelicaCompiler_bg.wasm` 这类大单体，边缘缓存请存**全量体**（而非只缓存
+分片响应）——分片请求命中的应是同一份缓存的不同区间。
+
+**验收判据**：
+```bash
+curl -sI -H "Range: bytes=0-1023" https://isui.ren/Octave-UI/lanes/wasm32-final/octave.wasm \
+  | head -1                            # ⇒ 206 Partial Content
+```
+
+## 申请四：确认 74.5MB 单体的边缘可行性
+
+OMC 引擎 `OpenModelicaCompiler_bg.wasm`（74,579,404 字节，SHA-256
+`8287589e…b001`）即将上站（见「本仓侧配合」②）。请确认：
+
+1. 边缘对该尺寸单文件的反代 / 缓存 / 传输**是否有上限**（若有请告知阈值）；
+2. 若有上限，本仓将把它也改为约 5MB/片分片交付（现有分片 shim 可复用），
+   届时另行通知。
+
+**验收判据**（上站后）：
+```bash
+curl -sI https://isui.ren/Octave-UI/omc/OpenModelicaCompiler_bg.wasm | head -1   # ⇒ 200
+```
+
+---
+
+## 本仓侧配合（我们自己完成，仅告知）
+
+1. **CI 补 `pnpm compress` 步骤**：使全量 `.gz` 随构建上站（申请一的前提）。
+2. **OMC wasm 构建期同步**：CI 从受控源（OpenModelica-Full-Wasm 仓 release asset）
+   拉取 74.5MB wasm + SHA-256 校验后入站——替换现 workflow 中引用本机路径的
+   同步步骤（该路径在 CI runner 上不存在，是当前线上 OMC 404 的根因）。
+3. **deploy-stamp.json 持续输出**（已有）：供边缘作部署刷新钩子。
+
+以上三项完成后本仓会推送 main 并观察一次完整 CI；管理人配置完成后请按各判据
+回执，双方对账闭环。
+
+**联系方式**：Octave-UI 仓 issues 或本文件所在仓库的 mail/ 信箱。
