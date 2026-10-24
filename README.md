@@ -81,6 +81,14 @@ pnpm build:lanes
 - 闸门自证请运行：`sh gates-selftest.sh`
 - 17 道闸门运行：`. reflect-hooks/einfacht-env.sh && python3 zreflect/registry.py --run commit`
 
+## WebMCP 网桥
+
+外部 AI agent 经页面事件协议 / 全局直柄（`modelContext`）调用引擎与 UI 能力。
+重构后形状（[spec v2](https://github.com/ArchivalEra/Octave-UI/issues)）：工具表 +
+纯函数分发机 + deps 能力门（`defineTool` 编译期绑死）+ 三通道 + 偏差表验收
+（`src/modules/plugins/webmcp/DEVIATIONS.md`）——旧调用零迁移成本（golden master 盯住）。
+调试句柄：`window.__webmcp_debug.stats()`（调用流量四元组环形缓冲，不上 wire）。
+
 ## Wayfinder × Einfacht 决策联动
 
 重大整改走 GitHub Issues 上的 [wayfinder 决策图](https://github.com/ArchivalEra/Octave-UI/issues/4)：
