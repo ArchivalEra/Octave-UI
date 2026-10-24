@@ -34,6 +34,16 @@ export interface WebMcpToolSpec<D extends WebMcpDepKey = WebMcpDepKey> {
    * OMC 仿真分钟级场景将来按需设。超时后底层任务仍在跑/排着——信封明示勿盲目重试。
    */
   readonly timeoutMs?: number;
+  /**
+   * 运行期能力门（spec B.2 · 偏差表 CAPABILITY_UNAVAILABLE）：声明了本字段的工具在
+   * run 之前接受一次「provision 在册但运行期是否可供给」的检查。
+   * 返回 null = 可供给（照常进 run）；返回短原因串 = 不可供给 ⇒ CAPABILITY_UNAVAILABLE 信封。
+   * 适用面**只限新路径**（懒加载引擎装载失败 / 服务 boot 中且该工具选择不排队）——
+   * 六个旧工具不声明本字段，服务缺席的旧守卫文案（golden 盯住）一字不变；
+   * 排队语义的工具同样不声明（booting 排队走旧路径不报——spec B.4）。
+   * 检查自身抛错按代码缺陷落 catch-all（与旧实现意外异常同路）。
+   */
+  readonly capability?: (ctx: Pick<WebMcpCtx, D>) => string | null;
 }
 
 /** 恒等工厂：类型咬合全部发生在 WebMcpToolSpec<D> 的推导里，运行期零行为 */

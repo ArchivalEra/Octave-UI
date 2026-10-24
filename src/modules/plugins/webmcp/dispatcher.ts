@@ -23,6 +23,10 @@ export const DEFAULT_TIMEOUT_MS = 120_000;
 export const TIMEOUT_ENVELOPE_TEXT = (name: string, ms: number) =>
   `TIMEOUT: tool "${name}" did not finish within ${ms}ms (counting from call initiation, queueing included). The underlying task may still be running or queued — do not blindly retry.`;
 
+/** 能力不可得信封（spec B.2 · 偏差表第 3 项——只用于 provision 在册但运行期不可得的新路径） */
+export const CAPABILITY_ENVELOPE_TEXT = (name: string, reason: string) =>
+  `CAPABILITY_UNAVAILABLE: tool "${name}" requires ${reason}, which is not currently available (the tool is provisioned but its runtime capability is missing — e.g., lazy engine load failed, or the service is still booting on a non-queuing path).`;
+
 /**
  * Promise.race 超时壳（spec B.1 第三条路）。超时后底层 promise **不被取消**——
  * JS 无取消原语，任务继续跑/排着；信封已如实告知调用方。工作 promise 先 settle
@@ -99,6 +103,20 @@ export async function dispatchTool(
     const invalid = validateArgs(tool.parameters, args);
     if (invalid) {
       return invalid;
+    }
+    // 能力门（spec B.2 · 偏差表 CAPABILITY_UNAVAILABLE）：只对**声明了 capability 的
+    // 工具**在 run 之前检查——provision 在册但运行期不可给（懒加载失败 / boot 中且该
+    // 工具不排队）⇒ CAPABILITY_UNAVAILABLE 信封。六个旧工具不声明 ⇒ 零行为变化
+    // （服务缺席的旧守卫文案一字不变，golden 盯住）；检查抛错落 catch-all（代码缺陷路）。
+    if (tool.capability) {
+      const ctxForCheck = materializeCtx(tool.deps, resolve);
+      const unavailableReason = tool.capability(ctxForCheck);
+      if (unavailableReason) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: CAPABILITY_ENVELOPE_TEXT(name, unavailableReason) }],
+        };
+      }
     }
     // 超时兜底（spec 步骤 3 第 2 项 · 偏差表 TIMEOUT，spec B.1）：Promise.race——
     // 计时含排队（从调用发起算，不从 handler 开始执行算），缺省 120s，表项 timeoutMs

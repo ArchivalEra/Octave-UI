@@ -46,7 +46,21 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
   超时触发面只存在于反向断言（tests/plugins/webmcp-timeout.test.ts，9 用例）。
 - **落点**：dispatcher 的 raceTimeout（defineTool 增加 timeoutMs 可选字段）。
 
-## ③ CAPABILITY_UNAVAILABLE —— 未实现（步骤 3 第 3 项）
+## ③ CAPABILITY_UNAVAILABLE —— 已实现 → 已确认（2026-10-24）
 
-只用于 provision 在册但运行期不可得（懒加载失败 / boot 中不排队路径）；provision 缺失 =
-Unknown tool 原文案（旧路径）。
+- **适用面**：provision **在册**但运行期不可给——懒加载引擎装载失败 / 服务 boot 中且该
+  工具选择**不排队**（排队语义的工具不声明本门，booting 走旧路径不报——spec B.4）。
+- **零偏差红线**：provision 缺失（未在名册）⇒ Unknown tool **原文案**（golden F 面盯住，
+  有反向断言钉死不是 CAPABILITY）；六个旧工具不声明 capability ⇒ 服务缺席的**旧守卫文案
+  一字不变**（golden F 组「三服务缺席」全体绿即证）。
+- **provision 在哪算**：createServer 一次性静态名册（server.ts `tools = octaveToolTable`，
+  不靠 thunk 键存在性判断——服务晚构造不抖名册）。
+- **信封**：`CAPABILITY_UNAVAILABLE: tool "<名>" requires <原因>, which is not currently
+  available (the tool is provisioned but its runtime capability is missing — e.g., lazy engine
+  load failed, or the service is still booting on a non-queuing path).`
+- **golden 快照变化：0 条**——六旧工具不声明门，行为零变化；触发面全在反向断言
+  （webmcp-capability.test.ts，7 用例：必报 ×2 / 恢复放行 / 缺名原文案 / 不声明不介入 /
+  检查抛错落 catch-all / 门在 ARGS_INVALID 之后）。
+- **落点**：defineTool 增 capability 可选字段（收窄 ctx 同 Pick 面）；dispatcher 在
+  校验之后、超时壳之前执行；omc 软依赖路径用 supervisor 模拟（catalog 无 omc 条目前的
+  等价物——验收方 068 提示的路径）。
