@@ -31,7 +31,17 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
 - **反向断言**：tests/plugins/webmcp-args-validation.test.ts（14 用例：必报 ×5 / 放行 ×4 /
   全链并存 ×5）。
 
-## ② TIMEOUT —— 已实现 → 已确认（2026-10-24）
+**偏差表状态：3/3 项已实现→已确认（ARGS_INVALID / TIMEOUT / CAPABILITY_UNAVAILABLE）——2026-10-24 全部勾销。**
+
+## 观测面记录（非偏差——不上 wire，无 wire 形状变化）
+
+- **onCall 计数器**（步骤 3 第 4 项，spec B.3/用户故事 11）：每次 callTool 终态记
+  `{name, ok, ms, ts}` 四元组进环形缓冲（容量 512，溢出丢最旧）；读取口 =
+  调试句柄 `window.__webmcp_debug.stats()`（init 挂 / destroy 卸，不误删后来者的）。
+  **不记 args**（隐私/体积）；**不上 wire、不改 get_system_state 输出**（golden F 面
+  88 用例零变化即证——等价断言「输出对象无 stats 键」在反向断言里）；**默认零行为**
+  （记录在终态之后，对调用结果零影响）。反向断言 10 用例
+  （webmcp-call-stats.test.ts）。
 
 - **适用面**：工具调用在 timeoutMs（缺省 120_000，表项可覆盖）内未完成 ⇒ TIMEOUT 信封。
   计时**含排队**（从调用发起算——machine 在 supervisor 之上看不到执行起点，首版如实承认）。

@@ -18,6 +18,7 @@ import { createServer, type WebMcpServer } from './server';
 import type { WebMcpChannel } from './channels/types';
 import { createGlobalHandleChannel } from './channels/globalHandle';
 import { createLegacyEventChannel } from './channels/eventChannel';
+import { createDebugHandle, attachDebugHandle, detachDebugHandle, type WebMcpDebugHandle } from './callStats';
 
 // 注入面迁至 ctx.ts（组合根），旧公开导入路径保持可用
 export type { WebMcpPluginServices } from './ctx';
@@ -52,6 +53,9 @@ export class WebMcpPlugin implements OctavePlugin<WebMcpPluginServices>, WebMcpC
 
   // --- 插件生命周期与双通道挂载 ---
 
+  private _debugHandle: WebMcpDebugHandle | null = null;
+  private _debugWin: Window | null = null;
+
   init(): void {
     const win = this.options?.windowTarget ?? (typeof window !== 'undefined' ? window : null);
     const doc = this.options?.documentTarget ?? (typeof document !== 'undefined' ? document : null);
@@ -63,6 +67,11 @@ export class WebMcpPlugin implements OctavePlugin<WebMcpPluginServices>, WebMcpC
     for (const channel of this._channels) {
       channel.attach(this);
     }
+    // 调试句柄（spec B.3）：window.__webmcp_debug.stats() —— 计数器唯一读取口；
+    // 不上 wire、不改任何工具输出（get_system_state 的 golden 盯住零变化）
+    this._debugHandle = createDebugHandle(this._server.callStats);
+    this._debugWin = win;
+    attachDebugHandle(win, this._debugHandle);
   }
 
   destroy(): void {
@@ -71,5 +80,11 @@ export class WebMcpPlugin implements OctavePlugin<WebMcpPluginServices>, WebMcpC
       channel.detach();
     }
     this._channels = [];
+    // 调试句柄跟随插件生命周期卸载（仅当挂的还是本句柄才动，不误删后来者的）
+    if (this._debugHandle) {
+      detachDebugHandle(this._debugWin, this._debugHandle);
+    }
+    this._debugHandle = null;
+    this._debugWin = null;
   }
 }

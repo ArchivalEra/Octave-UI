@@ -7,12 +7,18 @@ import type { WebMcpContextApi, WebMcpToolDefinition } from './types';
 import type { WebMcpCtxResolver } from './ctx';
 import { dispatchTool } from './dispatcher';
 import { octaveToolTable } from './tools';
+import { CallStats } from './callStats';
 
-export type WebMcpServer = WebMcpContextApi;
+export type WebMcpServer = WebMcpContextApi & {
+  /** onCall 计数器（spec 步骤 3 第 4 项）——装配根持有，调试句柄与分发机共用同一实例 */
+  readonly callStats: CallStats;
+};
 
 export function createServer(resolve: WebMcpCtxResolver): WebMcpServer {
   // 静态名册：不靠 thunk 键存在性判断 provision（服务晚构造不抖名册）
   const tools = octaveToolTable;
+  // onCall 计数器：默认零行为（内存 push + 环形裁剪）；不上 wire 不改工具输出
+  const callStats = new CallStats();
 
   return {
     async listTools(): Promise<WebMcpToolDefinition[]> {
@@ -24,8 +30,15 @@ export function createServer(resolve: WebMcpCtxResolver): WebMcpServer {
       }));
     },
 
-    callTool(name: string, args?: Record<string, unknown>) {
-      return dispatchTool(tools, resolve, name, args);
+    async callTool(name: string, args?: Record<string, unknown>) {
+      // 计时与记录（spec B.3）：args 一律不进记录（隐私/体积），只记四元组；
+      // 记录动作在终态之后——对调用结果零影响（默认零行为判据）
+      const startedAt = Date.now();
+      const res = await dispatchTool(tools, resolve, name, args);
+      callStats.record(name, res.isError !== true, Date.now() - startedAt);
+      return res;
     },
+
+    callStats,
   };
 }
