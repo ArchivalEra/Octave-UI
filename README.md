@@ -75,7 +75,7 @@ pnpm build:lanes
 - 架构契约与语义边界见 [CONTEXT.md](CONTEXT.md)（含领域词汇表：物理对账 / 钓鱼判据 / 见证 / 对账器 / 降级信号）
 - Agent 纪律与硬规矩见 [AGENTS.md](AGENTS.md)
 - 开发方向与地图见 [maintaince.md](maintaince.md)
-- 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)（2026-10-24 起边缘为运行时 gzip + 分层缓存，Range 已撤除）；边缘申请与回执（五项：gzip/分层缓存/Range/74.5MB/bridge 缓存）见 [SITE-ADMIN-REQUEST.md](SITE-ADMIN-REQUEST.md)
+- 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)（2026-10-24 起边缘为运行时 gzip + 分层缓存，Range 已撤除）；边缘申请与回执（五项+HTML 短缓存批）见 [SITE-ADMIN-REQUEST.md](SITE-ADMIN-REQUEST.md)
 - 跨 Agent 往来信箱见 [mail/README.md](mail/README.md)（与内容仓 Octave-Extra-Content 定稿纯下载模块规格）
 - 事实台账见 [FACTS.json](FACTS.json)
 - 安装 git hooks 守卫：`sh reflect-hooks/install.sh`
