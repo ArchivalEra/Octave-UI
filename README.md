@@ -71,7 +71,7 @@ pnpm build:lanes
 
 本仓库已接入 [Einfacht](https://github.com/ArchivalEra/Einfacht) 反幻觉事实系统：
 - 活状态文档见 [STATE.md](STATE.md)
-- 架构契约与语义边界见 [CONTEXT.md](CONTEXT.md)
+- 架构契约与语义边界见 [CONTEXT.md](CONTEXT.md)（含领域词汇表：物理对账 / 钓鱼判据 / 见证 / 对账器 / 降级信号）
 - Agent 纪律与硬规矩见 [AGENTS.md](AGENTS.md)
 - 开发方向与地图见 [maintaince.md](maintaince.md)
 - 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)
@@ -79,5 +79,12 @@ pnpm build:lanes
 - 事实台账见 [FACTS.json](FACTS.json)
 - 安装 git hooks 守卫：`sh reflect-hooks/install.sh`
 - 闸门自证请运行：`sh gates-selftest.sh`
-- 16 道闸门运行：`. reflect-hooks/einfacht-env.sh && python3 zreflect/registry.py --run commit`
+- 17 道闸门运行：`. reflect-hooks/einfacht-env.sh && python3 zreflect/registry.py --run commit`
+
+## Wayfinder × Einfacht 决策联动
+
+重大整改走 GitHub Issues 上的 [wayfinder 决策图](https://github.com/ArchivalEra/Octave-UI/issues/4)：
+每张决策票的 resolution 带 `gate:` 锚点（台账键 replay=False + witness，或
+`zreflect/check_wayfinder.py` 形状断言），关票时锚点必须真实在册——「裁定面与实现面」
+由闸门对账（详见[联动机制提案 issue #18](https://github.com/ArchivalEra/Octave-UI/issues/18)）。
 
