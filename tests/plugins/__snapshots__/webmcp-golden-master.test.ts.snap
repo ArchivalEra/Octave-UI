@@ -78,17 +78,17 @@ exports[`WebMCP golden master (step 0, recorded against old implementation) > A6
 
 exports[`WebMCP golden master (step 0, recorded against old implementation) > A6. non-serializable value: circular reference flowing into response (B.5) > circular | octave_run_cell | cell.streamingOutput is circular → data.output is that object 1`] = `"{"isError":false,"content":[{"type":"resource","mimeType":"application/json","data":{"cellId":"cell-1","status":"idle","executionCount":null,"durationMs":null,"output":{"circular":"[Circular]"}}}]}"`;
 
-exports[`WebMCP golden master (step 0, recorded against old implementation) > A7. boundary: missing / empty / illegal-typed args > boundary | octave_eval | callTool invoked with no args object at all (default {} → same guard) 1`] = `"{"isError":true,"content":[{"type":"text","text":"Error: parameter \\"code\\" is required and cannot be empty."}]}"`;
+exports[`WebMCP golden master (step 0, recorded against old implementation) > A7. boundary: missing / empty / illegal-typed args > boundary | octave_eval | callTool invoked with no args object at all (default {} → same guard) 1`] = `"{"isError":true,"content":[{"type":"text","text":"ARGS_INVALID: parameter \\"code\\" is required."}]}"`;
 
 exports[`WebMCP golden master (step 0, recorded against old implementation) > A7. boundary: missing / empty / illegal-typed args > boundary | octave_eval | code is non-string (number 42) → String() coercion → success path 1`] = `"{"isError":false,"content":[{"type":"text","text":"ans = 42\\n"}]}"`;
 
-exports[`WebMCP golden master (step 0, recorded against old implementation) > A7. boundary: missing / empty / illegal-typed args > boundary | octave_eval | missing code arg → guard 1`] = `"{"isError":true,"content":[{"type":"text","text":"Error: parameter \\"code\\" is required and cannot be empty."}]}"`;
+exports[`WebMCP golden master (step 0, recorded against old implementation) > A7. boundary: missing / empty / illegal-typed args > boundary | octave_eval | missing code arg → guard 1`] = `"{"isError":true,"content":[{"type":"text","text":"ARGS_INVALID: parameter \\"code\\" is required."}]}"`;
 
 exports[`WebMCP golden master (step 0, recorded against old implementation) > A7. boundary: missing / empty / illegal-typed args > boundary | octave_get_system_state | no-param tool given bogus args → args ignored, success shape 1`] = `"{"content":[{"type":"resource","mimeType":"application/json","data":{"supervisorState":"idle","activeLane":"wasm32-final","activeMode":"notebook","activeFile":"script.m","filesCount":1,"variablesCount":2,"notebookCellsCount":1}}]}"`;
 
 exports[`WebMCP golden master (step 0, recorded against old implementation) > A7. boundary: missing / empty / illegal-typed args > boundary | octave_get_workspace | no-param tool given bogus args → args ignored, success shape 1`] = `"{"content":[{"type":"resource","mimeType":"application/json","data":{"count":2,"variables":[{"name":"ans","type":"scalar","dimensions":"1x1","bytes":8,"valuePreview":"42"},{"name":"x","type":"scalar","dimensions":"1x1","bytes":8,"valuePreview":"10"}]}}]}"`;
 
-exports[`WebMCP golden master (step 0, recorded against old implementation) > A7. boundary: missing / empty / illegal-typed args > boundary | octave_install_package | missing name → guard 1`] = `"{"isError":true,"content":[{"type":"text","text":"Error: parameter \\"name\\" is required."}]}"`;
+exports[`WebMCP golden master (step 0, recorded against old implementation) > A7. boundary: missing / empty / illegal-typed args > boundary | octave_install_package | missing name → guard 1`] = `"{"isError":true,"content":[{"type":"text","text":"ARGS_INVALID: parameter \\"name\\" is required."}]}"`;
 
 exports[`WebMCP golden master (step 0, recorded against old implementation) > A7. boundary: missing / empty / illegal-typed args > boundary | octave_install_package | name passed as number 42 → String() coercion → success path 1`] = `"{"isError":false,"content":[{"type":"resource","mimeType":"application/json","data":{"state":"ok","cause":null}}]}"`;
 

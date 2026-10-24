@@ -14,6 +14,7 @@
 import type { WebMcpCtx, WebMcpCtxResolver } from './ctx';
 import type { WebMcpDepKey, WebMcpToolSpec } from './defineTool';
 import type { WebMcpToolCallResult } from './types';
+import { validateArgs } from './validate';
 
 /**
  * 把工具声明的 deps 物化成窄 ctx（Pick<WebMcpCtx, D> 的运行期对应物）。
@@ -51,6 +52,13 @@ export async function dispatchTool(
         isError: true,
         content: [{ type: 'text', text: `Unknown tool name: "${name}". Use listTools() to see available tools.` }],
       };
+    }
+    // 子集校验（spec 步骤 3 第 1 项 · 偏差表 ARGS_INVALID）：明确违规（缺 required/
+    // 类型错/enum 越界）在进 run 之前拦下；可强转值与未知字段放行——旧调用零误杀。
+    // 校验器是纯函数，规则细节与放行面的边界见 validate.ts 文件头。
+    const invalid = validateArgs(tool.parameters, args);
+    if (invalid) {
+      return invalid;
     }
     return await tool.run(args, materializeCtx(tool.deps, resolve));
   } catch (err: unknown) {
