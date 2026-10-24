@@ -28,6 +28,12 @@ export interface WebMcpToolSpec<D extends WebMcpDepKey = WebMcpDepKey> {
    * ctx 只暴露 deps 声明过的键（Pick<WebMcpCtx, D>）。
    */
   run: (args: Record<string, unknown>, ctx: Pick<WebMcpCtx, D>) => Promise<WebMcpToolCallResult>;
+  /**
+   * 超时覆盖（毫秒，spec B.1）：缺省 120_000；计时**含排队**（从调用发起算——
+   * machine 在 supervisor 之上看不到「开始执行」时刻，首版如实承认这一点）。
+   * OMC 仿真分钟级场景将来按需设。超时后底层任务仍在跑/排着——信封明示勿盲目重试。
+   */
+  readonly timeoutMs?: number;
 }
 
 /** 恒等工厂：类型咬合全部发生在 WebMcpToolSpec<D> 的推导里，运行期零行为 */

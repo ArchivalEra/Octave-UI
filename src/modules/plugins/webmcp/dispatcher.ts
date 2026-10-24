@@ -16,6 +16,46 @@ import type { WebMcpDepKey, WebMcpToolSpec } from './defineTool';
 import type { WebMcpToolCallResult } from './types';
 import { validateArgs } from './validate';
 
+/** 缺省超时（spec B.1）：120s——大于 Kill Ladder 最终决议阈值，只兜不经 supervisor 的慢路径 */
+export const DEFAULT_TIMEOUT_MS = 120_000;
+
+/** 超时信封（spec B.1 措辞逐字——进 golden 即钉死） */
+export const TIMEOUT_ENVELOPE_TEXT = (name: string, ms: number) =>
+  `TIMEOUT: tool "${name}" did not finish within ${ms}ms (counting from call initiation, queueing included). The underlying task may still be running or queued — do not blindly retry.`;
+
+/**
+ * Promise.race 超时壳（spec B.1 第三条路）。超时后底层 promise **不被取消**——
+ * JS 无取消原语，任务继续跑/排着；信封已如实告知调用方。工作 promise 先 settle
+ * 则原样透传（成功/失败形状都不动）。
+ */
+function raceTimeout(
+  work: Promise<WebMcpToolCallResult>,
+  timeoutMs: number,
+  name: string,
+): Promise<WebMcpToolCallResult> {
+  return new Promise<WebMcpToolCallResult>((resolve) => {
+    const timer = setTimeout(() => {
+      resolve({
+        isError: true,
+        content: [{ type: 'text', text: TIMEOUT_ENVELOPE_TEXT(name, timeoutMs) }],
+      });
+    }, timeoutMs);
+    work.then(
+      (res) => {
+        clearTimeout(timer);
+        resolve(res);
+      },
+      (err) => {
+        clearTimeout(timer);
+        resolve({
+          isError: true,
+          content: [{ type: 'text', text: `Execution failed for tool "${name}": ${err instanceof Error ? err.message : String(err)}` }],
+        });
+      },
+    );
+  });
+}
+
 /**
  * 把工具声明的 deps 物化成窄 ctx（Pick<WebMcpCtx, D> 的运行期对应物）。
  * 用惰性 getter：键的解析时机与旧实现 `this.supervisor` 这类属性访问完全一致
@@ -60,7 +100,15 @@ export async function dispatchTool(
     if (invalid) {
       return invalid;
     }
-    return await tool.run(args, materializeCtx(tool.deps, resolve));
+    // 超时兜底（spec 步骤 3 第 2 项 · 偏差表 TIMEOUT，spec B.1）：Promise.race——
+    // 计时含排队（从调用发起算，不从 handler 开始执行算），缺省 120s，表项 timeoutMs
+    // 可覆盖。不碰 supervisor（实施仓归属纪律）。超时只兜不经 supervisor 的慢路径：
+    // 懒加载引擎装载 / 装包下载 / UI 类工具读大量文件系统；eval 挂起由 Kill Ladder
+    // 先决议。超时后底层任务仍在跑/排着——信封明示勿盲目重试（spec 措辞逐字）。
+    const timeoutMs = tool.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const work = tool.run(args, materializeCtx(tool.deps, resolve));
+    const timed = raceTimeout(work, timeoutMs, name);
+    return await timed;
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     return {

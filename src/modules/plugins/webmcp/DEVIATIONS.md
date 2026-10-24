@@ -31,9 +31,20 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
 - **反向断言**：tests/plugins/webmcp-args-validation.test.ts（14 用例：必报 ×5 / 放行 ×4 /
   全链并存 ×5）。
 
-## ② TIMEOUT —— 未实现（步骤 3 第 2 项）
+## ② TIMEOUT —— 已实现 → 已确认（2026-10-24）
 
-含排队 120s 默认 / 表项 timeoutMs 覆盖 / 信封「仍在排队或执行中勿盲目重试」/ 不碰 supervisor。
+- **适用面**：工具调用在 timeoutMs（缺省 120_000，表项可覆盖）内未完成 ⇒ TIMEOUT 信封。
+  计时**含排队**（从调用发起算——machine 在 supervisor 之上看不到执行起点，首版如实承认）。
+- **不碰 supervisor**（实施仓归属纪律）：Promise.race 在 machine 层；超时后底层任务
+  **不被取消**（JS 无取消原语），信封如实告知。
+- **兜底范围**（spec B.1 明示）：eval 挂起由 Kill Ladder 先决议（120s > Kill Ladder 最终阈值，
+  超时几乎不触发）；真正兜住 = 懒加载引擎装载 / 装包下载 / UI 类工具读大量文件系统。
+- **信封**（措辞 spec 逐字，进 golden 即钉死）：`TIMEOUT: tool "<名>" did not finish within
+  <ms>ms (counting from call initiation, queueing included). The underlying task may still be
+  running or queued — do not blindly retry.`
+- **golden 快照变化：0 条**——120s 缺省窗内正常调用零影响（88 用例全体绿即证）；
+  超时触发面只存在于反向断言（tests/plugins/webmcp-timeout.test.ts，9 用例）。
+- **落点**：dispatcher 的 raceTimeout（defineTool 增加 timeoutMs 可选字段）。
 
 ## ③ CAPABILITY_UNAVAILABLE —— 未实现（步骤 3 第 3 项）
 
