@@ -140,6 +140,22 @@ export class OpfsStore implements Store {
     }
   }
 
+  async readBlob(path: string): Promise<Blob> {
+    const valid = validatePath(path);
+    const { dir, name } = splitPath(valid);
+
+    try {
+      const dirHandle = await this._resolveDir(dir, false);
+      if (!dirHandle) {
+        throw new Error(`Directory "${dir}" not found in OPFS`);
+      }
+      const fileHandle = await dirHandle.getFileHandle(name);
+      return await fileHandle.getFile();
+    } catch (err: any) {
+      throw new Error(`Failed to read file "${valid}" from OPFS: ${err?.message || err}`);
+    }
+  }
+
   async write(path: string, data: Uint8Array): Promise<void> {
     const valid = validatePath(path);
     const { dir, name } = splitPath(valid);

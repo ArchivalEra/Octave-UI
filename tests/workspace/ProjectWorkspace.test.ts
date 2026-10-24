@@ -11,7 +11,9 @@ describe('ProjectWorkspace Deep Module', () => {
   let workspace: ProjectWorkspace;
 
   beforeEach(() => {
-    supervisor = new EngineSupervisor({ skipPreflight: true });
+    adapter = new MockEmbedAdapter();
+    // 合法注入：生产路径已禁 Mock 回退，测试替身必须经 factory 显式进入
+    supervisor = new EngineSupervisor({ adapter, adapterFactory: () => adapter, skipPreflight: true });
     dirAdapter = new VirtualMemoryDirectoryAdapter('TestWorkspace');
     workspace = new ProjectWorkspace(supervisor, dirAdapter);
   });
@@ -53,25 +55,28 @@ describe('ProjectWorkspace Deep Module', () => {
   });
 
   it('switches engine lane before boot and forbids switching after computation starts', async () => {
-    expect(workspace.activeLane).toBe('wasm32-final');
-    expect(supervisor.state).toBe('unloaded');
+    // 本用例验证选档/锁定语义：使用独立 supervisor，不预注入适配器（保持 unloaded）
+    const bareSupervisor = new EngineSupervisor({ adapterFactory: () => new MockEmbedAdapter(), skipPreflight: true });
+    const ws = new ProjectWorkspace(bareSupervisor, new VirtualMemoryDirectoryAdapter('TestWorkspace'));
+    expect(ws.activeLane).toBe('wasm32-final');
+    expect(bareSupervisor.state).toBe('unloaded');
 
     // 切换引擎仅为选档，不触发启动，状态保持 unloaded
-    await workspace.switchLane('master');
-    expect(workspace.activeLane).toBe('master');
-    expect(supervisor.state).toBe('unloaded');
+    await ws.switchLane('master');
+    expect(ws.activeLane).toBe('master');
+    expect(bareSupervisor.state).toBe('unloaded');
 
-    await workspace.switchLane('IllegalPerformance');
-    expect(workspace.activeLane).toBe('IllegalPerformance');
-    expect(supervisor.state).toBe('unloaded');
+    await ws.switchLane('IllegalPerformance');
+    expect(ws.activeLane).toBe('IllegalPerformance');
+    expect(bareSupervisor.state).toBe('unloaded');
 
     // 开始计算后，锁定引擎切换
-    await supervisor.boot();
-    expect(supervisor.state).toBe('idle');
+    await bareSupervisor.boot();
+    expect(bareSupervisor.state).toBe('idle');
 
     // 计算开始后再切换应被拦截拒绝
-    await workspace.switchLane('wasm32-final');
-    expect(workspace.activeLane).toBe('IllegalPerformance');
+    await ws.switchLane('wasm32-final');
+    expect(ws.activeLane).toBe('IllegalPerformance');
   });
 
   it('mounts directory and manages standard .m files', async () => {
@@ -212,32 +217,38 @@ describe('ProjectWorkspace Deep Module', () => {
   });
 
   it('manages OpenModelica companion engine state independently from Octave lanes', async () => {
-    expect(workspace.isOmcEnabled).toBe(false);
-    expect(workspace.activeLane).toBe('wasm32-final');
+    // 选档/勾选语义要求引擎保持 unloaded：用独立 supervisor（惰性 factory，boot 前不注入）
+    const bareSupervisor = new EngineSupervisor({ adapterFactory: () => new MockEmbedAdapter(), skipPreflight: true });
+    const ws = new ProjectWorkspace(bareSupervisor, new VirtualMemoryDirectoryAdapter('TestWorkspace'));
+    expect(ws.isOmcEnabled).toBe(false);
+    expect(ws.activeLane).toBe('wasm32-final');
 
     // 独立开启 OpenModelica 伴随引擎（两边不干涉，各可打勾）
-    workspace.toggleOmc();
-    expect(workspace.isOmcEnabled).toBe(true);
-    expect(workspace.activeLane).toBe('wasm32-final');
+    ws.toggleOmc();
+    expect(ws.isOmcEnabled).toBe(true);
+    expect(ws.activeLane).toBe('wasm32-final');
 
     // 切换 Octave 档位不影响 OMC 状态
-    await workspace.switchLane('master');
-    expect(workspace.activeLane).toBe('master');
-    expect(workspace.isOmcEnabled).toBe(true);
+    await ws.switchLane('master');
+    expect(ws.activeLane).toBe('master');
+    expect(ws.isOmcEnabled).toBe(true);
 
     // 再次切换 OMC
-    workspace.toggleOmc();
-    expect(workspace.isOmcEnabled).toBe(false);
-    expect(workspace.activeLane).toBe('master');
+    ws.toggleOmc();
+    expect(ws.isOmcEnabled).toBe(false);
+    expect(ws.activeLane).toBe('master');
   });
 
   it('passes enableOmc and activeLane during execution boot', async () => {
-    const bootSpy = vi.spyOn(supervisor, 'boot');
-    workspace.setOmcEnabled(true);
-    await workspace.switchLane('IllegalPerformance');
+    // 执行期自动启动语义要求引擎保持 unloaded：用独立 supervisor（惰性 factory）
+    const bareSupervisor = new EngineSupervisor({ adapterFactory: () => new MockEmbedAdapter(), skipPreflight: true });
+    const ws = new ProjectWorkspace(bareSupervisor, new VirtualMemoryDirectoryAdapter('TestWorkspace'));
+    const bootSpy = vi.spyOn(bareSupervisor, 'boot');
+    ws.setOmcEnabled(true);
+    await ws.switchLane('IllegalPerformance');
 
     // 执行单元格自动按当前勾选的 Octave 档位与 OMC 状态启动
-    await workspace.executeCell(workspace.cells[0].id);
+    await ws.executeCell(ws.cells[0].id);
 
     expect(bootSpy).toHaveBeenCalledWith({
       lane: 'IllegalPerformance',

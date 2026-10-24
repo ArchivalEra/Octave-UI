@@ -17,7 +17,6 @@ import type {
 } from './types';
 import { EngineCrashedError } from './types';
 import { WasmEmbedAdapter } from './WasmEmbedAdapter';
-import { MockEmbedAdapter } from './MockEmbedAdapter';
 
 
 export interface PendingTask {
@@ -235,7 +234,11 @@ export class EngineSupervisor {
       } else if (typeof window !== 'undefined' && window.OctaveEmbed) {
         adapter = await WasmEmbedAdapter.boot({ ...opts, lane: effectiveLane });
       } else {
-        adapter = new MockEmbedAdapter(opts.id || 'default');
+        // 约束：生产路径禁止 Mock 回退——OctaveEmbed 桥缺席 = 桥脚本未加载，
+        // 必须显式失败（failed 态 + BOOT_UNAVAILABLE），不得静默降级为假引擎。
+        const err = new Error('OctaveEmbed 桥未加载，无法启动真实引擎（生产路径禁止 Mock 回退）') as Error & { code: string };
+        err.code = 'BOOT_UNAVAILABLE';
+        throw err;
       }
 
       this.attachAdapter(adapter);
@@ -412,7 +415,10 @@ export class EngineSupervisor {
       } else if (typeof window !== 'undefined' && window.OctaveEmbed) {
         newAdapter = await WasmEmbedAdapter.boot({});
       } else {
-        newAdapter = new MockEmbedAdapter();
+        // 约束：生产路径禁止 Mock 回退——恢复路径与启动路径同一纪律，桥缺席即显式失败。
+        const err = new Error('OctaveEmbed 桥未加载，无法启动真实引擎（生产路径禁止 Mock 回退）') as Error & { code: string };
+        err.code = 'BOOT_UNAVAILABLE';
+        throw err;
       }
 
       this.attachAdapter(newAdapter);

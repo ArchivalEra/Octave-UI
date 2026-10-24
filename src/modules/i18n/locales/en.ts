@@ -387,6 +387,8 @@ export const en = {
   'package_manager.err_compute_plan': 'Failed to compute install plan: {error}',
   'package_manager.err_install_failed': 'Installation failed: {error}',
   'package_manager.err_install_generic': 'Installation encountered an error: {error}',
+  'package_manager.btn_retry': 'Retry',
+  'package_manager.catalog_error_empty': 'Catalog failed to load. Retry or check the console for details.',
 
   // 7 错误码封闭集 (Closed error codes from host-007 & mail/012)
   'errors.NOT_DOWNLOADED': 'Asset not downloaded to local storage',
@@ -399,6 +401,23 @@ export const en = {
   'errors.CATALOG_UNREADABLE': 'Forge catalog is missing or unreadable',
   'errors.NOT_INSTALLABLE': 'Item is a toolchain capability and cannot be loaded directly',
   'errors.LAYER_NOT_IMPLEMENTED': 'Capability layer is not implemented in current build',
+
+  // assets-loader errCode 词表（DX1，wayfinder #14）：UI 会遇到的 code 子集——
+  // 消费端 t('errors.' + code) 翻译；toast-code-badge 呈现原始 code 串
+  'errors.FS_NOT_READY': 'Engine filesystem is not ready yet',
+  'errors.MODULE_NOT_READY': 'Engine module is not ready yet',
+  'errors.ASSET_FETCH_FAILED': 'Failed to fetch asset from site',
+  'errors.MANIFEST_FETCH_FAILED': 'Failed to fetch asset manifest',
+  'errors.LAYER_UNREACHABLE': 'Capability layer is unreachable',
+  'errors.SHA_MISMATCH': 'Asset integrity check failed (sha256 mismatch)',
+  'errors.ASSET_NO_MOUNT': 'Asset is missing its mount path',
+  'errors.JS_BUNDLE_NO_META': 'JS bundle did not declare its asset metadata',
+  'errors.UNKNOWN_ASSET_KIND': 'Unknown asset kind',
+  'errors.UNPACK_FAILED': 'Failed to unpack asset archive',
+  'errors.NOT_IN_ANY_LIST': 'Package is not on the shelf (catalog or manifest)',
+  'errors.ENGINE_NOT_READY': 'Engine is not ready for this operation',
+  'errors.ARCH_MISMATCH': 'Package architecture does not match the active lane',
+  'errors.COMPILE_FAILED': 'Compiling package from source failed',
 
   // Package Manager & Download additions
   'package_manager.btn_download': 'Download',
@@ -429,6 +448,7 @@ export const en = {
   'header.engine_octave_badge': 'Numeric',
   'header.download_btn': 'Download',
   'header.downloaded_badge': 'Downloaded',
+  'header.corrupted_badge': 'Corrupted',
   'header.downloading_badge': 'Downloading',
   'header.delete_download': 'Delete download',
   'header.omc_dual_boot_tip': 'Will boot both Octave and OpenModelica simultaneously (co-simulation)',

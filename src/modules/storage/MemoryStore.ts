@@ -68,6 +68,15 @@ export class MemoryStore implements Store {
     return new Uint8Array(entry.data);
   }
 
+  async readBlob(path: string): Promise<Blob> {
+    const valid = validatePath(path);
+    const entry = this._files.get(valid);
+    if (!entry) {
+      throw new Error(`File not found: "${valid}"`);
+    }
+    return new Blob([new Uint8Array(entry.data)]);
+  }
+
   async write(path: string, data: Uint8Array): Promise<void> {
     const valid = validatePath(path);
     this._ensureParentDirs(valid);

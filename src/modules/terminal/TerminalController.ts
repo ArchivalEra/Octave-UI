@@ -3,6 +3,8 @@
 import { HistoryStore } from '../history/HistoryStore';
 import type { EngineSessionLike } from '../engine/types';
 import { p5FigureOverlayPlugin } from '../plugins';
+import { ErrorSanitizer } from '../semantic/ErrorSanitizer';
+import type { Locale } from '../i18n/types';
 
 export interface AnsiSpan {
   text: string;
@@ -36,6 +38,21 @@ export class TerminalController {
     }
   }
 
+  // R1（wayfinder #14，自 #11 移入）：终端错误通道接 ErrorSanitizer——
+  // 上游 octave-embed.js 的 fireError（如 :157 的「eval 失败 rc=…」硬编码中文）
+  // 是 bridge 文件不动；净化器在消费端拦：bridge 噪音剥掉、语义分类后按 locale 渲染。
+  // 默认 locale 走 zh-Hans（与 ErrorSanitizer 缺省一致）；构造后可由宿主按
+  // 当前界面语言调 setLocale 刷新（Notebook 面同款 ErrorSanitizer.format 渲染路径）。
+  private _locale: Locale = 'zh-Hans';
+
+  setLocale(locale: Locale): void {
+    this._locale = locale;
+  }
+
+  get locale(): Locale {
+    return this._locale;
+  }
+
   get history(): HistoryStore {
     return this._history;
   }
@@ -58,7 +75,11 @@ export class TerminalController {
       this.appendOutput(text);
     });
     session.onError((err) => {
-      this.appendOutput(`\x1b[31m${err}\x1b[0m\n`);
+      // R1：错误先过净化器（剥 bridge 噪音 + 语义分类 + locale 渲染），
+      // 再以红色 ANSI 落终端——终端面不再直通上游中文旁路。
+      const sanitized = ErrorSanitizer.sanitize(String(err), this._locale);
+      const text = sanitized.userFriendlyText || sanitized.summary || sanitized.raw;
+      this.appendOutput(`\x1b[31m${text}\x1b[0m\n`);
     });
   }
 

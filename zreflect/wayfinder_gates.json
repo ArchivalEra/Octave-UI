@@ -1,0 +1,236 @@
+{
+  "schema": 1,
+  "_comment": "wayfinder 决策票的 gate: 锚点登记表（本仓维护，零网络）。anchors（A 面）：每张已关 wayfinder 工单的判据锚点——kind=ledger 指向事实台账键（必须在 FACTS.json 真实存在）；kind=gate 指向闸门文件（必须存在）。assertions（B 面）：各票已落地的静态形状断言，全部本地文件读取判。断言的增删改都在本表做，闸门代码不感知具体票号；pending=true = 票未执行、断言先登记不生效（闸门跳过执行并如实注明），#10/#12 执行时删掉 pending 即生效。",
+  "anchors": [
+    {
+      "ticket": 7,
+      "key": "integrity_check_physical",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 8,
+      "key": "get_assets_port_alive",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 9,
+      "key": "supervisor_no_mock_fallback",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 5,
+      "key": "plot_panel_figure_chain",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 6,
+      "key": "offline_boot_five_piece",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 11,
+      "key": "engine_layer_no_ui_import",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 12,
+      "key": "sha_ledger_no_decoration",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 15,
+      "key": "download_event_two_shot",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 14,
+      "key": "pkg_error_toast_chain",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 10,
+      "key": "fake_seams_purged",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 13,
+      "key": "check_wayfinder_selftest",
+      "kind": "gate",
+      "check": "zreflect/check_wayfinder.py"
+    },
+    {
+      "ticket": 19,
+      "key": "header_integrity_badge",
+      "kind": "ledger",
+      "check": null
+    },
+    {
+      "ticket": 19,
+      "key": "plot_event_bus",
+      "kind": "ledger",
+      "check": null
+    }
+  ],
+  "assertions": [
+    {
+      "ticket": 9,
+      "desc": "EngineSupervisor 生产路径零 MockEmbedAdapter 引用",
+      "file": "src/modules/engine/EngineSupervisor.ts",
+      "must_not_contain": "MockEmbedAdapter"
+    },
+    {
+      "ticket": 8,
+      "desc": "getAssetsPort() 定义存在",
+      "file": "src/modules/plugins/package/PackageManagerPlugin.ts",
+      "must_contain": "getAssetsPort"
+    },
+    {
+      "ticket": 5,
+      "desc": "GraphicsSink 事件面 onFigure 存在",
+      "file": "src/modules/figure/GraphicsSink.ts",
+      "must_contain": "onFigure"
+    },
+    {
+      "ticket": 6,
+      "desc": "matchRequest 拦截键形状：assets-manifest.json 平铺存储名映射在 resolver 源里",
+      "file": "src/modules/engine/EngineAssetResolver.ts",
+      "must_contain": "assets-manifest.json"
+    },
+    {
+      "ticket": 6,
+      "desc": "matchRequest 拦截键形状：octave.build.json 拦截在 resolver 源里",
+      "file": "src/modules/engine/EngineAssetResolver.ts",
+      "must_contain": "octave.build.json"
+    },
+    {
+      "ticket": 6,
+      "desc": "boot OPFS 优先形状：WasmEmbedAdapter 走 assertBootable 前置对账",
+      "file": "src/modules/engine/WasmEmbedAdapter.ts",
+      "must_contain": "assertBootable"
+    },
+    {
+      "ticket": 6,
+      "desc": "五件套下载形状：DownloadStore Octave 分支追加 assets/manifest.json item",
+      "file": "src/modules/storage/DownloadStore.ts",
+      "must_contain": "assets-manifest.json"
+    },
+    {
+      "ticket": 11,
+      "desc": "engine 层所有 .ts 不含 toastService（无 UI 旁路）",
+      "dir": "src/modules/engine",
+      "ext": ".ts",
+      "must_not_contain": "toastService"
+    },
+    {
+      "ticket": 11,
+      "desc": "appContext 经 onOmcFlavorError 通道订阅（已知缝收编）",
+      "file": "src/modules/appContext.ts",
+      "must_contain": "onOmcFlavorError"
+    },
+    {
+      "ticket": 10,
+      "desc": "src/lib/engine 壳不存在（迁移落地面，2026-10-23 物理删除后断言生效）",
+      "path_must_not_exist": "src/lib/engine"
+    },
+    {
+      "ticket": 12,
+      "desc": "DownloadStore 无 128 位连续 hex 字面量（intake 预防面）",
+      "file": "src/modules/storage/DownloadStore.ts",
+      "must_not_contain_re": "[0-9a-f]{128}"
+    },
+    {
+      "ticket": 12,
+      "desc": "combinedSha 拼接产地删除（三产地归一）",
+      "file": "src/modules/storage/DownloadStore.ts",
+      "must_not_contain": "combinedSha"
+    },
+    {
+      "ticket": 12,
+      "desc": "KNOWN_ENGINE_METADATA 瘦身：键 omc（版本语义除名）",
+      "file": "src/modules/storage/DownloadStore.ts",
+      "must_contain": "KNOWN_ENGINE_METADATA['omc']"
+    },
+    {
+      "ticket": 15,
+      "desc": "两发定档形状：download() 的 finally 块不再发 broadcastChange（第三声删除）",
+      "file": "src/modules/storage/DownloadStore.ts",
+      "must_contain": "download() 内 finally 零 broadcastChange"
+    },
+    {
+      "ticket": 15,
+      "desc": "失效挂点形状：download() 终态显式调 invalidateCache（#7 显式方法）",
+      "file": "src/modules/storage/DownloadStore.ts",
+      "must_contain": "EngineAssetResolver.getInstance().invalidateCache(lane as any)"
+    },
+    {
+      "ticket": 14,
+      "desc": "DX3 forge 族复制行：sync-lanes.sh 铺 lane 时物理复制根 assets 的 forge-catalog.json",
+      "file": "scripts/sync-lanes.sh",
+      "must_contain": "forge-catalog.json"
+    },
+    {
+      "ticket": 14,
+      "desc": "DX3 forge 族复制行：sync-lanes.sh 复制 assets/forge/ 目录进 lane",
+      "file": "scripts/sync-lanes.sh",
+      "must_contain": "assets/forge/"
+    },
+    {
+      "ticket": 14,
+      "desc": "DX3 forge 族复制行：sync-lanes.sh 复制 assets/pkg/ 目录进 lane",
+      "file": "scripts/sync-lanes.sh",
+      "must_contain": "assets/pkg/"
+    },
+    {
+      "ticket": 14,
+      "desc": "DX1 toast 双呈现接线：模态组件调 toastService.error（errors.* 键完整性归 i18n 闸门）",
+      "file": "src/components/PackageManagerModal.svelte",
+      "must_contain": "toastService.error"
+    },
+    {
+      "ticket": 14,
+      "desc": "DX2 重试路径：模态组件调 packageManagerPlugin.loadCatalog()（#8 已救活）",
+      "file": "src/components/PackageManagerModal.svelte",
+      "must_contain": "packageManagerPlugin.loadCatalog()"
+    },
+    {
+      "ticket": 14,
+      "desc": "DX2 loading/error 互斥：模板层 spinner 渲染挂 !errorMsg 双保险",
+      "file": "src/components/PackageManagerModal.svelte",
+      "must_contain": "!catalogLoaded && catalogLoading && !errorMsg"
+    },
+    {
+      "ticket": 14,
+      "desc": "R1 终端净化接线：TerminalController onError 通道过 ErrorSanitizer",
+      "file": "src/modules/terminal/TerminalController.ts",
+      "must_contain": "ErrorSanitizer.sanitize"
+    },
+    {
+      "ticket": 19,
+      "desc": "spec #19 红线 2：HeaderBar 徽标必须消费引擎层 integrity 三态（不得退回只取 downloaded 布尔）",
+      "file": "src/components/HeaderBar.svelte",
+      "must_contain": "integrity"
+    },
+    {
+      "ticket": 19,
+      "desc": "spec #19 红线 1：事件链必须有页面级总线（跨模块实例不失聪）",
+      "file": "src/modules/figure/GraphicsSink.ts",
+      "must_contain": "wireFigureBusToSink"
+    },
+    {
+      "ticket": 19,
+      "desc": "spec #19 红线 1：钩子去重标记必须挂在包装函数上（对象级标记在 OctaveP5 重赋值后失聪）",
+      "file": "src/modules/plugins/figure/P5FigureOverlayPlugin.ts",
+      "must_contain": "__overlay_hooked = true"
+    }
+  ]
+}

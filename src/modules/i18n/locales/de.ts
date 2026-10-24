@@ -388,6 +388,8 @@ const _de = {
   'package_manager.err_compute_plan': 'Installationsplan konnte nicht berechnet werden: {error}',
   'package_manager.err_install_failed': 'Installation fehlgeschlagen: {error}',
   'package_manager.err_install_generic': 'Bei der Installation ist ein Fehler aufgetreten: {error}',
+  'package_manager.btn_retry': 'Erneut versuchen',
+  'package_manager.catalog_error_empty': 'Katalog konnte nicht geladen werden. Erneut versuchen oder Konsole prüfen.',
 
   // 7 错误码封闭集 (Closed error codes from host-007 & mail/012)
   'errors.NOT_DOWNLOADED': 'Asset nicht in den lokalen Speicher heruntergeladen',
@@ -400,6 +402,23 @@ const _de = {
   'errors.CATALOG_UNREADABLE': 'Forge-Katalog fehlt oder ist unlesbar',
   'errors.NOT_INSTALLABLE': 'Eintrag ist eine Toolchain-Fähigkeit und kann nicht direkt geladen werden',
   'errors.LAYER_NOT_IMPLEMENTED': 'Fähigkeitsebene ist im aktuellen Build nicht implementiert',
+
+  // assets-loader errCode 词表（DX1，wayfinder #14）：UI 会遇到的 code 子集——
+  // 消费端 t('errors.' + code) 翻译；toast-code-badge 呈现原始 code 串
+  'errors.FS_NOT_READY': 'Engine-Dateisystem ist noch nicht bereit',
+  'errors.MODULE_NOT_READY': 'Engine-Modul ist noch nicht bereit',
+  'errors.ASSET_FETCH_FAILED': 'Asset konnte nicht von der Seite geladen werden',
+  'errors.MANIFEST_FETCH_FAILED': 'Asset-Manifest konnte nicht geladen werden',
+  'errors.LAYER_UNREACHABLE': 'Fähigkeitsebene ist nicht erreichbar',
+  'errors.SHA_MISMATCH': 'Integritätsprüfung fehlgeschlagen (sha256 stimmt nicht überein)',
+  'errors.ASSET_NO_MOUNT': 'Asset fehlt der Mount-Pfad',
+  'errors.JS_BUNDLE_NO_META': 'JS-Bundle hat seine Asset-Metadaten nicht deklariert',
+  'errors.UNKNOWN_ASSET_KIND': 'Unbekannter Asset-Typ',
+  'errors.UNPACK_FAILED': 'Asset-Archiv konnte nicht entpackt werden',
+  'errors.NOT_IN_ANY_LIST': 'Paket ist nicht im Regal (Katalog oder Manifest fehlt)',
+  'errors.ENGINE_NOT_READY': 'Engine ist für diesen Vorgang noch nicht bereit',
+  'errors.ARCH_MISMATCH': 'Paket-Architektur passt nicht zur aktiven Lane',
+  'errors.COMPILE_FAILED': 'Kompilieren des Pakets aus Quellcode fehlgeschlagen',
 
   // Package Manager & Download additions
   'package_manager.btn_download': 'Herunterladen',
@@ -430,6 +449,7 @@ const _de = {
   'header.engine_octave_badge': 'Numerik',
   'header.download_btn': 'Herunterladen',
   'header.downloaded_badge': 'Heruntergeladen',
+  'header.corrupted_badge': 'Beschädigt',
   'header.downloading_badge': 'Wird geladen',
   'header.delete_download': 'Download löschen',
   'header.omc_dual_boot_tip': 'Startet Octave und OpenModelica gleichzeitig auf derselben Seite',

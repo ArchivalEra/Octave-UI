@@ -32,6 +32,21 @@
 - **CI 正面执行同一判据**：`gates` workflow 每推跑 `facts.py --check`
   + 六道闸门（每条 `cmd` 真的逐字复跑）；`readme-sync` 查三语同批。
   本地 hook 只约束跑过 install.sh 的机器（issue #4 ②）。
+- **包管理器错误呈现链已落地**（wayfinder #14）：DX1 banner + code 双呈现
+  （错误同时 toast 一条带 code 的短消息，`errors.*` 键表三语补齐 7 码全 +
+  assets-loader 码子集）；DX2 loading/error 互斥（有 error ⇒ spinner 必停）+
+  模态内重试按钮复用 `loadCatalog()`；R1 终端错误通道过 ErrorSanitizer
+  （bridge 硬编码中文在消费端拦，locale 由组合根随语言切换下发）。
+  判据锚点见 `[[pkg_error_toast_chain]]`；sync-lanes.sh 的 forge 族复制行
+  （DX3）在 `wayfinder_gates.json` 的形状断言里。
+- **假 seam 已清理**（wayfinder #10）：`src/lib/engine` 双壳物理删除
+  （modules/ 为真产地）；DownloadStore 死接口核销走「生产零消费者 grep」
+  逐个判（`unit()` 实锤删除，getRecord/index/checkQuota/download 族均有
+  真实消费者保留）；ProjectWorkspace 的 downloadStore 零逻辑透传拆除
+  （调用点直连 appContext 单例）+ `syncFilesToEngine` 走 `supervisor.fsWrite`
+  （同一概念一条路径）；引擎 ref 构造收单进 `engineRef` 工厂
+  （omc version 如实 `-rust`——Q6C）。判据锚点见 `[[fake_seams_purged]]`；
+  `src/lib/engine` 不存在与版本字面量形状在 `wayfinder_gates.json` 断言里。
 
 ## 那条示例翻案
 
@@ -46,16 +61,28 @@
 
 | 键 | 值 | 测于 | 复跑命令 |
 |---|---|---|---|
-| `astro_files` | **2** | 2026-10-21T19:24:34+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
-| `md_files` | **42** | 2026-10-21T19:24:34+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `md_lines` | **2835** | 2026-10-21T19:24:34+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
-| `py_files` | **30** | 2026-10-21T19:24:34+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
-| `py_lines` | **6514** | 2026-10-21T19:24:34+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
-| `svelte_files` | **20** | 2026-10-21T19:24:34+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
-| `test_files` | **31** | 2026-10-21T19:24:34+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
-| `ts_files` | **90** | 2026-10-21T19:24:34+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
+| `astro_files` | **2** | 2026-10-24T13:34:44+0800 | `find . -path './src/*' -name '*.astro' | wc -l` |
+| `download_event_two_shot` | **DownloadStore.download() 通知通道统一：三发收敛两发（start null 进 downloading 态 + 终态一次——成功 record / 失败 catch 里 null 后 rethrow，finally 中间那次删除）；终态后显式调 EngineAssetResolver.getInstance().invalidateCache(lane)（#7 显式方法，engine ref 才挂，lane 推法与 removeEngine 同款）⇒ 成功与失败两路单例缓存都失效（tests/storage/DownloadStore.test.ts 3 新用例：事件数===2×2 + 失效挂点 spy 双路，2026-10-23 实测 336/336 绿）** | 2026-10-24T13:34:44+0800 | `pnpm test -- tests/storage/DownloadStore.test.ts` |
+| `engine_layer_no_ui_import` | **engine 层 6 个 ts 文件中含 toastService 的文件数 = 0（应为 0；（OmcBridge 抽离 + 三条 UI 旁路拔除；tests/engine/OmcBridge.test.ts 11 用例，2026-10-22 实测 322/322 绿）** | 2026-10-24T13:34:44+0800 | `python3 -c "import os, glob; fs=glob.glob('src/modules/engine/*.ts'); print(sum(open(f).read().count('toastService') for f in fs) if fs else 'absent')"` |
+| `fake_seams_purged` | **假 seam 清理（wayfinder #10）：src/lib/engine 双壳物理删除（modules/ 为真产地，壳的自证用例同步删）；DownloadStore unit() 死接口核销（生产零消费者）+ 其余公开接口逐一grep 核销（getRecord/index/checkQuota/download/downloadEngine/removeEngine/isEngineDownloading 均有真实消费者，保留）；ProjectWorkspace 7 个 downloadStore 零逻辑透传拆除（HeaderBar 直连appContext downloadStore 单例）+ syncFilesToEngine 直取 adapter.fs.write 改走 supervisor.fsWrite；engineRef 工厂收 7 产地（omc version 如实 '-rust'，Q6C）（tests/engine/ 两文件 + tests/storage/DownloadStore.test.ts + tests/workspace/ProjectWorkspace.test.ts，2026-10-23 实测 346/346 绿）** | 2026-10-24T13:34:44+0800 | `pnpm test` |
+| `get_assets_port_alive` | **getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）** | 2026-10-24T13:34:44+0800 | `python3 -c "import os; p='src/modules/plugins/package/PackageManagerPlugin.ts'; print(open(p).read().count('getAssetsPort') if os.path.exists(p) else 'absent')"` |
+| `header_integrity_badge` | **HeaderBar 徽标三态消费引擎层 integrity（12 处引用）；corrupted ⇒ ⚠ 已损坏、verified/unchecked ⇒ ✓、未下载 ⇒ 下载按钮；三语 header.corrupted_badge（tests/ui/HeaderBar.svelte.test.ts 6 用例，2026-10-23 实测 362/362 绿）** | 2026-10-24T13:34:44+0800 | `python3 -c "import os; p='src/components/HeaderBar.svelte'; print(open(p).read().count('integrity') if os.path.exists(p) else 'absent')"` |
+| `integrity_check_physical` | **integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）** | 2026-10-24T13:34:44+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts` |
+| `md_files` | **50** | 2026-10-24T13:34:44+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `md_lines` | **3450** | 2026-10-24T13:34:44+0800 | `find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l` |
+| `offline_boot_five_piece` | **boot OPFS 优先（verified ⇒ getBlob 读 octave.js 注入，未下载走网络，corrupted ⇒ throw ENGINE_CORRUPTED）+ matchRequest 两拦截键（assets/manifest.json 映射平铺名 assets-manifest.json、octave.build.json；w64 档 manifest.w64.json 不拦）+ 五件指纹（删 assets-manifest 后缓存不命中 ⇒ corrupted）（tests/engine/ 两文件 + DownloadStore 五件套记账，2026-10-23 实测 326/326 绿）** | 2026-10-24T13:34:44+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts tests/engine/WasmEmbedAdapter.test.ts` |
+| `pkg_error_toast_chain` | **包管理器错误呈现链（wayfinder #14）：DX1 banner+code 双呈现（错误同时 toastService.error(短消息, code)——toast-code-badge 消费 code；errors.* 键表三语补齐 7 码全 + assets-loader 14 码子集）；DX2 loading/error 互斥（有 error ⇒ spinner 零命中）+ 重试按钮调 loadCatalog()（#8 已救活）re-fetch 计数+1；R1 终端 onError 通道接 ErrorSanitizer（bridge 硬编码中文在消费端拦，三语各测）（tests/ui/PackageManagerModal.svelte.test.ts 7 用例 + tests/terminal/TerminalController.test.ts R1 扩展 4 用例，2026-10-23 实测 347/347 绿）** | 2026-10-24T13:34:44+0800 | `pnpm test -- tests/ui/PackageManagerModal.svelte.test.ts tests/terminal/TerminalController.test.ts` |
+| `plot_event_bus` | **页面级图表事件总线（wireFigureBusToSink 1 处）解耦装钩与收事件；钩子重赋值安全 + 空 URL 丢弃 + lastFigure 回放（tests/figure/P5FigureChain.test.ts 10 用例，其中 6 条对修复前代码全红）** | 2026-10-24T13:34:44+0800 | `python3 -c "import os; p='src/modules/figure/GraphicsSink.ts'; print(open(p).read().count('wireFigureBusToSink') if os.path.exists(p) else 'absent')"` |
+| `plot_panel_figure_chain` | **GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）** | 2026-10-24T13:34:44+0800 | `python3 -c "import os; p='src/modules/figure/GraphicsSink.ts'; print(open(p).read().count('onFigure') if os.path.exists(p) else 'absent')"` |
+| `py_files` | **31** | 2026-10-24T13:34:44+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l` |
+| `py_lines` | **7277** | 2026-10-24T13:34:44+0800 | `find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l` |
+| `sha_ledger_no_decoration` | **DownloadStore sha 台账去装饰化：源内 128hex 字面量 = 0 + combinedSha 拼接产地 = 0（三产地归一）；幂等比对换逐文件三元组（path/sha/bytes，undefined sha 跳 sha 维）⇒ 五件套重下 fetchPort 调用 = 0；intake 出口 64hex 断言（128hex/空串/大写 ⇒ INDEX_UNREADABLE）；KNOWN_ENGINE_METADATA 瘦身（键 omc、无顶层 bytes/sha256，bytes 从 files 累加）+ 多文件 record 顶层 sha = undefined（tests/storage/DownloadStore.test.ts + tests/plugins/PackageManagerPlugin.test.ts，2026-10-23 实测 333/333 绿）** | 2026-10-24T13:34:44+0800 | `pnpm test -- tests/storage/DownloadStore.test.ts tests/plugins/PackageManagerPlugin.test.ts` |
+| `supervisor_no_mock_fallback` | **EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）** | 2026-10-24T13:34:44+0800 | `python3 -c "import os; p='src/modules/engine/EngineSupervisor.ts'; print(open(p).read().count('MockEmbedAdapter') if os.path.exists(p) else 'absent')"` |
+| `svelte_files` | **20** | 2026-10-24T13:34:44+0800 | `find . -path './src/*' -name '*.svelte' | wc -l` |
+| `test_files` | **37** | 2026-10-24T13:34:44+0800 | `find . -path './tests/*' -name '*.test.ts' | wc -l` |
+| `ts_files` | **98** | 2026-10-24T13:34:44+0800 | `find . \( -path './src/*' -o -path './tests/*' \) -name '*.ts' | wc -l` |
 
-8 条事实。
+20 条事实。
 <!-- /AUTO:FACTS -->
 
 <!-- AUTO:GATES -->
@@ -78,8 +105,9 @@
 | `check_retractions.py`（翻案重现检测） | commit | 被推翻的断言不许悄悄回来当现状 | `REFLECT_RETRACTIONS`, `REFLECT_DOCS`, `REFLECT_HISTORY_SECS` |
 | `check_stale.py`（陈旧断言检测） | commit | sha 出处 / 退役名 / 测龄 | `REFLECT_DOCS`, `REFLECT_FACTS`, `REFLECT_HISTORY_SECS`, `REFLECT_RETIRED`, `REFLECT_STALE_DAYS` |
 | `check_theme_tokens.py`（主题变量与硬编码颜色闸门） | commit | 检查 Svelte 组件中的 CSS 变量合法性与禁止硬编码十六进制颜色 | — |
+| `check_wayfinder.py`（wayfinder 闸门） | commit | 决策票 gate: 锚点对账（台账键/闸门文件存在性）+ 形状断言收编（零网络） | `REFLECT_FACTS` |
 | `check_world.py`（world 闸门） | commit | 声明式验证对象：多线仓库共享验证环境的世界对账 | `REFLECT_WORLD`, `REFLECT_WORLD_LINE` |
 | `doctor.py`（开工预检 doctor） | start-of-work | 进程 / 端口活性（查会死的东西 ⇒ runs_at=start-of-work，不进 pre-commit） | `REFLECT_DOCTOR`, `REFLECT_DOCTOR_TIMEOUT` |
 
-16 道闸门（发现式名录派生 —— 手写清单会漂，加闸门 = 落一个声明行，这里自动长出来）。
+17 道闸门（发现式名录派生 —— 手写清单会漂，加闸门 = 落一个声明行，这里自动长出来）。
 <!-- /AUTO:GATES -->

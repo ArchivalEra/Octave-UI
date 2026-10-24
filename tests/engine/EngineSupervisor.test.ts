@@ -53,13 +53,14 @@ describe('EngineSupervisor Deep Module', () => {
     try {
       (globalThis as any).window = { crossOriginIsolated: false };
 
-      // 1. wasm32-final 单线程基线档：在无 COI 静态环境下预检必须放行，且能正常启动至 idle
+      // 1. wasm32-final 单线程基线档：在无 COI 静态环境下预检必须放行；
+      //    但桥缺席时 boot 必须显式失败（BOOT_UNAVAILABLE），不得静默 Mock 回退
       const checkWasm32 = EngineSupervisor.checkPreflight('wasm32-final');
       expect(checkWasm32.ok).toBe(true);
 
       const supWasm32 = new EngineSupervisor({ skipPreflight: false });
-      await supWasm32.boot({ lane: 'wasm32-final' });
-      expect(supWasm32.state).toBe('idle');
+      await expect(supWasm32.boot({ lane: 'wasm32-final' })).rejects.toThrow(/OctaveEmbed 桥未加载/);
+      expect(supWasm32.state).toBe('failed');
 
       // 2. 多线程档位 (master / IllegalPerformance)：缺少 COI 必须被预检严格拦截并报错
       const checkMaster = EngineSupervisor.checkPreflight('master');
@@ -374,19 +375,24 @@ describe('EngineSupervisor Deep Module', () => {
     expect(supervisor.crashCause).toBe('trap');
   });
 
-  it('boots cleanly via boot() with MockEmbedAdapter when window.OctaveEmbed is not available', async () => {
+  it('rejects boot with BOOT_UNAVAILABLE and failed state when window.OctaveEmbed is absent (no Mock fallback)', async () => {
+    // happy-dom 下 window 存在而 window.OctaveEmbed 缺席——旧生产 Mock 回退的触发条件。
+    // 反向断言：无 factory + 无桥 ⇒ 必须 reject + failed 态 + 无适配器（绝不降级为 ans=42 假引擎）。
+    expect((globalThis as any).window).toBeDefined();
+    expect((globalThis as any).window.OctaveEmbed).toBeUndefined();
+
     const sup = new EngineSupervisor({ skipPreflight: true });
     expect(sup.state).toBe('unloaded');
 
-    await sup.boot();
-    expect(sup.state).toBe('idle');
-    expect(sup.isReady).toBe(true);
-
-    const res = await sup.eval('1 + 1');
-    expect(res.ok).toBe(true);
+    await expect(sup.boot()).rejects.toThrow(/OctaveEmbed 桥未加载/);
+    expect(sup.state).toBe('failed');
+    // 绝无 ans=42 形状：boot 失败后不得残留任何适配器实例
+    expect(sup.adapter).toBeNull();
+    // 失败后再 eval 必须被终端态拦截，不允许任何计算发生
+    await expect(sup.eval('1 + 1')).rejects.toThrow(EngineCrashedError);
   });
 
-  it('allows lane selection when unloaded and forbids lane switching after boot', async () => {
+  it('allows lane selection when unloaded and forbids lane switching after adapter injection', async () => {
     const sup = new EngineSupervisor({ skipPreflight: true });
     expect(sup.state).toBe('unloaded');
     expect(sup.currentLane).toBe('wasm32-final');
@@ -400,12 +406,25 @@ describe('EngineSupervisor Deep Module', () => {
     expect(sup.currentLane).toBe('IllegalPerformance');
     expect(sup.state).toBe('unloaded');
 
-    // 启动引擎
-    await sup.boot();
+    // 合法注入适配器（测试替身经显式 attachAdapter 进入，非生产回退）
+    sup.attachAdapter(new MockEmbedAdapter());
     expect(sup.state).toBe('idle');
 
     // 启动后切换引擎必须抛出明确错误
     expect(() => sup.setLane('wasm32-final')).toThrow(/Cannot switch engine lane after computation has started/);
     await expect(sup.switchLane('wasm32-final')).rejects.toThrow(/Cannot switch engine lane after computation has started/);
+  });
+
+  it('rejects recover() with BOOT_UNAVAILABLE when window.OctaveEmbed is absent (no Mock fallback on recovery)', async () => {
+    // 反向断言：恢复路径与启动路径同一纪律——无 factory + 无桥 ⇒ 拒绝恢复并记录失败
+    const sup = new EngineSupervisor({ skipPreflight: true });
+    sup.attachAdapter(mockAdapter);
+    sup.onEngineDeath(sup.epoch, 'trap');
+    expect(sup.state).toBe('crashed');
+
+    await expect(sup.recover()).rejects.toThrow(/OctaveEmbed 桥未加载/);
+    // 恢复失败被记录：未到熔断阈值时回到 crashed（恢复失败），适配器保持为空
+    expect(sup.adapter).toBeNull();
+    expect(['crashed', 'failed']).toContain(sup.state);
   });
 });

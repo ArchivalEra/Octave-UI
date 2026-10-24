@@ -1,13 +1,14 @@
 // src/modules/appContext.ts
 // 全局领域服务单例与应用状态上下文：装配 EngineSupervisor、CapabilityPolicy 与 GraphicsSink
 import { EngineSupervisor } from './engine/EngineSupervisor';
+import { onOmcFlavorError } from './engine/OmcBridge';
 import { TerminalController } from './terminal/TerminalController';
 import { HistoryStore } from './history/HistoryStore';
 import { WorkspaceStore } from './workspace/WorkspaceStore';
 import { FilesystemStore } from './filesystem/FilesystemStore';
 import { ThemeManager } from './theme/ThemeManager';
 import { CapabilityPolicy } from './figure/CapabilityPolicy';
-import { GraphicsSink } from './figure/GraphicsSink';
+import { GraphicsSink, wireFigureSource, wireFigureBusToSink } from './figure/GraphicsSink';
 import { i18n, t } from './i18n/I18nManager.svelte';
 
 import { WorkbenchController } from './workbench/WorkbenchController';
@@ -69,15 +70,28 @@ export const capabilityPolicy = new CapabilityPolicy();
 export const graphicsSink = new GraphicsSink();
 
 export { pluginRegistry, pretextPlugin, searchPlugin, p5FigureOverlayPlugin, packageManagerPlugin, webMcpPlugin } from './plugins';
-import { packageManagerPlugin } from './plugins';
+import { packageManagerPlugin, p5FigureOverlayPlugin } from './plugins';
 
 packageManagerPlugin.setDownloadStore(downloadStore);
+
+// 转发 P5 图表事件到 GraphicsSink 的 onFigure 面：面板订阅 sink 即可拿到
+// {imageDataUrl,...}（evt.url 是 Blob URL——PNG 渲染就绪）。
+// 两条通道都接（spec #19 决策 1）：
+// ① 页面级总线——不绑插件实例身份，模块被求值出两个实例也不失聪（056 红线 1 的根因）；
+// ② 实例内 subscribe——插件实例与这里同一个时照常工作（兼容旧路径；同一次渲染
+//    两条通道都会到 sink，emitFigure 的幂等由面板状态赋值天然吸收）。
+// 解绑函数留在模块级（模块生命周期 = 应用生命周期，不主动解）。
+wireFigureSource(p5FigureOverlayPlugin, graphicsSink);
+wireFigureBusToSink(graphicsSink);
 
 // 启用图形外挂补丁策略：允许绘图指令出队交由原生 WebGL toolkit 处理
 capabilityPolicy.setSafePolyfillActive(true);
 
 i18n.subscribe((locale) => {
   projectWorkspace.syncLocale(locale);
+  // R1（wayfinder #14）：终端错误净化跟随界面语言切换（TerminalController 内部
+  // 错误通道过 ErrorSanitizer，locale 由这里单一产地下发）
+  terminalController.setLocale(locale);
 });
 
 // 当引擎达到 idle 状态时，自动将工作区文件推送到 Wasm MEMFS 并配置 addpath
@@ -85,5 +99,15 @@ supervisor.onStateChange((state) => {
   if (state === 'idle') {
     void workspaceStorage.syncToEngine(supervisor);
   }
+});
+
+// OMC 附加 flavor 失败降级告知：engine 层只 throw 不碰 UI 面，
+// 组合根经 onOmcFlavorError 通道订阅后呈现（双引擎模式 Octave-only 降级的唯一 UI 出口；
+// 纯 omc lane 的失败走 boot reject 主链路，不进这里）。
+onOmcFlavorError((err) => {
+  toastService.warning(
+    `OpenModelica runtime unavailable (${err?.message || err}). Running in Octave-only mode.`,
+    'FLAVOR_UNAVAILABLE'
+  );
 });
 

@@ -10,8 +10,8 @@ import { SemanticResultRenderer, type SemanticResult } from '../semantic/Semanti
 import { SafePlotSinkPolyfill } from '../semantic/SafePlotSinkPolyfill';
 import type { WorkspaceStorageManager } from '../storage/WorkspaceStorageManager';
 import type { DownloadStore } from '../storage/DownloadStore';
-import type { DownloadRecord, DownloadProgressCallback } from '../storage/downloadTypes';
 import { p5FigureOverlayPlugin } from '../plugins';
+import { EngineAssetResolver, type EngineAssetStatus } from '../engine/EngineAssetResolver';
 
 export type WorkbenchMode = 'notebook' | 'terminal';
 
@@ -220,7 +220,6 @@ export class ProjectWorkspace {
       return;
     }
     this._supervisor.setLane(lane);
-    this._activeLane = lane;
     this._notify();
   }
 
@@ -230,8 +229,11 @@ export class ProjectWorkspace {
       return;
     }
     this._supervisor.setLane(lane);
-    this._activeLane = lane;
     this._notify();
+  }
+
+  async checkPhysicalEngineStatus(lane: EngineLane): Promise<EngineAssetStatus> {
+    return EngineAssetResolver.getInstance().checkPhysicalStatus(lane);
   }
 
   get isOmcEnabled(): boolean {
@@ -251,38 +253,13 @@ export class ProjectWorkspace {
     this.setOmcEnabled(!this._omcEnabled);
   }
 
-  setDownloadStore(ds: DownloadStore): void {
-    this._downloadStore = ds;
-  }
-
-  get downloadStore(): DownloadStore | undefined {
-    return this._downloadStore;
-  }
-
-  isEngineDownloaded(lane: string): boolean {
-    return this._downloadStore ? this._downloadStore.isEngineDownloaded(lane) : false;
-  }
-
-  isEngineDownloading(lane: string): boolean {
-    return this._downloadStore ? this._downloadStore.isEngineDownloading(lane) : false;
-  }
-
-  getEngineRecord(lane: string): DownloadRecord | null {
-    return this._downloadStore ? this._downloadStore.getEngineRecord(lane) : null;
-  }
-
-  async downloadEngine(lane: string, onProgress?: DownloadProgressCallback): Promise<DownloadRecord | null> {
-    if (!this._downloadStore) return null;
-    const rec = await this._downloadStore.downloadEngine(lane, { onProgress });
-    this._notify();
-    return rec;
-  }
-
-  async removeEngine(lane: string): Promise<void> {
-    if (!this._downloadStore) return;
-    await this._downloadStore.removeEngine(lane);
-    this._notify();
-  }
+  // #10 Q10.3：7 个 downloadStore 零逻辑透传方法已删（setDownloadStore /
+  // downloadStore getter / isEngineDownloaded / isEngineDownloading /
+  // getEngineRecord / downloadEngine / removeEngine——054 审计点名的
+  // 「StorageService 形状转世」）。调用点直连真源：HeaderBar 改 import
+  // appContext 的 downloadStore 单例；本类保留 _downloadStore 仅为构造期
+  // init + 'octave:download-changed' → _notify 的接线（事件驱动刷新是真职责，
+  // 不是转发）。引擎查询/下载/移除的领域入口在 DownloadStore 本体。
 
   stopEngine(): void {
     this._supervisor.stop();
@@ -301,8 +278,6 @@ export class ProjectWorkspace {
     if (!this._dirAdapter.isMounted || !this._supervisor.isReady) {
       return;
     }
-    const adapter = this._supervisor.adapter;
-    if (!adapter || !adapter.fs) return;
 
     try {
       const files = await this._dirAdapter.list();
@@ -310,9 +285,12 @@ export class ProjectWorkspace {
         if (file.kind === 'file') {
           try {
             const content = await this._dirAdapter.readText(file.name);
-            adapter.fs.write(file.name, content);
+            // #10 Q10.3：穿透式文件同步收口——不再直取 supervisor.adapter.fs.write
+            // （绕过领域边界的走私路径），同一概念一条路径走 supervisor.fsWrite
+            // 公开方法（与 WorkspaceStorageManager.syncToEngine 同款）
+            this._supervisor.fsWrite(file.name, content);
             try {
-              adapter.fs.write(`/home/web_user/${file.name}`, content);
+              this._supervisor.fsWrite(`/home/web_user/${file.name}`, content);
             } catch {}
           } catch {}
         }

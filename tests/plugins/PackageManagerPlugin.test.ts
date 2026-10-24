@@ -1,8 +1,12 @@
 // tests/plugins/PackageManagerPlugin.test.ts
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PackageManagerPlugin } from '../../src/modules/plugins/package/PackageManagerPlugin';
 import { MockAssetsAdapter } from '../../src/modules/plugins/package/MockAssetsAdapter';
 import type { ForgeCatalog } from '../../src/modules/plugins/package/types';
+import { DownloadStore } from '../../src/modules/storage/DownloadStore';
+import { MemoryStore } from '../../src/modules/storage/MemoryStore';
+import { MockFetchAdapter } from '../../src/modules/storage/FetchPort';
+import { DownloadError } from '../../src/modules/storage/downloadTypes';
 
 describe('PackageManagerPlugin Deep Module', () => {
   let mockAdapter: MockAssetsAdapter;
@@ -380,5 +384,219 @@ describe('PackageManagerPlugin Deep Module', () => {
     const res = await plugin.installPackage('pyodide');
     expect(res.state).toBe('ok');
     expect(res.installed).toEqual(['pyodide']);
+  });
+
+  it('getAssetsPort() returns the port injected via constructor (issue #8 Q8.1)', () => {
+    // 构造注入的 port 必须原样出站——插件是 seam 持有者，port 单一出口
+    const port = plugin.getAssetsPort();
+    expect(port).toBe(mockAdapter);
+    // setPort 换 port 后访问器必须跟随
+    const replacement = new MockAssetsAdapter();
+    plugin.setPort(replacement);
+    expect(plugin.getAssetsPort()).toBe(replacement);
+    plugin.setPort(mockAdapter);
+  });
+
+  it('getAssetsPort().fetchCatalog() is callable and returns the synthetic catalog of the adapter (issue #8 Q8.1)', async () => {
+    const cat = await plugin.getAssetsPort().fetchCatalog();
+    // MockAssetsAdapter.fetchCatalog 返回深拷贝，按内容断言合成目录
+    expect(cat.packs.length).toBe(sampleCatalog.packs.length);
+    expect(cat.packs.map((p) => p.name)).toEqual(sampleCatalog.packs.map((p) => p.name));
+    expect(cat.schema).toBe(sampleCatalog.schema);
+  });
+
+  it('DownloadStore catalogProvider closure via plugin.getAssetsPort does not throw TypeError (issue #8 Q8.4 反向断言)', async () => {
+    // 模拟 appContext.ts 的接线形状：catalogProvider 闭包经 plugin.getAssetsPort().fetchCatalog()
+    const memoryStore = new MemoryStore();
+    await memoryStore.init();
+    const mockFetch = new MockFetchAdapter();
+    // 静态侧（KNOWN_ENGINE_METADATA）的 omc 分件 sha，让整链路可走完
+    mockFetch.setFile(
+      'https://octave.test/omc/OpenModelicaCompiler_bg.wasm',
+      'omc-wasm',
+      '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001'
+    );
+    mockFetch.setFile(
+      'https://octave.test/omc/OpenModelicaCompiler.js',
+      'omc-js',
+      '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17'
+    );
+    const store = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: () => plugin.getAssetsPort().fetchCatalog(),
+    });
+    await store.init();
+
+    // 直接调 provider：必须解析出目录而不抛 "is not a function"
+    const cat = await (store as any).catalogProvider();
+    expect(Array.isArray(cat.packs)).toBe(true);
+
+    // 经 downloadEngine('omc') 整链路：provider 被真实消费，不允许吐出代码级 TypeError
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let brokenCalls: any[][] = [];
+    try {
+      const rec = await store.downloadEngine('omc');
+      // catalog 无 omc 条目（合成目录 packs 不含 omc）⇒ 回退 KNOWN_ENGINE_METADATA 静态侧
+      expect(rec.ref.name).toBe('omc');
+      expect(rec.bytes).toBeGreaterThan(0);
+      // #12 Q12.2：静态回退侧无顶层聚合 sha（拼接串产地已删）——多文件
+      // record 的顶层 sha = undefined；分件 sha = KNOWN_ENGINE_METADATA['omc'].files 真值
+      expect(rec.sha256).toBeUndefined();
+      expect(rec.files.map((f) => f.sha256)).toEqual([
+        '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001',
+        '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17',
+      ]);
+    } finally {
+      brokenCalls = errSpy.mock.calls.filter(
+        (c) => typeof c[0] === 'string' && c[0].includes('catalog provider is broken')
+      );
+      errSpy.mockRestore();
+    }
+    // 分级判据：合法降级路径不许触发「catalog provider is broken」响亮报
+    expect(brokenCalls.length).toBe(0);
+  });
+
+  it('resolves omc engine metadata from catalog真值 when the pack entry exists (issue #8 Q8.4)', async () => {
+    // 合成 catalog 携带 omc 条目（含 size/sha256/files），动态 catalog 必须覆盖静态手抄侧
+    // #12 Q12.3：intake 断言只放行真 64hex ⇒ mock 分件 sha 真算
+    function sha256OfNode(data: string): string {
+      const nodeCrypto = require('node:crypto') as typeof import('node:crypto');
+      return nodeCrypto.createHash('sha256').update(data).digest('hex');
+    }
+    const catWasmSha = sha256OfNode('a'.repeat(12000));
+    const catJsSha = sha256OfNode('b'.repeat(345));
+    const omcCatalog: ForgeCatalog = {
+      packs: [
+        {
+          name: 'omc',
+          version: '1.25.0',
+          form: 'tree',
+          content: [],
+          size: 12345,
+          // 顶层 sha256 不再被消费（#12 Q12.2：聚合 sha 产地删除，只取 files）
+          sha256: 'catalog-omc-combined-sha',
+          files: {
+            'OpenModelicaCompiler_bg.wasm': { bytes: 12000, sha256: catWasmSha },
+            'OpenModelicaCompiler.js': { bytes: 345, sha256: catJsSha },
+          },
+        } as any,
+      ],
+    };
+    const omcAdapter = new MockAssetsAdapter(omcCatalog);
+    const omcPlugin = new PackageManagerPlugin(omcAdapter);
+
+    const memoryStore = new MemoryStore();
+    await memoryStore.init();
+    const mockFetch = new MockFetchAdapter();
+    // 分件按 catalog files 的 sha256 抓取校验——mock 文件必须带同一 sha 才能走完链路
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler_bg.wasm', 'a'.repeat(12000), catWasmSha);
+    mockFetch.setFile('https://octave.test/omc/OpenModelicaCompiler.js', 'b'.repeat(345), catJsSha);
+    const store = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: () => omcPlugin.getAssetsPort().fetchCatalog(),
+      maxQuotaBytes: 1024 * 1024,
+    });
+    await store.init();
+
+    const rec = await store.downloadEngine('omc');
+    // record 的总字节必须来自 catalog files 累加真值，不是 KNOWN_ENGINE_METADATA
+    expect(rec.bytes).toBe(12345);
+    // #12 Q12.2：顶层聚合 sha 删除 ⇒ 多文件 record 顶层 sha = undefined
+    // （catalog 顶层的 'catalog-omc-combined-sha' 装饰值不再被消费）
+    expect(rec.sha256).toBeUndefined();
+    // 文件级 sha 也必须用 catalog 值：分件下载项按 catalog files 的 sha256 抓取校验
+    expect(rec.files.map((f) => f.sha256)).toEqual([catWasmSha, catJsSha]);
+    expect(rec.files.map((f) => f.bytes)).toEqual([12000, 345]);
+  });
+
+  it('loudly reports catalog provider code defects while degrading silently on network-family errors (issue #8 Q8.2 分级)', async () => {
+    const memoryStore = new MemoryStore();
+    await memoryStore.init();
+    const mockFetch = new MockFetchAdapter();
+    // 三组对照共用静态侧 omc 分件 sha，保证降级链路本身可走完
+    mockFetch.setFile(
+      'https://octave.test/omc/OpenModelicaCompiler_bg.wasm',
+      'omc-wasm',
+      '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001'
+    );
+    mockFetch.setFile(
+      'https://octave.test/omc/OpenModelicaCompiler.js',
+      'omc-js',
+      '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17'
+    );
+    const store = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      // 模拟 appContext 接错缝的旧病：闭包引用不存在的方法 ⇒ TypeError 'is not a function'
+      catalogProvider: () =>
+        (plugin as any).missingAssetsPort().fetchCatalog(),
+    });
+    await store.init();
+
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let brokenCalls: any[][] = [];
+    try {
+      const rec = await store.downloadEngine('omc');
+      // 降级仍然成立：静态 KNOWN_ENGINE_METADATA 兜底成功
+      expect(rec.ref.name).toBe('omc');
+    } finally {
+      brokenCalls = errSpy.mock.calls.filter(
+        (c) => typeof c[0] === 'string' && c[0].includes('catalog provider is broken')
+      );
+      errSpy.mockRestore();
+    }
+
+    // 代码缺陷必须响亮打出（不许无声吞掉死代码缝）
+    expect(brokenCalls.length).toBe(1);
+    expect(String((brokenCalls[0] as any[])[1])).toContain('is not a function');
+
+    // 对照组：网络族错（'Failed to fetch'）必须静默降级，不许刷屏
+    const networkStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: async () => {
+        throw new TypeError('Failed to fetch catalog from network');
+      },
+    });
+    await networkStore.init();
+    errSpy.mockClear();
+    try {
+      const rec = await networkStore.downloadEngine('omc');
+      expect(rec.ref.name).toBe('omc');
+    } finally {
+      errSpy.mockRestore();
+    }
+    const networkBrokenCalls = errSpy.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && c[0].includes('catalog provider is broken')
+    );
+    expect(networkBrokenCalls.length).toBe(0);
+
+    // 对照组：DownloadError（带 code 的合法降级路径）不许被打进 console.error
+    const deStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: () => {
+        throw new DownloadError('INDEX_UNREADABLE', '目录读不出来');
+      },
+    });
+    await deStore.init();
+    errSpy.mockClear();
+    try {
+      const rec = await deStore.downloadEngine('omc');
+      expect(rec.ref.name).toBe('omc');
+    } finally {
+      errSpy.mockRestore();
+    }
+    const deBrokenCalls = errSpy.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && c[0].includes('catalog provider is broken')
+    );
+    expect(deBrokenCalls.length).toBe(0);
   });
 });

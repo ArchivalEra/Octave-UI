@@ -15,8 +15,10 @@ describe('WorkspaceStorageManager Deep Module', () => {
     await manager.init();
 
     mockAdapter = new MockEmbedAdapter();
+    // 合法注入：生产路径已禁 Mock 回退，测试替身必须经 factory 显式进入
     supervisor = new EngineSupervisor({
-      createAdapter: () => mockAdapter,
+      adapter: mockAdapter,
+      adapterFactory: () => mockAdapter,
     });
     await supervisor.boot();
   });

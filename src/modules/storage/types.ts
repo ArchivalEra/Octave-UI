@@ -40,6 +40,7 @@ export interface Store {
   init(): Promise<void>;
   list(): AsyncIterable<EntryMeta>;
   read(path: string): Promise<Uint8Array>;
+  readBlob?(path: string): Promise<Blob>;
   write(path: string, data: Uint8Array): Promise<void>;
   remove(path: string): Promise<void>;
   mkdir(path: string): Promise<void>;
