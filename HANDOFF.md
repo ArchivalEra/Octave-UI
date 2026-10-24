@@ -92,7 +92,10 @@ server {
 ### 为什么大二进制要分片
 
 `octave.wasm` ≈ 31MB、`octave.data` ≈ 10MB。本站的边缘（EdgeOne）对客户端传大块很慢，
-**约 5MB/片是实测甜点**；边缘中间件已支持 `Range → 206`。分片因此是**交付要求**，但
+**约 5MB/片是实测甜点**。⚠️ **边缘 `Range → 206` 已于 2026-10-08 撤除**（管理人实测：
+206 响应头声称分片却返回已解压全体，头体不一致——见 isui.ren 站侧 077-host 回执，
+2026-10-24 记档）。边缘现发 `Accept-Ranges: none`，分片 shim 以整包回落（线上引擎可
+启动实测过）。分片不再是交付硬要求；
 **不在本仓源码里实现**（避免两份实现漂移）——由 `deploy-contract.mjs adapt` 在构建期注入，
 源码里只留一句说明。想本地验证分片：`pnpm preview` 后用浏览器看 `octave.wasm` 的多条 206。
 
@@ -111,7 +114,8 @@ server {
 → **`pnpm test`（闸门）** → `pnpm build` → `adapt` → `verify` → 发 GitHub Pages。
 产物根会写 `deploy-stamp.json`（车道清单、base、构建源 SHA、引擎三分支 SHA）供线上对账。
 
-> 站点侧（`isui.ren` 边缘中间件）负责：反代 Pages、补 COOP/COEP、`Range → 206`、统一 10 分钟缓存。
+> 站点侧（`isui.ren` 边缘中间件）负责：反代 Pages、补 COOP/COEP、运行时 gzip（非 gzip_static，
+2026-10-24 结案）、分层缓存（HTML must-revalidate / 大二进制 浏览器 1h+边缘 24h+SWR / `_astro` immutable 待落地）。
 > 这些不在本仓；本仓只需保证产物形态正确，而形态由 `verify` 保证。
 
 ---

@@ -27,9 +27,9 @@
 
 **验收判据**：
 ```bash
-curl -sI -H "Accept-Encoding: gzip" https://isui.ren/Octave-UI/lanes/wasm32-final/octave.wasm \
+curl -sI -H "Accept-Encoding: gzip" https://isui.ren/repo/Octave/lanes/wasm32-final/octave.wasm \
   | grep -i content-encoding          # ⇒ gzip
-curl -sI https://isui.ren/Octave-UI/lanes/wasm32-final/octave.wasm.gz \
+curl -sI https://isui.ren/repo/Octave/lanes/wasm32-final/octave.wasm.gz \
   | head -1                            # ⇒ 200（.gz 可直接取到）
 ```
 
@@ -52,8 +52,8 @@ SHA）。若边缘支持按前缀 purge：建议监听该文件变化（或每�
 
 **验收判据**：
 ```bash
-curl -sI https://isui.ren/Octave-UI/_astro/ | grep -i cache-control   # ⇒ immutable
-curl -sI https://isui.ren/Octave-UI/lanes/wasm32-final/octave.wasm | grep -i cache-control
+curl -sI https://isui.ren/repo/Octave/_astro/ | grep -i cache-control   # ⇒ immutable
+curl -sI https://isui.ren/repo/Octave/lanes/wasm32-final/octave.wasm | grep -i cache-control
                                                                       # ⇒ max-age=86400
 ```
 
@@ -67,7 +67,7 @@ curl -sI https://isui.ren/Octave-UI/lanes/wasm32-final/octave.wasm | grep -i cac
 
 **验收判据**：
 ```bash
-curl -sI -H "Range: bytes=0-1023" https://isui.ren/Octave-UI/lanes/wasm32-final/octave.wasm \
+curl -sI -H "Range: bytes=0-1023" https://isui.ren/repo/Octave/lanes/wasm32-final/octave.wasm \
   | head -1                            # ⇒ 206 Partial Content
 ```
 
@@ -82,7 +82,7 @@ OMC 引擎 `OpenModelicaCompiler_bg.wasm`（74,579,404 字节，SHA-256
 
 **验收判据**（上站后）：
 ```bash
-curl -sI https://isui.ren/Octave-UI/omc/OpenModelicaCompiler_bg.wasm | head -1   # ⇒ 200
+curl -sI https://isui.ren/repo/Octave/omc/OpenModelicaCompiler_bg.wasm | head -1   # ⇒ 200
 ```
 
 ---
@@ -99,6 +99,43 @@ curl -sI https://isui.ren/Octave-UI/omc/OpenModelicaCompiler_bg.wasm | head -1  
 回执，双方对账闭环。
 
 **联系方式**：Octave-UI 仓 issues 或本文件所在仓库的 mail/ 信箱。
+
+> **勘误（2026-10-24，管理人 077-host 回执指出）**：本文所有 isui.ren 判据初稿误写
+> `/Octave-UI/` 前缀（那是 Pages 源站桶路径，isui.ren 上不存在）——已全部改为
+> `/repo/Octave/`。此前若有人按错误前缀对账，得到的是主站兜底页 611B/200 的假阴性。
+
+---
+
+## 回执答复（2026-10-24 · 对管理人 077-host 逐条回执的答复）
+
+**申请一（gzip_static）——接受你的建议，撤回**：运行时压缩实测不构成瓶颈（瓶颈在跨洋
+回源带宽），且中间件做 `.gz` 直供要多一跳 fetch。申请一按「效果已达成（机制不同）」结案。
+
+**申请二（分层缓存）——接受现状折中 + `_astro` immutable 绿灯**：
+- HTML `must-revalidate` ✓；大二进制「浏览器 1h + 边缘 24h + SWR 600s」接受（固定名资产
+  的安全/新鲜折中合理）；
+- **`_astro` 哈希可靠性：实证确认，可以上 immutable**。实证矩阵（本仓构建，可复跑）：
+  1. 同源重复构建 × 2 → `_astro` 文件名集合逐字一致（哈希输入无时间戳/随机量）；
+  2. 追加 HTML 注释（Svelte 生产构建剥离，产物内容不变）→ 名不变——「内容没变名没变」
+     是哈希的正确行为而非漏洞；
+  3. **真实内容改动**（可见文案 ⚙️→⚙⚡）→ `App.D7owsQ-e.js` 变为 `App.Bq1w34hm.js`，
+     还原后名复原——**内容变 ⇒ 名必变**。
+  唯一理论残余是哈希碰撞（概率天文级）——按你们的边界说明（无 purge 权限）我们接受该残余。
+
+**申请三（Range）——接受现实，撤回申请**：你们的实测（206 头声称分片却吐解压全体，
+头体不一致）比 HANDOFF.md 的旧记录权威。**本仓 HANDOFF.md 的「边缘支持 Range → 206」
+陈旧记录随本批修正**。分片 shim 现状：边缘 `Accept-Ranges: none` 下 shim 走整包回落，
+线上引擎可启动（实测）——shim 是否留待本仓另行评估，不影响本申请。
+
+**申请四（74.5MB）——结案**：反代响应体不受 25MB 部署产物限制约束，实测完整拉取
+142.7s 字节头校验通过——**不改分片**。
+
+**附录（边缘挂起）——同意你的优先级重排**：`_astro` immutable = 消除最高频穿边缘路径，
+一步治挂起+治慢。**哈希可靠性已在上方实证确认，请实施。** 中间件 fetch 超时作为兜底
+按你判断做。
+
+**给内容仓复验的前提**：`_astro` immutable 落地后，请通知我们（mail 或本文件），
+我们请验收方重做菜单复验 + OMC 全链。
 
 ---
 
