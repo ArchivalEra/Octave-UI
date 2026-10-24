@@ -1,23 +1,27 @@
 // src/modules/plugins/webmcp/WebMcpPlugin.ts
-// WebMCP 自主智能体标准网桥：100% DOM-free 纯服务调度，双通道挂载与静默握手
+// WebMCP 网桥 · 薄壳（spec v2 步骤 2 骨架迁移后的形状，验收 = golden master 全量零差异）：
+//   - 工具名册 / 分发 / 依赖解析下沉到 server.ts / dispatcher.ts / ctx.ts；
+//   - 双通道挂载下沉到 channels/（legacy 事件 + 全局直柄，均实现 WebMcpChannel）；
+//   - 本文件只剩插件生命周期与装配。
+//
+// 旧实现的三个服务 getter（含 require('../../appContext') 惰性回退）已逐字迁入
+// ctx.ts 的 resolveCtx —— 注入与回退**并存**（mail/062 红线 1），本壳经
+// `resolveCtx(() => this.options)` 保持「每次访问重读 options」的旧语义。
+//
+// 公开面（listTools/callTool/init/destroy + options 注入）签名与语义逐字保持
+// —— golden master 双通道用例与 tests/plugins/WebMcpPlugin.test.ts 直接吃这个面。
 
 import type { OctavePlugin } from '../types';
-import type {
-  WebMcpToolDefinition,
-  WebMcpToolCallResult,
-  WebMcpContextApi,
-} from './types';
-import type { ProjectWorkspace } from '../../workspace/ProjectWorkspace';
-import type { PackageManagerPlugin } from '../package/PackageManagerPlugin';
-import type { EngineSupervisor } from '../../engine/EngineSupervisor';
+import type { WebMcpToolDefinition, WebMcpToolCallResult, WebMcpContextApi } from './types';
+import { resolveCtx, type WebMcpCtxResolver } from './ctx';
+import { createServer, type WebMcpServer } from './server';
+import type { WebMcpChannel } from './channels/types';
+import { createGlobalHandleChannel } from './channels/globalHandle';
+import { createLegacyEventChannel } from './channels/eventChannel';
+import { createDebugHandle, attachDebugHandle, detachDebugHandle, type WebMcpDebugHandle } from './callStats';
 
-export interface WebMcpPluginServices {
-  projectWorkspace?: ProjectWorkspace;
-  packageManagerPlugin?: PackageManagerPlugin;
-  supervisor?: EngineSupervisor;
-  windowTarget?: Window;
-  documentTarget?: Document;
-}
+// 注入面迁至 ctx.ts（组合根），旧公开导入路径保持可用
+export type { WebMcpPluginServices } from './ctx';
 
 export class WebMcpPlugin implements OctavePlugin<WebMcpPluginServices>, WebMcpContextApi {
   readonly id = 'webmcp';
@@ -27,474 +31,60 @@ export class WebMcpPlugin implements OctavePlugin<WebMcpPluginServices>, WebMcpC
   enabled = true;
   options?: WebMcpPluginServices;
 
-  private _boundEventListener: ((e: Event) => void) | null = null;
-  private _targetWindow: Window | null = null;
-  private _targetDocument: Document | null = null;
+  private readonly _resolve: WebMcpCtxResolver;
+  private readonly _server: WebMcpServer;
+  private _channels: WebMcpChannel[] = [];
 
   constructor(services?: WebMcpPluginServices) {
     this.options = services;
+    this._resolve = resolveCtx(() => this.options);
+    this._server = createServer(this._resolve);
   }
 
-  private get workspace(): ProjectWorkspace | undefined {
-    if (this.options?.projectWorkspace) return this.options.projectWorkspace;
-    try {
-      // 允许从全局环境惰性解析
-      const ctx = require('../../appContext');
-      return ctx.projectWorkspace;
-    } catch {
-      return undefined;
-    }
-  }
-
-  private get packageManager(): PackageManagerPlugin | undefined {
-    if (this.options?.packageManagerPlugin) return this.options.packageManagerPlugin;
-    try {
-      const ctx = require('../../appContext');
-      return ctx.packageManagerPlugin;
-    } catch {
-      return undefined;
-    }
-  }
-
-  private get supervisor(): EngineSupervisor | undefined {
-    if (this.options?.supervisor) return this.options.supervisor;
-    try {
-      const ctx = require('../../appContext');
-      return ctx.supervisor;
-    } catch {
-      return undefined;
-    }
-  }
-
-  // --- WebMCP 工具名册 ---
+  // --- WebMcpContextApi：全权委托 server（签名与语义与旧实现逐字保持） ---
 
   async listTools(): Promise<WebMcpToolDefinition[]> {
-    return [
-      {
-        name: 'octave_eval',
-        description: 'Evaluate GNU Octave code directly in WebAssembly engine and return execution output.',
-        parameters: {
-          type: 'object',
-          properties: {
-            code: {
-              type: 'string',
-              description: 'Octave/MATLAB code statement or script to execute (e.g. "A = magic(3); det(A)").',
-            },
-          },
-          required: ['code'],
-        },
-      },
-      {
-        name: 'octave_run_cell',
-        description: 'Execute a specific notebook cell by cell ID or 0-based cell index.',
-        parameters: {
-          type: 'object',
-          properties: {
-            cellId: {
-              type: 'string',
-              description: 'The unique ID of the target notebook cell to run.',
-            },
-            index: {
-              type: 'number',
-              description: 'The 0-based index of the cell in the notebook cell list.',
-            },
-          },
-        },
-      },
-      {
-        name: 'octave_get_workspace',
-        description: 'Retrieve all current variables in the GNU Octave workspace (names, types, dimensions, bytes).',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'octave_list_packages',
-        description: 'Query available, compatible, and installed Octave Forge packages and runtime layers in the catalog.',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: 'Optional search keyword for package name, description, or dependencies.',
-            },
-            consumer: {
-              type: 'string',
-              enum: ['all', 'octave', 'omc'],
-              description: 'Filter by consumer ecosystem target.',
-            },
-            form: {
-              type: 'string',
-              enum: ['all', 'pkg', 'tree'],
-              description: 'Filter by delivery form (pkg: standard package, tree: runtime layer).',
-            },
-            installedOnly: {
-              type: 'boolean',
-              description: 'Whether to restrict results to already-installed packages only.',
-            },
-          },
-        },
-      },
-      {
-        name: 'octave_install_package',
-        description: 'Pre-plan or execute installation of an Octave Forge package or runtime extension layer.',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'string',
-              description: 'Exact package identifier (e.g. "signal", "optim", "linear-algebra").',
-            },
-            version: {
-              type: 'string',
-              description: 'Optional package version string. Defaults to latest release.',
-            },
-            planOnly: {
-              type: 'boolean',
-              description: 'If true, simulates dependency tree and calculates download budget with zero network cost.',
-            },
-          },
-          required: ['name'],
-        },
-      },
-      {
-        name: 'octave_get_system_state',
-        description: 'Get engine supervisor state, active computation lane, open file, mode, and workspace metrics.',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-    ];
+    return this._server.listTools();
   }
-
-  // --- WebMCP 工具调用执行器 (DOM-free) ---
 
   async callTool(name: string, args: Record<string, unknown> = {}): Promise<WebMcpToolCallResult> {
-    try {
-      switch (name) {
-        case 'octave_eval': {
-          const code = String(args.code || '').trim();
-          if (!code) {
-            return {
-              isError: true,
-              content: [{ type: 'text', text: 'Error: parameter "code" is required and cannot be empty.' }],
-            };
-          }
-
-          const sup = this.supervisor;
-          if (!sup) {
-            return {
-              isError: true,
-              content: [{ type: 'text', text: 'Error: EngineSupervisor service is not available.' }],
-            };
-          }
-
-          const evalResult = await sup.eval(code);
-          const ws = this.workspace;
-          if (ws) {
-            await ws.syncVariables();
-          }
-
-          return {
-            isError: !evalResult.ok,
-            content: [
-              {
-                type: 'text',
-                text: evalResult.output || (evalResult.ok ? '(execution completed with no output)' : `Error (rc=${evalResult.rc})`),
-              },
-            ],
-          };
-        }
-
-        case 'octave_run_cell': {
-          const ws = this.workspace;
-          if (!ws) {
-            return {
-              isError: true,
-              content: [{ type: 'text', text: 'Error: ProjectWorkspace service is not available.' }],
-            };
-          }
-
-          const cells = ws.cells || [];
-          let targetCell = typeof args.cellId === 'string'
-            ? cells.find((c) => c.id === args.cellId)
-            : typeof args.index === 'number'
-            ? cells[args.index]
-            : null;
-
-          if (!targetCell) {
-            return {
-              isError: true,
-              content: [{ type: 'text', text: 'Error: target cell not found. Provide a valid cellId or index.' }],
-            };
-          }
-
-          const targetCellId = targetCell.id;
-          const cellRes = await ws.executeCell(targetCellId);
-          const updatedCell = (ws.cells || []).find((c) => c.id === targetCellId);
-
-          return {
-            isError: !cellRes.ok,
-            content: [
-              {
-                type: 'resource',
-                mimeType: 'application/json',
-                data: {
-                  cellId: targetCellId,
-                  status: updatedCell?.status || (cellRes.ok ? 'success' : 'error'),
-                  executionCount: updatedCell?.executionCount ?? null,
-                  durationMs: updatedCell?.durationMs ?? null,
-                  output: updatedCell?.streamingOutput || cellRes.output || '',
-                },
-              },
-            ],
-          };
-        }
-
-        case 'octave_get_workspace': {
-          const ws = this.workspace;
-          const sup = this.supervisor;
-          const vars = ws ? await ws.syncVariables() : sup?.isReady ? await sup.getWorkspace() : [];
-
-          return {
-            content: [
-              {
-                type: 'resource',
-                mimeType: 'application/json',
-                data: {
-                  count: vars.length,
-                  variables: vars.map((v) => ({
-                    name: v.name,
-                    type: v.type,
-                    dimensions: v.dimensions,
-                    bytes: v.bytes,
-                    valuePreview: v.valuePreview,
-                  })),
-                },
-              },
-            ],
-          };
-        }
-
-        case 'octave_list_packages': {
-          const pm = this.packageManager;
-          if (!pm) {
-            return {
-              isError: true,
-              content: [{ type: 'text', text: 'Error: PackageManagerPlugin is not available.' }],
-            };
-          }
-
-          if (!pm.getCatalog()) {
-            await pm.loadCatalog().catch(() => {});
-          }
-
-          const query = typeof args.query === 'string' ? args.query : '';
-          const consumer = (args.consumer as 'all' | 'octave' | 'omc') || 'all';
-          const form = (args.form as 'all' | 'pkg' | 'tree') || 'all';
-          const installedOnly = Boolean(args.installedOnly);
-
-          const list = pm.filterPackages({ query, consumer, form, installedOnly });
-
-          return {
-            content: [
-              {
-                type: 'resource',
-                mimeType: 'application/json',
-                data: {
-                  total: list.length,
-                  packages: list.map((pkg) => {
-                    const status = pm.getStatus(pkg.name);
-                    return {
-                      name: pkg.name,
-                      version: pkg.version,
-                      description: pkg.description,
-                      consumer: pkg.consumer,
-                      form: pkg.form,
-                      size: pkg.size,
-                      status,
-                      deps: pkg.deps || [],
-                    };
-                  }),
-                },
-              },
-            ],
-          };
-        }
-
-        case 'octave_install_package': {
-          const pm = this.packageManager;
-          if (!pm) {
-            return {
-              isError: true,
-              content: [{ type: 'text', text: 'Error: PackageManagerPlugin is not available.' }],
-            };
-          }
-
-          const name = String(args.name || '').trim();
-          if (!name) {
-            return {
-              isError: true,
-              content: [{ type: 'text', text: 'Error: parameter "name" is required.' }],
-            };
-          }
-
-          const version = typeof args.version === 'string' ? args.version : undefined;
-          const planOnly = Boolean(args.planOnly);
-
-          if (planOnly) {
-            const plan = await pm.planInstall(name, version);
-            return {
-              content: [
-                {
-                  type: 'resource',
-                  mimeType: 'application/json',
-                  data: {
-                    packageName: name,
-                    planOnly: true,
-                    bytes: plan.bytes,
-                    layers: plan.layers,
-                  },
-                },
-              ],
-            };
-          }
-
-          const installResult = await pm.installPackage(name, { version });
-          return {
-            isError: installResult.state !== 'ok',
-            content: [
-              {
-                type: 'resource',
-                mimeType: 'application/json',
-                data: installResult,
-              },
-            ],
-          };
-        }
-
-        case 'octave_get_system_state': {
-          const sup = this.supervisor;
-          const ws = this.workspace;
-
-          return {
-            content: [
-              {
-                type: 'resource',
-                mimeType: 'application/json',
-                data: {
-                  supervisorState: sup?.state || 'unloaded',
-                  activeLane: ws?.activeLane || sup?.currentLane || 'wasm32-final',
-                  activeMode: ws?.mode || 'notebook',
-                  activeFile: ws?.activeFile || null,
-                  filesCount: (ws?.files || []).length,
-                  variablesCount: (ws?.variables || []).length,
-                  notebookCellsCount: (ws?.cells || []).length,
-                },
-              },
-            ],
-          };
-        }
-
-        default:
-          return {
-            isError: true,
-            content: [{ type: 'text', text: `Unknown tool name: "${name}". Use listTools() to see available tools.` }],
-          };
-      }
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        content: [{ type: 'text', text: `Execution failed for tool "${name}": ${errorMsg}` }],
-      };
-    }
+    return this._server.callTool(name, args);
   }
 
-  // --- 插件生命周期与浏览器双通道握手 ---
+  // --- 插件生命周期与双通道挂载 ---
+
+  private _debugHandle: WebMcpDebugHandle | null = null;
+  private _debugWin: Window | null = null;
 
   init(): void {
     const win = this.options?.windowTarget ?? (typeof window !== 'undefined' ? window : null);
     const doc = this.options?.documentTarget ?? (typeof document !== 'undefined' ? document : null);
 
-    this._targetWindow = win;
-    this._targetDocument = doc;
-
-    if (doc) {
-      (doc as unknown as { modelContext: WebMcpContextApi }).modelContext = this;
+    this._channels = [
+      createGlobalHandleChannel(win, doc), // 全局直柄通道（doc/win/navigator 的 modelContext）
+      createLegacyEventChannel(win, this.id), // legacy 事件通道（call/response/ready/unloaded）
+    ];
+    for (const channel of this._channels) {
+      channel.attach(this);
     }
-
-    if (win) {
-      (win as unknown as { modelContext: WebMcpContextApi }).modelContext = this;
-      if (typeof navigator !== 'undefined') {
-        try {
-          (navigator as unknown as { modelContext: WebMcpContextApi }).modelContext = this;
-        } catch {
-          // Navigator might be non-extensible in some engines
-        }
-      }
-
-      this._boundEventListener = (e: Event) => {
-        const customEvent = e as CustomEvent<{
-          id?: string;
-          name: string;
-          arguments?: Record<string, unknown>;
-        }>;
-        if (!customEvent.detail || !customEvent.detail.name) return;
-
-        void this.callTool(customEvent.detail.name, customEvent.detail.arguments).then((res) => {
-          win.dispatchEvent(
-            new CustomEvent('webmcp:response', {
-              detail: { id: customEvent.detail.id, result: res },
-            })
-          );
-        });
-      };
-
-      win.addEventListener('webmcp:call', this._boundEventListener);
-
-      // 静默握手信标：声明 WebMCP 工具已就绪
-      void this.listTools().then((tools) => {
-        win.dispatchEvent(
-          new CustomEvent('webmcp:ready', {
-            detail: { pluginId: this.id, tools },
-          })
-        );
-      });
-    }
+    // 调试句柄（spec B.3）：window.__webmcp_debug.stats() —— 计数器唯一读取口；
+    // 不上 wire、不改任何工具输出（get_system_state 的 golden 盯住零变化）
+    this._debugHandle = createDebugHandle(this._server.callStats);
+    this._debugWin = win;
+    attachDebugHandle(win, this._debugHandle);
   }
 
   destroy(): void {
-    if (this._targetWindow && this._boundEventListener) {
-      this._targetWindow.removeEventListener('webmcp:call', this._boundEventListener);
-      this._boundEventListener = null;
+    // 摘通道次序：先直柄后事件 —— webmcp:unloaded 信标仍最后发出（与旧实现一致）
+    for (const channel of this._channels) {
+      channel.detach();
     }
-
-    if (this._targetDocument && (this._targetDocument as unknown as { modelContext: unknown }).modelContext === this) {
-      delete (this._targetDocument as unknown as { modelContext?: unknown }).modelContext;
+    this._channels = [];
+    // 调试句柄跟随插件生命周期卸载（仅当挂的还是本句柄才动，不误删后来者的）
+    if (this._debugHandle) {
+      detachDebugHandle(this._debugWin, this._debugHandle);
     }
-
-    if (this._targetWindow && (this._targetWindow as unknown as { modelContext: unknown }).modelContext === this) {
-      delete (this._targetWindow as unknown as { modelContext?: unknown }).modelContext;
-    }
-
-    if (typeof navigator !== 'undefined' && (navigator as unknown as { modelContext?: unknown }).modelContext === this) {
-      try {
-        delete (navigator as unknown as { modelContext?: unknown }).modelContext;
-      } catch {}
-    }
-
-    if (this._targetWindow) {
-      this._targetWindow.dispatchEvent(
-        new CustomEvent('webmcp:unloaded', {
-          detail: { pluginId: this.id },
-        })
-      );
-    }
-
-    this._targetWindow = null;
-    this._targetDocument = null;
+    this._debugHandle = null;
+    this._debugWin = null;
   }
 }
