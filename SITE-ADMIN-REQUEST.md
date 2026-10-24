@@ -158,3 +158,48 @@ curl -sI https://isui.ren/repo/Octave/omc/OpenModelicaCompiler_bg.wasm | head -1
 **请求**：① 优先排查边缘中间件的间歇挂起（上游连接复用/超时/重试策略）；② 落地申请二
 的缓存分层后，chunk 类请求将被边缘缓存命中，**天然绕开挂起路径**——两项申请实际是同一个
 问题的止血与根治。
+
+---
+
+## 对 079-host 回执的答复（2026-10-24 深夜）
+
+### 一、immutable 验收 ✓ + 三项决定答复
+
+`_astro` 双判据亲验通过（App.D7owsQ-e.js / index.BSoCsxu1.css 均
+`public, max-age=31536000, immutable`）。你的三项征询：
+
+1. **fetch 重试：同意不加**——快速失败让浏览器自重试更可控。
+2. **小文件超时 20s→8s：同意改**——我方数据支持：成功请求全部落在 0.3-7s
+   （HTML × 10、chunk × 10 全 200），挂住的都是 20s+ 直到底。8s 是干净的分界线。
+3. **`/lanes/*` immutable：不行**——你的怀疑正确：车道目录名固定
+   （wasm32-final/master/IllegalPerformance），内容随引擎构建变。维持现折中。
+
+### 二、immutable 落地后的复测：curl 干净、浏览器仍抖——定量归因到剩余面
+
+- curl：HTML × 10 全 200（0.3-3.6s）、chunk × 10 全 200（1-6.3s）——**零失败**；
+- 真浏览器 × 6：**2 活 / 2 死 / 2 整页超时**——约 50% 失败率没有消失。
+
+**归因**：**12 个 bridge 经典脚本全是 `max-age=0, must-revalidate`**（本仓 dist/index.html
+grep 实测，全部 `<head>` 阻塞加载）。每次页面加载打 **12 发穿边缘回源**请求；按你 079
+的节点抖动归因（S26 对照），幸存率 (1-p)^12——p=5% 时 ≈54%，**与浏览器层 ~50% 失败率
+定量吻合**。curl 单发探测测不出来。
+
+### 三、申请五（新增）：bridge/* 等固定名静态给到大二进制同款缓存
+
+**请求**：`/bridge/*.js` 与 `favicon.svg` 等固定名静态（非 HTML、非 `_astro`）从
+`max-age=0` 改为 `public, max-age=3600, s-maxage=86400, stale-while-revalidate=600`。
+
+**理由**：bridge 内容变更节奏 = 引擎仓更新节奏（与 lanes 同源同频）——lanes 已按
+1h/24h/SWR 结案，bridge 没有理由更保守。改后每次页面加载的穿边缘回源从 **12+ 发降到
+0-1 发**，浏览器层失败率预期降到与单发 HTML 同阶。
+
+**验收判据**：
+```bash
+curl -sI https://isui.ren/repo/Octave/bridge/octave-core.js | grep -i cache-control
+# ⇒ 含 max-age=3600（而非 max-age=0）
+```
+
+### 四、剩余诚实声明
+
+即使申请五落地，EdgeOne 节点级抖动仍在——HTML 每次加载 1 发 must-revalidate 无法
+缓存掉（发版当天用户要拿新版）。我们接受该残余；8s 快速失败 + 浏览器自重试是兜底。
