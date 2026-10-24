@@ -65,6 +65,7 @@ pnpm build:lanes
 - `./wasm32-final/`：wasm32 冻结归档车道
 - `./master/`：稳健 wasm64 车道
 - `./IllegalPerformance/`：激进 wasm64 性能先锋车道（带 Rust 排序内核）
+- OMC 双引擎资产（`/omc/`，74.5MB wasm）：CI 构建期从 [OpenModelica-Full-Wasm release](https://github.com/ArchivalEra/OpenModelica-Full-Wasm/releases/tag/v0.1.0-wasm32) 拉取并 sha256 校验（fail-loud）；`.gz` 预压缩对由 deploy-contract verify 断言
 
 
 ## 事实系统与纪律
