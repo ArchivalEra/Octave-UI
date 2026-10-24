@@ -82,13 +82,19 @@ jobs:
           test -f public/w64/octave.wasm
           echo "ENGINE_SHAS=$(git -C .engine rev-parse --short origin/wasm32-final) $(git -C .engine rev-parse --short origin/master) $(git -C .engine rev-parse --short origin/IllegalPerformance)" >> "$GITHUB_ENV"
 
-      # ── OMC 引擎资产同步（同源托管）──
-      - name: Sync OMC assets if present
+      # ── OMC 引擎资产同步（同源托管契约 mail/053）──
+      # wasm(74.5MB) 被 .gitignore 排除在 git 树外，构建期从受控源拉取——与引擎三车道
+      # 走 git 仓同构。本机路径（site-omc）在 CI runner 上不存在，旧步骤的 if-present
+      # 静默跳过曾致线上 /omc/*.wasm 永远 404（2026-10-24 实测抓到）——本步骤 fail-loud：
+      # 下载失败 / sha 不符 ⇒ 整条流水线红，绝不绿着缺件。
+      # sha 与 DownloadStore.KNOWN_ENGINE_METADATA 同值（下载侧校验的同一指纹）。
+      - name: Sync OMC engine assets (release asset, sha-pinned)
         run: |
+          set -euo pipefail
           mkdir -p public/omc
-          if [ -d "/mnt/hdd/openmodelica-wasm-build/site-omc/omc" ]; then
-            cp -rf /mnt/hdd/openmodelica-wasm-build/site-omc/omc/* public/omc/
-          fi
+          curl -fL --retry 3 -o public/omc/OpenModelicaCompiler_bg.wasm \
+            "https://github.com/ArchivalEra/OpenModelica-Full-Wasm/releases/download/v0.1.0-wasm32/OpenModelicaCompiler_bg.wasm"
+          echo "8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001  public/omc/OpenModelicaCompiler_bg.wasm" | sha256sum -c -
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -103,6 +109,10 @@ jobs:
       # ── 部署契约 2/3：重写遗漏的根绝对引用 + 注入分片 shim ──
       - name: Contract · adapt
         run: node scripts/deploy-contract.mjs adapt
+
+      # ── 静态 gzip 预压缩（gzip -9）：边缘 gzip_static 直供的前提（SITE-ADMIN-REQUEST 申请一）──
+      - name: Pre-compress static assets
+        run: pnpm compress
 
       # ── 部署契约 3/3：产物断言（缺件/形态不对 ⇒ 整个流水线红，不推半个站）──
       - name: Contract · verify

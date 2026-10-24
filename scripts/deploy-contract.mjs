@@ -148,7 +148,17 @@ function cmdVerify() {
     "assets/manifest.w64.json",
   ];
   for (const lane of LANES) must.push(`lanes/${lane}/octave.js`, `lanes/${lane}/w64/octave.js`);
+  // OMC 同源托管件（2026-10-24：旧 CI 本机路径静默跳过曾致线上 404——缺件必须红）
+  must.push("omc/OpenModelicaCompiler_bg.wasm", "omc/OpenModelicaCompiler.js");
   const missing = must.filter((rel) => !fs.existsSync(path.join(DIST, rel)));
+  // 大件 .gz 对（gzip_static 直供前提）：wasm/data 必压缩——文本小件由边缘/源站兜底亦可
+  const gzMust = [
+    "w64/octave.wasm",
+    "lanes/wasm32-final/octave.wasm",
+    "omc/OpenModelicaCompiler_bg.wasm",
+  ].map((rel) => `${rel}.gz`);
+  const gzMissing = gzMust.filter((rel) => !fs.existsSync(path.join(DIST, rel)));
+  if (gzMissing.length) missing.push(...gzMissing, "(先跑 pnpm compress)");
   if (missing.length) {
     console.error(`[contract:verify] 产物缺件：${missing.join(", ")}`);
     process.exit(1);
