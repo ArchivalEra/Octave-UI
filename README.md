@@ -84,6 +84,7 @@ pnpm build:lanes
 - 交付契约：`node scripts/deploy-contract.mjs {base|adapt|verify}`（构建期重写根绝对引用 +
   注入分片 shim + **bridge 12 脚本打包为单 bundle**——边缘挂起幸存率 (1-p)^12 → (1-p)
   + **fetch 守卫**（同源 GET 响应头 10s 超时 + 单次重试——挂起概率 p → p²，浏览器端 AbortController 完好）
+  + **modulepreload 注入**（island 水合链 component→renderer→runtime 的串行瀑布打平为并行）
 
 ## WebMCP 网桥
 

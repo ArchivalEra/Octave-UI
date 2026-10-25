@@ -114,6 +114,26 @@ function injectFetchGuard(html) {
   return `${html.slice(0, idx)}<script>window.__octaveFetchGuard=1;</script>\n${FETCH_GUARD}\n${html.slice(idx)}`;
 }
 
+/**
+ * modulepreload 注入（isui.ren 冷节点瀑布打平）：astro-island 的水合链是
+ * component-url → renderer-url →（renderer 的静态依赖 render.*.js）**串行 import 瀑布**；
+ * 冷节点上每跳首字节 5-10s ⇒ 总延迟 15-90s。在 <head> 顶注入 modulepreload 把
+ * component/renderer 两枚（Chromium 会连带其静态依赖）并行起拉——瀑布降为单跳。
+ */
+function injectModulePreload(html) {
+  if (html.includes("__octavePreload")) return html;
+  const urls = new Set();
+  const re = /(component-url|renderer-url)="([^"]+)"/g;
+  let m;
+  while ((m = re.exec(html)) !== null) urls.add(m[2]);
+  if (urls.size === 0) return html;
+  const tags = [...urls].map((u) => `<link rel="modulepreload" href="${u}">`).join("\n    ");
+  const head = html.indexOf("<head>");
+  const at = head === -1 ? html.indexOf("<html") : head + "<head>".length;
+  if (at === -1) return html;
+  return `${html.slice(0, at)}\n    <script>window.__octavePreload=1;</script>\n    ${tags}${html.slice(at)}`;
+}
+
 function cmdAdapt() {
   const names = fs
     .readdirSync(DIST, { withFileTypes: true })
@@ -136,6 +156,7 @@ function cmdAdapt() {
     if (bs.injected && bs.out !== html) baseSignals += 1;
     html = bs.out;
     html = injectFetchGuard(html);
+    html = injectModulePreload(html);
     if (html !== before) fs.writeFileSync(file, html);
   }
 
@@ -210,6 +231,10 @@ function cmdVerify() {
       }
     }
     const idxHtml = fs.readFileSync(path.join(DIST, "index.html"), "utf8");
+    if (!idxHtml.includes('rel="modulepreload"')) {
+      console.error("[contract:verify] index.html 缺 modulepreload（冷节点瀑布打平未生效？）");
+      process.exit(1);
+    }
     if (!idxHtml.includes("__octaveFetchGuard")) {
       console.error("[contract:verify] index.html 缺 fetch 守卫（adapt 注入未生效？）");
       process.exit(1);
