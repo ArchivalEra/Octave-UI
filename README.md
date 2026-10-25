@@ -85,6 +85,7 @@ pnpm build:lanes
   注入分片 shim + **bridge 12 脚本打包为单 bundle**——边缘挂起幸存率 (1-p)^12 → (1-p)
   + **fetch 守卫**（同源 GET 响应头 10s 超时 + 单次重试——挂起概率 p → p²，浏览器端 AbortController 完好）
   + **modulepreload 注入**（island 水合链 component→renderer→runtime 的串行瀑布打平为并行）
+  + **字面量重写只及引擎/桥侧**：_astro 自有代码豁免（其字面量运行期经 resolveUrl 叠 base——构建期再叠=双重前缀=线上 404，081 号信实锤；verify 双向断言钉住）
 
 ## WebMCP 网桥
 

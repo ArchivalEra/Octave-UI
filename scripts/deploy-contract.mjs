@@ -160,9 +160,14 @@ function cmdAdapt() {
     if (html !== before) fs.writeFileSync(file, html);
   }
 
-  // JS bundle：字符串/模板字面量里的根绝对资源前缀（引擎车道加载路径就在这里）
+  // JS bundle：字符串/模板字面量里的根绝对资源前缀（引擎车道加载路径就在这里）。
+  // ⚠️ 只重写**引擎/桥侧**文件（lanes/ bridge/ 等——它们不读 site-base，字面量是唯一
+  // 能被前缀化的面）。**跳过 _astro（自有代码）**：DownloadStore 等的字面量运行期还要
+  // 过 resolveUrl() 再叠一次 base——重写它们 = 双重前缀（线上 OMC 下载 404 的实锤根因，
+  // 验收方 081 号信：/repo/Octave/repo/Octave/omc/…）。
   let jsFixed = 0;
   for (const file of walk(DIST, ".js")) {
+    if (file.includes(`${path.sep}_astro${path.sep}`)) continue;
     const code = fs.readFileSync(file, "utf8");
     const { code: fixed, n } = rewriteJsLiterals(code);
     if (n) {
@@ -222,6 +227,19 @@ function cmdVerify() {
   must.push("omc/OpenModelicaCompiler_bg.wasm", "omc/OpenModelicaCompiler.js");
   // bridge 单 bundle（isui.ren 083-host 客户端杠杆 #1：12 发阻塞彩票 → 1 发）
   must.push("bridge/bundle.js");
+  // 双重前缀防回归（081 号信）：_astro（自有代码）里的资源字面量不得被 adapt 前缀化——
+  // 它们运行期经 resolveUrl 叠 base，构建期再叠 = 双重前缀 = 线上 404
+  for (const file of walk(DIST, ".js")) {
+    if (!file.includes(`${path.sep}_astro${path.sep}`)) continue;
+    const c = fs.readFileSync(file, "utf8");
+    for (const p of JS_ASSET_PREFIXES) {
+      const prefixed = BASE.slice(0, -1) + p; // e.g. "/repo/Octave/omc/"
+      if (c.includes("'" + prefixed) || c.includes('"' + prefixed) || c.includes('`' + prefixed)) {
+        console.error(`[contract:verify] _astro 内出现被前缀化的资源字面量 ${BASE.slice(0, -1)}${p}（双重前缀根因，adapt 不得重写 _astro）`);
+        process.exit(1);
+      }
+    }
+  }
   {
     const b = fs.readFileSync(path.join(DIST, "bridge/bundle.js"), "utf8");
     for (const marker of ["createOctaveCore", "createOctaveAssets", "__octaveLanes"]) {
@@ -265,8 +283,11 @@ function cmdVerify() {
   );
   if (stale.length) problems.push(`HTML 仍有根绝对引用：${stale.slice(0, 3).join(", ")}`);
   if (!/<meta\s+name=["']site-base["']/i.test(idx)) problems.push("缺 <meta name=\"site-base\">");
-  // 部署 bundle 里任何 JS 字面量都不得以根绝对资源前缀开头（车道加载路径曾在此踩坑）
+  // 引擎/桥侧 JS 的字面量不得以根绝对资源前缀开头（adapt 已统一前缀化；漏网=子路径部署 404）。
+  // _astro（自有代码）豁免：其字面量运行期经 resolveUrl(base) 解析，必须保持根绝对形态
+  // （构建期重写它们 = 双重前缀 = 线上 404，081 号信实锤——上面有专门反向断言盯着）。
   const jsStale = walk(DIST, ".js").filter((f) => {
+    if (f.includes(`${path.sep}_astro${path.sep}`)) return false;
     const c = fs.readFileSync(f, "utf8");
     return JS_ASSET_PREFIXES.some((p) => ["`", "'", '"'].some((q) => c.includes(q + p)));
   });
