@@ -75,7 +75,7 @@
 *.wasm
 *.data
 # MSL 站内资产 (19.5MB zip) 同款纪律：由 pages.yml 构建期从 OM release 镜像（fail-loud + sha 锚）
-public/msl/
+public/assets/msl/
 *.oct
 node_modules/
 **/node_modules/

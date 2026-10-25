@@ -228,7 +228,7 @@ function cmdVerify() {
   // bridge 单 bundle（isui.ren 083-host 客户端杠杆 #1：12 发阻塞彩票 → 1 发）
   must.push("bridge/bundle.js");
   // MSL 站内资产（内容仓 084 A2：兄弟目录 msl/，单 zip；缺失/落错目录即红）
-  must.push("msl/msl-4.1.0-maint.om.zip");
+  must.push("assets/msl/msl-4.1.0-maint.om.zip");
   // 双重前缀防回归（081 号信）：_astro（自有代码）里的资源字面量不得被 adapt 前缀化——
   // 它们运行期经 resolveUrl 叠 base，构建期再叠 = 双重前缀 = 线上 404
   for (const file of walk(DIST, ".js")) {
