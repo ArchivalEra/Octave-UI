@@ -82,7 +82,8 @@ pnpm build:lanes
 - 闸门自证请运行：`sh gates-selftest.sh`
 - 17 道闸门运行：`. reflect-hooks/einfacht-env.sh && python3 zreflect/registry.py --run commit`
 - 交付契约：`node scripts/deploy-contract.mjs {base|adapt|verify}`（构建期重写根绝对引用 +
-  注入分片 shim + **bridge 12 脚本打包为单 bundle**——边缘挂起幸存率 (1-p)^12 → (1-p)）
+  注入分片 shim + **bridge 12 脚本打包为单 bundle**——边缘挂起幸存率 (1-p)^12 → (1-p)
+  + **fetch 守卫**（同源 GET 响应头 10s 超时 + 单次重试——挂起概率 p → p²，浏览器端 AbortController 完好）
 
 ## WebMCP 网桥
 

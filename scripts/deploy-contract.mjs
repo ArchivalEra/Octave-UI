@@ -98,6 +98,22 @@ function injectBaseSignal(html) {
   return { out, injected: true };
 }
 
+/**
+ * fetch 守卫（isui.ren 083-host 客户端杠杆 #2）：同源 GET 的**响应头** 10s 不至 ⇒
+ * abort 并重试一次（挂起型失败的单发概率 p → p²）。只看响应头——body 流式传输不受影响
+ * （大 wasm 的 142s 下载不会被误杀）；非 GET / 跨源 / 手动 signal 透传不动。
+ * 背景：边缘节点对冷缓存路径的回源 fetch 会无限挂起（8s 超时在 EdgeOne 中间件运行时
+ * 无效——AbortController 无法中断）；但**浏览器里** AbortController 完好，守卫在这里做。
+ */
+const FETCH_GUARD = `<script>\n(function(){\n  if (typeof window.fetch !== 'function' || typeof AbortController === 'undefined') return;\n  var HEAD_TIMEOUT_MS = 10000;\n  var orig = window.fetch;\n  window.fetch = function(input, init) {\n    try {\n      var url = (typeof input === 'string') ? input : (input && input.url) || '';\n      var sameOrigin = url.indexOf('/') === 0 || (typeof location !== 'undefined' && url.indexOf(location.origin) === 0);\n      var method = (init && init.method) || (input && input.method) || 'GET';\n      var hasSignal = !!(init && init.signal);\n      if (!sameOrigin || String(method).toUpperCase() !== 'GET' || hasSignal) return orig.apply(this, arguments);\n    } catch (e) { return orig.apply(this, arguments); }\n    var self = this, args = arguments;\n    function once() {\n      var ctrl = new AbortController();\n      var timer = setTimeout(function() { ctrl.abort(); }, HEAD_TIMEOUT_MS);\n      return orig.call(self, args[0], Object.assign({}, args[1] || {}, { signal: ctrl.signal })).then(\n        function(res) { clearTimeout(timer); return res; },\n        function(err) { clearTimeout(timer); throw err; }\n      );\n    }\n    return once().catch(function(err) {\n      var aborted = err && (err.name === 'AbortError' || /aborted/i.test(String(err && err.message || err)));\n      if (!aborted) throw err;\n      return once(); // 仅对「头超时被我们 abort」的做一次重试；网络错误原样抛\n    });\n  };\n})();\n</script>`;
+
+function injectFetchGuard(html) {
+  if (html.includes("__octaveFetchGuard")) return html;
+  const idx = html.indexOf("</head>");
+  if (idx === -1) return html;
+  return `${html.slice(0, idx)}<script>window.__octaveFetchGuard=1;</script>\n${FETCH_GUARD}\n${html.slice(idx)}`;
+}
+
 function cmdAdapt() {
   const names = fs
     .readdirSync(DIST, { withFileTypes: true })
@@ -119,6 +135,7 @@ function cmdAdapt() {
     const bs = injectBaseSignal(html);
     if (bs.injected && bs.out !== html) baseSignals += 1;
     html = bs.out;
+    html = injectFetchGuard(html);
     if (html !== before) fs.writeFileSync(file, html);
   }
 
@@ -193,6 +210,10 @@ function cmdVerify() {
       }
     }
     const idxHtml = fs.readFileSync(path.join(DIST, "index.html"), "utf8");
+    if (!idxHtml.includes("__octaveFetchGuard")) {
+      console.error("[contract:verify] index.html 缺 fetch 守卫（adapt 注入未生效？）");
+      process.exit(1);
+    }
     if (!idxHtml.includes("bridge/bundle.js")) {
       console.error('[contract:verify] index.html 未引用 bridge/bundle.js（adapt 打包未生效？）');
       process.exit(1);
