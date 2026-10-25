@@ -108,9 +108,10 @@ describe('WebMcpPlugin Deep Module', () => {
   });
 
   describe('Tool Registry & Schemas', () => {
-    it('lists 6 core autonomous agent tools', async () => {
+    // 7 条（内容仓 093 裁定 A：omc 工具族按 provision 自然生长；本工具经逐条显式确认）
+    it('lists 7 tools (6 octave + omc_load_msl)', async () => {
       const tools = await plugin.listTools();
-      expect(tools.length).toBe(6);
+      expect(tools.length).toBe(7);
       const names = tools.map((t) => t.name).sort();
       expect(names).toEqual([
         'octave_eval',
@@ -119,6 +120,7 @@ describe('WebMcpPlugin Deep Module', () => {
         'octave_install_package',
         'octave_list_packages',
         'octave_run_cell',
+        'omc_load_msl',
       ]);
     });
 
@@ -260,7 +262,7 @@ describe('WebMcpPlugin Deep Module', () => {
 
       expect(readyDetail).not.toBeNull();
       expect(readyDetail.pluginId).toBe('webmcp');
-      expect(readyDetail.tools.length).toBe(6);
+      expect(readyDetail.tools.length).toBe(7); // 6 octave + omc_load_msl（内容仓 093 裁定 A）
     });
 
     it('responds to webmcp:call events with webmcp:response', async () => {

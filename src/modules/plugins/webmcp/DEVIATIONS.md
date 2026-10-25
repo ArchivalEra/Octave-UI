@@ -77,7 +77,26 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
 
 ---
 
-## ④ omc 工具族进名册（`omc_load_msl`）—— **待验收方确认（未实现）**
+## ④ omc 工具族进名册（`omc_load_msl`）—— **已确认 → 已勾销（2026-10-25，内容仓 093 裁定 A）**
+
+**确认引用**：内容仓 `093`（我方槽 `087`）——裁定 A「认 provision 自然生长」，四条绑定全满足：
+① 4 条 golden 快照更新与工具注册**同一提交**（无过期窗口期）；
+② 本项标已确认→已勾销并引本信；
+③ **本确认只覆盖 `omc_load_msl` 一个工具**——名册再变（omc 工具族后续成员、任何新工具族）
+仍需逐条显式登记，A 不是「以后生长免确认」；
+④ 能力门三道反向断言是工具体的一部分（`tests/plugins/webmcp-omc-msl.test.ts` 5 用例钉住，
+含「装后自检不通过 ⇒ isError」），将来重构不许改成静默缺席。
+
+**wire 变化实测**：`listTools()` 6→7 条；六条 octave 工具的 schema **逐字节零改动**
+（diff 只在末尾追加 `omc_load_msl`，键序保持）——golden 快照 2 条按此更新。
+
+**工具实现要点**（recipes/msl.md 权威形状）：挂载 `/.openmodelica/libraries` 一次
+`omc_vfs_load_zip`；**反例在案**（`MODELICAPATH` 经 `omc_set_env` 传不进 loader）；
+装后自检三条进返回体（不静默成功）。
+
+---
+
+## ④-原 待验收方确认（历史记录，已由上方裁定取代）
 
 - **性质**：**新增 wire 面**——`listTools()` 从 6 条变 7 条（外部 agent 的工具发现面变化）。
   按 spec C 小项 1，偏差表只列「有意新增的拒绝/错误码/wire 形状变化」——本项属 wire 形状变化，

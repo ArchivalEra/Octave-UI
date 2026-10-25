@@ -67,7 +67,7 @@ pnpm build:lanes
 - `./IllegalPerformance/`：激进 wasm64 性能先锋车道（带 Rust 排序内核）
 - OMC 双引擎资产（`/omc/`，74.5MB wasm）：CI 构建期从 [OpenModelica-Full-Wasm release](https://github.com/ArchivalEra/OpenModelica-Full-Wasm/releases/tag/v0.1.0-wasm32)（public，mail/076 产地裁定）拉取并 sha256 校验（fail-loud）；`.gz` 预压缩对由 deploy-contract verify 断言
 - MSL 站内资产（`/assets/msl/msl-4.1.0-maint.om.zip`，19.5MB）：同款 fail-loud 镜像（锚 OM 台账 `msl_asset_sha`）；落位**以宿主 catalog 的 url 字段为权威**（`assets/msl/`，兄弟目录不混入 `omc/`——否则引擎 tree 闭包预算虚胀 ~19.5MB）
-- `form:"file"` 单件交付（MSL 形状）：下载层已支持（条目 url+size+sha 三件齐即下单件计划，缺一即响亮拒）；omc 工具族 `omc_load_msl` 已实现但**名册注册待 wire 面裁定**（见 webmcp/DEVIATIONS.md ④）
+- `form:"file"` 单件交付（MSL 形状）：下载层已支持（条目 url+size+sha 三件齐即下单件计划，缺一即响亮拒）；omc 工具族 `omc_load_msl` 已上线（内容仓 093 裁定 A：provision 自然生长，`listTools()` 6→7；能力门三道反向断言钉住）
 
 
 ## 事实系统与纪律

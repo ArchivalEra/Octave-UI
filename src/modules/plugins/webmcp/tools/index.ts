@@ -11,6 +11,7 @@ import { octaveGetWorkspaceTool } from './octaveGetWorkspace';
 import { octaveListPackagesTool } from './octaveListPackages';
 import { octaveInstallPackageTool } from './octaveInstallPackage';
 import { octaveGetSystemStateTool } from './octaveGetSystemState';
+import { omcLoadMslTool } from './omcLoadMsl';
 
 export const octaveToolTable: readonly WebMcpToolSpec[] = [
   octaveEvalTool,
@@ -19,4 +20,6 @@ export const octaveToolTable: readonly WebMcpToolSpec[] = [
   octaveListPackagesTool,
   octaveInstallPackageTool,
   octaveGetSystemStateTool,
+  // omc 车道工具族（内容仓 093 裁定 A：provision 自然生长，逐条显式确认）
+  omcLoadMslTool,
 ];

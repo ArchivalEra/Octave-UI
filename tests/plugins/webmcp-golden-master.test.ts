@@ -647,7 +647,7 @@ describe('WebMCP golden master (step 0, recorded against old implementation)', (
   // =========================================================================
 
   describe('C. protocol level', () => {
-    it('listTools() full response: 6 tool schemas with key order (builder must be byte-identical)', async () => {
+    it('listTools() full response: 7 tool schemas with key order (6 octave byte-identical + omc_load_msl appended)', async () => {
       const tools = await plugin.listTools();
       expect(JSON.stringify(normalizeForGolden(tools))).toMatchSnapshot();
     });
