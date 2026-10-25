@@ -74,6 +74,8 @@
 # 注意：*.wasm 排除大文件进 git 树；OMC wasm (74.5MB) 遵循同源托管契约 (mail/053)，由 pages.yml / sync-lanes.sh 构建期从 site-omc 同步
 *.wasm
 *.data
+# MSL 站内资产 (19.5MB zip) 同款纪律：由 pages.yml 构建期从 OM release 镜像（fail-loud + sha 锚）
+public/msl/
 *.oct
 node_modules/
 **/node_modules/

@@ -96,6 +96,18 @@ jobs:
             "https://github.com/ArchivalEra/OpenModelica-Full-Wasm/releases/download/v0.1.0-wasm32/OpenModelicaCompiler_bg.wasm"
           echo "8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001  public/omc/OpenModelicaCompiler_bg.wasm" | sha256sum -c -
 
+      # ── MSL 站内资产镜像（内容仓 084 A2 裁定：form:"file" 单 zip，落**兄弟目录** msl/，
+      # 不混进 omc/——引擎 form:"tree" 的 size 是目录字节和，混入会虚胀 ~19.5MB 闭包预算）。
+      # 锚 = OM 台账键 msl_asset_sha / msl_asset_bytes（fail-closed，同引擎模式）。
+      - name: Sync MSL asset (release asset, sha-pinned)
+        run: |
+          set -euo pipefail
+          mkdir -p public/msl
+          curl -fL --retry 3 -o public/msl/msl-4.1.0-maint.om.zip \
+            "https://github.com/ArchivalEra/OpenModelica-Full-Wasm/releases/download/v0.1.0-wasm32/msl-4.1.0-maint.om.zip"
+          echo "a97d8d94ca7f7960f7f1c209613a35d65bcfa2426660e5052617e71326308535  public/msl/msl-4.1.0-maint.om.zip" | sha256sum -c -
+          test "$(stat -c%s public/msl/msl-4.1.0-maint.om.zip)" = "19482938"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
