@@ -74,3 +74,21 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
 - **落点**：defineTool 增 capability 可选字段（收窄 ctx 同 Pick 面）；dispatcher 在
   校验之后、超时壳之前执行；omc 软依赖路径用 supervisor 模拟（catalog 无 omc 条目前的
   等价物——验收方 068 提示的路径）。
+
+---
+
+## ④ omc 工具族进名册（`omc_load_msl`）—— **待验收方确认（未实现）**
+
+- **性质**：**新增 wire 面**——`listTools()` 从 6 条变 7 条（外部 agent 的工具发现面变化）。
+  按 spec C 小项 1，偏差表只列「有意新增的拒绝/错误码/wire 形状变化」——本项属 wire 形状变化，
+  **必须显式登记并经验收方确认**，不得以「加工具是正常生长」为由悄悄改 golden。
+- **依据**：内容仓 `086` 裁定 #4「MSL 供给面 + WebMCP 工具族**即刻可开工**」；spec 用户故事 13
+  「第二引擎工具按 provision 加前缀自然生长」。
+- **实现现状**：工具体已写（`tools/omcLoadMsl.ts`，含 recipes/msl.md 的挂载形状 + 反例注释 +
+  装后自检三条），**但未注册进名册**——注册即触发 4 条 golden 快照变化
+  （`listTools` 6→7、`ready.detail.tools ≡ listTools`），已实测。
+- **需要裁定**：① 认可这是「provision 自然生长」的正当 wire 变化（则更新 golden 4 条快照，
+  本项标「已确认→已勾销」）；② 或要求 omc 工具族走**独立 provision 开关**（默认不进
+  octave 面名册，避免 octave-only 构建的工具面被 omc 工具污染）。
+- **反向断言已备**：缺 packageManager ⇒ `CAPABILITY_UNAVAILABLE`；catalog 无 MSL 条目 ⇒ 明说
+  未找到；`window.__omc` 缺席 ⇒ `CAPABILITY_UNAVAILABLE`（不冒充成功）。

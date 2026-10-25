@@ -778,3 +778,66 @@ describe('DownloadStore Deep Module', () => {
     }
   });
 });
+
+
+describe('form:"file" 单件交付（内容仓 084 A2 / 086 裁定：MSL 形状）', () => {
+  const mslEntry = {
+    name: 'modelica-standard-library',
+    version: '4.1.0+maint.om',
+    form: 'file',
+    sha256: 'a97d8d94ca7f7960f7f1c209613a35d65bcfa2426660e5052617e71326308535',
+    url: 'assets/msl/msl-4.1.0-maint.om.zip',
+    size: 19482938,
+    content: [],
+    consumer: ['omc'],
+    role: 'package',
+    deps: [],
+  };
+
+  it('★ file 形态：url/size/sha 三件齐 ⇒ 单件下载计划（无 arch 也走通）', async () => {
+    const store = new DownloadStore({
+      storage: new MemoryStore(),
+      catalogProvider: () => ({ schema: 2, packs: [mslEntry] }),
+      baseUrl: '',
+      fetchPort: {
+        fetchBytes: async () => ({
+          ok: true,
+          status: 200,
+          data: new Uint8Array(19482938),
+          sha256: mslEntry.sha256,
+          totalBytes: 19482938,
+        }),
+        fetchJSON: async () => ({}),
+      } as any,
+    });
+    const rec = await store.download({ name: 'modelica-standard-library', version: '4.1.0+maint.om', kind: 'pre', arch: null });
+    expect(rec.files.length).toBe(1);
+    expect(rec.files[0].path).toBe('downloads/file/modelica-standard-library/4.1.0+maint.om/msl-4.1.0-maint.om.zip');
+    expect(rec.files[0].sha256).toBe(mslEntry.sha256);
+    expect(rec.bytes).toBe(19482938);
+  });
+
+  it('★ 反向断言：file 条目缺 sha256 ⇒ 响亮 FLAVOR_UNAVAILABLE（不猜、不静默）', async () => {
+    const broken = { ...mslEntry, sha256: undefined };
+    const store = new DownloadStore({
+      storage: new MemoryStore(),
+      catalogProvider: () => ({ schema: 2, packs: [broken as any] }),
+      baseUrl: '',
+    });
+    await expect(
+      store.download({ name: 'modelica-standard-library', version: '4.1.0+maint.om', kind: 'pre', arch: null })
+    ).rejects.toMatchObject({ code: 'FLAVOR_UNAVAILABLE' });
+  });
+
+  it('★ 反向断言：file 条目缺 size ⇒ 同报（三件缺一即拒）', async () => {
+    const broken = { ...mslEntry, size: undefined };
+    const store = new DownloadStore({
+      storage: new MemoryStore(),
+      catalogProvider: () => ({ schema: 2, packs: [broken as any] }),
+      baseUrl: '',
+    });
+    await expect(
+      store.download({ name: 'modelica-standard-library', version: '4.1.0+maint.om', kind: 'pre', arch: null })
+    ).rejects.toMatchObject({ code: 'FLAVOR_UNAVAILABLE' });
+  });
+});

@@ -726,6 +726,28 @@ export class DownloadStore {
       throw new DownloadError('VERSION_WITHHELD', `Package ${ref.name} not found in catalog`);
     }
 
+    // form:"file" 单件交付（内容仓 084 A2 / 086 裁定）：条目自带 url + size + sha256 三件，
+    // 解压发生在运行期（omc_vfs_load_zip），站点侧就是一个文件 ⇒ 无 arch、无 artifacts[]。
+    // 判据：表单形态 + 三件齐（缺一即如实报 FLAVOR_UNAVAILABLE，不猜）。
+    if ((pkg as any).form === 'file') {
+      const item = pkg as any;
+      if (!item.url || typeof item.size !== 'number' || !item.sha256) {
+        throw new DownloadError(
+          'FLAVOR_UNAVAILABLE',
+          `File-form package ${ref.name} is missing url/size/sha256 (catalog entry incomplete)`
+        );
+      }
+      const filename = String(item.url).split('/').pop() || `${ref.name}-${ref.version}.zip`;
+      const url = this.resolveUrl(item.url);
+      const destPath = `downloads/file/${ref.name}/${ref.version}/${filename}`;
+      return {
+        sha256: item.sha256,
+        bytes: item.size,
+        provenanceUrl: url,
+        items: [{ filename, url, destPath, sha256: item.sha256 }],
+      };
+    }
+
     if (!ref.arch) {
       throw new DownloadError('FLAVOR_UNAVAILABLE', `Precompiled package ${ref.name} requires an arch`);
     }
