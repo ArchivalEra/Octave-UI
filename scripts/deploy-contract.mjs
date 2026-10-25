@@ -10,7 +10,7 @@
  *
  * 三条子命令（都幂等，重复跑无副作用）：
  *   base    构建前：把 astro base 钉成部署路径 /repo/Octave/
- *   adapt   构建后：重写产物里遗漏的根绝对引用 + 注入 5MB 分片 shim
+ *   adapt   构建后：重写产物里遗漏的根绝对引用 + 注入 5MB 分片 shim + bridge 打包
  *   verify  构建后：断言产物齐备且形态正确（缺一即失败，绝不推半个站）
  *
  * 用法：node scripts/deploy-contract.mjs {base|adapt|verify}
@@ -132,8 +132,40 @@ function cmdAdapt() {
       jsFixed += n;
     }
   }
+  // ── bridge 打包（isui.ren 站侧 083-host 裁定后的客户端杠杆 #1）──
+  // 12 个 <head> 阻塞脚本 × 每发都有边缘挂起概率 ⇒ 整页幸存率 (1-p)^12。合并为单
+  // bundle 后降为 1 发彩票。语义等价性依据（2026-10-25 亲验）：12 个脚本零按名互引
+  // （grep 命中全为注释）、纯全局交互、只有加载顺序依赖——按 dist/index.html 现序
+  // 顺序拼接即等价。本地 dev 不经此路径（astro dev 直接吃 12 文件），只有 dist 产物打包。
+  let bundled = 0;
+  const BRIDGE_ORDER = [
+    "assets-loader.js", "queue.js", "p5canvas.js", "webaudio.js", "webaudiorec.js",
+    "webfilepick.js", "webnet.js", "octave-core.js", "octave-page.js", "octave-embed.js",
+    "lanes.js", "lane.js",
+  ];
+  const bridgeDir = path.join(DIST, "bridge");
+  if (fs.existsSync(bridgeDir) && BRIDGE_ORDER.every((n) => fs.existsSync(path.join(bridgeDir, n)))) {
+    const sep = "\n;;;\n"; // 拼接分隔：空语句防上一文件末尾缺分号时粘连
+    const bundle = BRIDGE_ORDER.map((n) => fs.readFileSync(path.join(bridgeDir, n), "utf8")).join(sep);
+    fs.writeFileSync(path.join(bridgeDir, "bundle.js"), bundle);
+    // HTML：12 个独立 <script src>（允许其间有属性变体）替换为单 bundle 标签
+    for (const file of walk(DIST, ".html")) {
+      let html = fs.readFileSync(file, "utf8");
+      const esc = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const tags = BRIDGE_ORDER.map(
+        (n) => `<script[^>]*src="(?:${esc(BASE)})?bridge/${esc(n)}"[^>]*><\/script>`,
+      ).join("\\s*");
+      const reBundle = new RegExp(tags, "g");
+      if (reBundle.test(html)) {
+        html = html.replace(reBundle, `<script src="${BASE}bridge/bundle.js"></script>`);
+        fs.writeFileSync(file, html);
+        bundled += 1;
+      }
+    }
+  }
+
   console.log(
-    `[contract:adapt] HTML 属性 ${rewrote} 处；JS 字面量 ${jsFixed} 处；base 信号 ${baseSignals} 页`,
+    `[contract:adapt] HTML 属性 ${rewrote} 处；JS 字面量 ${jsFixed} 处；base 信号 ${baseSignals} 页；bridge 打包 ${bundled} 页`,
   );
 }
 
@@ -150,6 +182,22 @@ function cmdVerify() {
   for (const lane of LANES) must.push(`lanes/${lane}/octave.js`, `lanes/${lane}/w64/octave.js`);
   // OMC 同源托管件（2026-10-24：旧 CI 本机路径静默跳过曾致线上 404——缺件必须红）
   must.push("omc/OpenModelicaCompiler_bg.wasm", "omc/OpenModelicaCompiler.js");
+  // bridge 单 bundle（isui.ren 083-host 客户端杠杆 #1：12 发阻塞彩票 → 1 发）
+  must.push("bridge/bundle.js");
+  {
+    const b = fs.readFileSync(path.join(DIST, "bridge/bundle.js"), "utf8");
+    for (const marker of ["createOctaveCore", "createOctaveAssets", "__octaveLanes"]) {
+      if (!b.includes(marker)) {
+        console.error(`[contract:verify] bridge/bundle.js 缺标记 ${marker}（拼接不完整？）`);
+        process.exit(1);
+      }
+    }
+    const idxHtml = fs.readFileSync(path.join(DIST, "index.html"), "utf8");
+    if (!idxHtml.includes("bridge/bundle.js")) {
+      console.error('[contract:verify] index.html 未引用 bridge/bundle.js（adapt 打包未生效？）');
+      process.exit(1);
+    }
+  }
   const missing = must.filter((rel) => !fs.existsSync(path.join(DIST, rel)));
   // 大件 .gz 对（gzip_static 直供前提）：wasm/data 必压缩——文本小件由边缘/源站兜底亦可
   const gzMust = [
