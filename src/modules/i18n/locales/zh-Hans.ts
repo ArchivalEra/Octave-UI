@@ -90,7 +90,6 @@ const _zhHans = {
   'boot.runtime_mode_label': '运行档位：',
   'boot.runtime_mode_val': 'WebAssembly 本地计算内核',
   'boot.asset_size_label': '资产体量：',
-  'boot.asset_size_val': '按需加载 (静态交付)',
   'boot.data_privacy_label': '数据隐私：',
   'boot.data_privacy_val': '代码与数据完全驻留本机内存与 IDBFS，不向云端外传',
   'boot.status_ready': '准备就绪，点击下方按钮开始按需加载。',
@@ -478,6 +477,12 @@ const _zhHans = {
   'omc.status_simulating': 'OMC 仿真计算中...',
   'omc.clear_console': '清空输出',
   'omc.run_sample': '载入并仿真弹跳球模型',
+
+  // Common（跨组件共享：车道体量显示，BootModal 与 HeaderBar 共用）
+  // 数值来自构建期注入 __LANE_SIZES__（真源 = octave.build.json measured.files 求和），
+  // 真源缺失时显示显式降级文案——绝不显示编造的数字。
+  'common.asset_size_mb': '~{mb} MB',
+  'common.asset_size_unavailable': '体量数据缺失',
 } as const;
 
 export const zhHans: EnsureParity<typeof _zhHans> & LocaleDictionary = _zhHans;

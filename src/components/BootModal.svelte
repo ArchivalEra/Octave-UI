@@ -1,6 +1,7 @@
 <!-- src/components/BootModal.svelte -->
 <script lang="ts">
   import { supervisor, projectWorkspace, t } from '../modules/appContext';
+  import { formatAssetSize, getLaneSizeBytes } from '../modules/engine/laneSizes';
 
   let { isOpen = false, onClose } = $props<{
     isOpen?: boolean;
@@ -27,31 +28,31 @@
     return unsub;
   });
 
+  // 体量（size）不再逐档写死：三个车道的显示值统一经 getLaneSizeBytes 取
+  // 构建期注入的真源（octave.build.json measured.files 求和），真源缺失 ⇒
+  // formatAssetSize 显式显示降级文案。此前的 ~39.3/~40.7 MB 是编造的历史值
+  // （实测三车道字节完全相同），已退役——tests/engine/laneSizes.test.ts 守回归。
   const laneInfo = $derived.by(() => {
     switch (activeLane) {
       case 'wasm32-final':
         return {
           name: 'wasm32-final',
           mode: t('boot.mode_wasm32'),
-          size: '~39.3 MB',
         };
       case 'master':
         return {
           name: 'master',
           mode: t('boot.mode_master'),
-          size: '~40.7 MB',
         };
       case 'IllegalPerformance':
         return {
           name: 'IllegalPerformance',
           mode: t('boot.mode_illegal'),
-          size: '~40.7 MB',
         };
       default:
         return {
           name: activeLane,
           mode: `${activeLane} ${t('boot.mode_suffix')}`,
-          size: t('boot.asset_size_val'),
         };
     }
   });
@@ -109,7 +110,7 @@
           </div>
           <div class="info-item">
             <span class="label">{t('boot.asset_size_label')}</span>
-            <span class="val">{laneInfo.size}</span>
+            <span class="val">{formatAssetSize(getLaneSizeBytes(activeLane), t)}</span>
           </div>
           <div class="info-item">
             <span class="label">{t('boot.data_privacy_label')}</span>

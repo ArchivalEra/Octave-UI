@@ -90,7 +90,6 @@ const _de = {
   'boot.runtime_mode_label': 'Laufzeitmodus:',
   'boot.runtime_mode_val': 'WebAssembly Lokaler Rechenkern',
   'boot.asset_size_label': 'Asset-Größe:',
-  'boot.asset_size_val': 'Laden nach Bedarf (Statische Bereitstellung)',
   'boot.data_privacy_label': 'Datenschutz:',
   'boot.data_privacy_val': 'Code und Daten verbleiben lokal im Speicher und IDBFS und werden nie in die Cloud übertragen',
   'boot.status_ready': 'Bereit. Klicken Sie auf die Schaltfläche unten, um das Laden nach Bedarf zu starten.',
@@ -477,6 +476,12 @@ const _de = {
   'omc.status_simulating': 'OMC Simuliert...',
   'omc.clear_console': 'Ausgabe leeren',
   'omc.run_sample': 'BouncingBall laden & simulieren',
+
+  // Common（跨组件共享：车道体量显示，BootModal 与 HeaderBar 共用）
+  // 数值来自构建期注入 __LANE_SIZES__（真源 = octave.build.json measured.files 求和），
+  // 真源缺失时显示显式降级文案——绝不显示编造的数字。
+  'common.asset_size_mb': '~{mb} MB',
+  'common.asset_size_unavailable': 'Größendaten nicht verfügbar',
 } as const;
 
 export const de: EnsureParity<typeof _de> & LocaleDictionary = _de;

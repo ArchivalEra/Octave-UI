@@ -74,6 +74,7 @@ vi.mock('../../src/modules/appContext', () => ({
 
 const HeaderBar = (await import('../../src/components/HeaderBar.svelte')).default;
 const { EngineAssetResolver } = await import('../../src/modules/engine/EngineAssetResolver');
+const { setLaneSizeBytes } = await import('../../src/modules/engine/laneSizes');
 
 type Integrity = 'verified' | 'corrupted' | 'unchecked';
 
@@ -151,6 +152,7 @@ beforeEach(() => {
   document.body.innerHTML = '';
   i18n.setLocale('en');
   statusByLane = {};
+  setLaneSizeBytes({});
   EngineAssetResolver.setInstance(resolverDouble as any);
 });
 
@@ -271,6 +273,72 @@ describe('HeaderBar 引擎徽标三态（spec #19 红线 2）', () => {
         expect(text).toContain(word);
         expect(text).not.toContain('✓');
       }
+    }
+
+    teardown(ctx);
+  });
+});
+
+// ── 车道体量显示 = 真源的函数（fix/lane-sizes）───────────────────────────────
+// 判据落在 .size-hint 的可见文本上：注入真源变 ⇒ 显示变（对修复前写死
+// ~39.3/~40.7MB 的代码必红）；真源缺失 ⇒ 显式降级文案，不出现编造数字。
+describe('HeaderBar 车道体量显示（fix/lane-sizes）', () => {
+  it('注入真源 ⇒ 每档 size-hint 各自显示自己的字节（per-lane 映射）', async () => {
+    setLaneSizeBytes({
+      'wasm32-final': 1024 * 1024,
+      master: 2 * 1024 * 1024,
+      IllegalPerformance: 3 * 1024 * 1024,
+    });
+    const ctx = mountHeader();
+    await flush();
+    await openMenu(ctx.target);
+
+    const hints = Array.from(ctx.target.querySelectorAll('.lane-meta-row .size-hint')).map(
+      (el) => (el.textContent || '').trim()
+    );
+    // 前 3 个 = Octave 三档（来自注入真源），第 4 个 = OMC（已登记手写遗留）
+    expect(hints).toEqual(['~1.0 MB', '~2.0 MB', '~3.0 MB', '~74.6MB']);
+
+    teardown(ctx);
+  });
+
+  it('真源变 ⇒ 显示跟着变（同一批组件重新渲染取新值）', async () => {
+    setLaneSizeBytes({ 'wasm32-final': 39807224, master: null, IllegalPerformance: null });
+    let ctx = mountHeader();
+    await flush();
+    await openMenu(ctx.target);
+    let hints = Array.from(ctx.target.querySelectorAll('.lane-meta-row .size-hint')).map(
+      (el) => (el.textContent || '').trim()
+    );
+    expect(hints[0]).toBe('~38.0 MB');
+    teardown(ctx);
+
+    setLaneSizeBytes({ 'wasm32-final': 5 * 1024 * 1024, master: null, IllegalPerformance: null });
+    ctx = mountHeader();
+    await flush();
+    await openMenu(ctx.target);
+    hints = Array.from(ctx.target.querySelectorAll('.lane-meta-row .size-hint')).map(
+      (el) => (el.textContent || '').trim()
+    );
+    expect(hints[0]).toBe('~5.0 MB');
+    teardown(ctx);
+  });
+
+  it('真源缺失 ⇒ 显式降级文案，不编一个数（无 MB、无 ~）', async () => {
+    setLaneSizeBytes({}); // 裸构建：什么都没注入
+    const ctx = mountHeader();
+    await flush();
+    await openMenu(ctx.target);
+
+    const hints = Array.from(ctx.target.querySelectorAll('.lane-meta-row .size-hint')).map(
+      (el) => (el.textContent || '').trim()
+    );
+    // 前 3 个（Octave 档）降级；第 4 个是 OMC 已登记手写遗留
+    expect(hints.length).toBe(4);
+    for (const text of hints.slice(0, 3)) {
+      expect(text).toBe(t('common.asset_size_unavailable'));
+      expect(text).not.toMatch(/MB/);
+      expect(text).not.toContain('~');
     }
 
     teardown(ctx);
