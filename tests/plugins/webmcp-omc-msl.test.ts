@@ -87,12 +87,17 @@ describe('omc_load_msl 能力门（内容仓 093 绑定④：不许退化成静�
 
   it('★ ④ 全绿路径：走 omc_vfs_load_zip(默认库目录) 且返回体带装后自检（不静默成功）', async () => {
     const calls: Array<{ path: string; bytes: number }> = [];
+    // ★ 产物真实面（D12：omc_loadModel/omc_getVersion 不存在——只有 omc_eval）
     (window as any).__omc = {
       omc_vfs_load_zip: async (path: string, bytes: Uint8Array) => {
         calls.push({ path, bytes: bytes.length });
       },
-      omc_loadModel: async (n: string) => n === 'Modelica',
-      omc_getVersion: async () => '4.1.0',
+      omc_eval: async (expr: string) => {
+        if (expr === 'loadModel(Modelica)') return 'true';
+        if (expr === 'getVersion(Modelica)') return '"4.1.0"'; // 实测带引号
+        if (expr === 'loadModel(NoSuchPackageXYZ)') return 'false';
+        return 'false';
+      },
     };
     const res = await dispatchTool(
       [omcLoadMslTool],
@@ -115,8 +120,7 @@ describe('omc_load_msl 能力门（内容仓 093 绑定④：不许退化成静�
   it('★ ⑤ 反向：装后自检不通过 ⇒ isError true（不静默成功）', async () => {
     (window as any).__omc = {
       omc_vfs_load_zip: async () => {},
-      omc_loadModel: async () => false, // 装失败（正向 false）
-      omc_getVersion: async () => null,
+      omc_eval: async () => 'false', // 装载真失败：loadModel 返回 false
     };
     const res = await dispatchTool(
       [omcLoadMslTool],
@@ -125,5 +129,65 @@ describe('omc_load_msl 能力门（内容仓 093 绑定④：不许退化成静�
       {},
     );
     expect(res.isError).toBe(true);
+  });
+});
+
+describe('D12 回归锁：自检必须调产物里存在的 API（内容仓 096）', () => {
+  const okEval = async (expr: string) =>
+    expr === 'loadModel(Modelica)' ? 'true' : expr === 'getVersion(Modelica)' ? '"4.1.0"' : 'false';
+
+  it('★ 完整成功路径：omc_eval 面 ⇒ isError false（此前必然报失败）', async () => {
+    (window as any).__omc = { omc_vfs_load_zip: async () => '4376', omc_eval: okEval };
+    const res = await dispatchTool(
+      [omcLoadMslTool],
+      resolverWith({ packageManager: fakePm({ ...mslEntry, url: 'assets/msl/msl-4.1.0-maint.om.zip' }) }),
+      'omc_load_msl',
+      {},
+    );
+    expect(res.isError).toBeFalsy();
+    const data = (res.content[0] as any).data;
+    expect(data.selfCheck.loadModel).toBe(true);
+    expect(data.selfCheck.version).toBe('4.1.0');   // 引号已去
+    expect(data.selfCheck.negative).toBe(false);
+  });
+
+  it('★ 版本不符 ⇒ isError true（version 参与判据）', async () => {
+    (window as any).__omc = {
+      omc_vfs_load_zip: async () => '0',
+      omc_eval: async (e: string) => (e === 'getVersion(Modelica)' ? '"3.2.3"' : e === 'loadModel(Modelica)' ? 'true' : 'false'),
+    };
+    const res = await dispatchTool([omcLoadMslTool], resolverWith({ packageManager: fakePm(mslEntry) }), 'omc_load_msl', {});
+    expect(res.isError).toBe(true);
+  });
+
+  it('★ 运行时无 omc_eval ⇒ 明确报「API 缺口」而非冒充装载失败（096 §3 第 3 条）', async () => {
+    (window as any).__omc = { omc_vfs_load_zip: async () => '0' }; // 无 omc_eval
+    const res = await dispatchTool([omcLoadMslTool], resolverWith({ packageManager: fakePm(mslEntry) }), 'omc_load_msl', {});
+    expect(res.isError).toBe(true);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain('omc_eval');
+    expect(text).toContain('not a load failure');
+  });
+
+  it('★ 自检单条异常不污染其它条（probeError 与装载结果分开记）', async () => {
+    (window as any).__omc = {
+      omc_vfs_load_zip: async () => '0',
+      omc_eval: async (e: string) => {
+        if (e === 'getVersion(Modelica)') throw new Error('probe boom');
+        return e === 'loadModel(Modelica)' ? 'true' : 'false';
+      },
+    };
+    const res = await dispatchTool([omcLoadMslTool], resolverWith({ packageManager: fakePm(mslEntry) }), 'omc_load_msl', {});
+    const data = (res.content[0] as any).data;
+    expect(data.selfCheck.loadModel).toBe(true);      // 其它条照常求值
+    expect(data.selfCheck.probeError).toContain('probe boom');
+  });
+
+  it('★ 条目缺 url ⇒ 如实报（不猜文件名——096 §4.2）', async () => {
+    (window as any).__omc = { omc_vfs_load_zip: async () => '0', omc_eval: okEval };
+    const noUrl = { ...mslEntry }; delete (noUrl as any).url;
+    const res = await dispatchTool([omcLoadMslTool], resolverWith({ packageManager: fakePm(noUrl) }), 'omc_load_msl', {});
+    expect(res.isError).toBe(true);
+    expect((res.content[0] as any).text).toContain('has no url');
   });
 });

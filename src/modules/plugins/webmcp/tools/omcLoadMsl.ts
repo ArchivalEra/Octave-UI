@@ -68,8 +68,18 @@ export const omcLoadMslTool = defineTool<'packageManager'>({
     // 3) 取字节：走站点同源 url（条目自带 url+size+sha256，三件齐；DownloadStore 的
     //    form:"file" 分支负责持久化下载，本工具只做「装进运行时」这一步）
     let zipBytes: Uint8Array;
+    // 条目缺 url 就如实报（内容仓 096 §4.2：不猜文件名——`modelica-standard-library.zip`
+    // 是编的，真实资产是 `msl-4.1.0-maint.om.zip`）
+    if (!entry.url) {
+      return {
+        isError: true,
+        content: [
+          { type: 'text', text: `Error: catalog entry "${MSL_PACKAGE_NAME}" has no url (cannot locate the asset).` },
+        ],
+      };
+    }
     try {
-      const url = entry.url || `assets/msl/${MSL_PACKAGE_NAME}.zip`;
+      const url = entry.url;
       const base = (typeof document !== 'undefined' && document.querySelector('meta[name="site-base"]')?.getAttribute('content')) || '';
       const res = await fetch(`${base}${url.startsWith('/') ? url.slice(1) : url}`);
       if (!res.ok) throw new Error(`fetch ${res.status}`);
@@ -92,17 +102,60 @@ export const omcLoadMslTool = defineTool<'packageManager'>({
     }
 
     // 5) 装后自检（recipes/msl.md 三条判据）
+    //
+    // ★ D12（内容仓 096）：此前用 `omc.omc_loadModel(...)` / `omc.omc_getVersion(...)`——
+    // **这两个函数在产物里不存在**（`.d.ts` 导出面实测只有 omc_eval / omc_vfs_load_zip /
+    // omc_init / omc_set_* / omc_sim_*；OM 探针 site-omc/msl-local.html:44-52 的权威用法是
+    // `omc_eval('loadModel(Modelica)')`）。调用不存在的 API ⇒ TypeError 被 catch 吞成
+    // checks.error ⇒ ok 恒 false ⇒ **装成功也报失败**，且「装载真失败」与「自检代码坏了」
+    // 无法区分（与 D11「装配缺陷伪装成能力降级」同一种反噬形态）。
+    //
+    // 现在分三层（内容仓 096 §3 要求）：
+    //   · 自检 API 存在性**先验**：omc_eval 不是函数 ⇒ 明确报「运行时 API 缺口」，
+    //     不冒充装载失败；
+    //   · 三条判据各自独立求值，单条异常不污染其它条；
+    //   · checks.probeError 记自检自身异常——与「装载失败」在返回体里分开。
     const checks: Record<string, unknown> = {};
-    try {
-      checks.loadModel = await omc.omc_loadModel('Modelica');
-      checks.version = await omc.omc_getVersion?.('Modelica');
-      checks.negative = await omc.omc_loadModel('NoSuchPackageXYZ');
-    } catch (err: any) {
-      checks.error = String(err?.message || err);
+    const probeErrors: string[] = [];
+    if (typeof omc.omc_eval !== 'function') {
+      return {
+        isError: true,
+        content: [
+          {
+            type: 'text',
+            text:
+              'CAPABILITY_UNAVAILABLE: the OpenModelica runtime exposes no omc_eval — ' +
+              'post-load self-check cannot run (runtime API gap, not a load failure).',
+          },
+        ],
+      };
     }
+    const evalStr = async (expr: string): Promise<string> => String(await omc.omc_eval(expr)).trim();
+    try {
+      checks.loadModel = (await evalStr('loadModel(Modelica)')) === 'true';
+    } catch (err: any) {
+      probeErrors.push(`loadModel: ${err?.message || err}`);
+    }
+    try {
+      // getVersion 返回带引号（实测 `"4.1.0"`）——去引号后比配方版本
+      checks.version = (await evalStr('getVersion(Modelica)')).replace(/"/g, '');
+    } catch (err: any) {
+      probeErrors.push(`getVersion: ${err?.message || err}`);
+    }
+    try {
+      // 反向判据：不存在的包必须 loadModel=false（返回 true 才是异常）
+      checks.negative = (await evalStr('loadModel(NoSuchPackageXYZ)')) === 'true';
+    } catch (err: any) {
+      probeErrors.push(`negative: ${err?.message || err}`);
+    }
+    if (probeErrors.length) checks.probeError = probeErrors.join('; ');
 
-    // 配方三条判据全参与（内容仓 095 §四建议：version 也在判据里——版本不符不该算成功）
-    const ok = checks.loadModel === true && checks.negative === false && checks.version === '4.1.0';
+    // 配方三条判据全参与（内容仓 095 §四 + 096：version 也在判据里，版本不符不算成功）
+    const ok =
+      checks.loadModel === true &&
+      checks.negative === false &&
+      typeof checks.version === 'string' &&
+      (checks.version as string).includes('4.1.0');
     return {
       isError: !ok,
       content: [
