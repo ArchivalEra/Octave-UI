@@ -43,6 +43,8 @@ REGISTRY = {
     "REFLECT_DOCS": ("list", "STATE.md,AGENTS.md,README.md,README.zh.md,README.de.md",
                      "翻案 / 陈旧闸门扫描的活状态文档清单"),
     "REFLECT_HISTORY_SECS": ("value", "", "append-only 历史章节编号（如 5,9,10）"),
+    "REFLECT_OMC_DTS": ("file", "",
+                        "OM 产物 .d.ts 路径（mock 面收敛闸门的导出面来源；空 = 用默认候选）"),
     "REFLECT_RETIRED": ("value", "", "退役组件名清单；空 = 该规则明说未启用"),
     "REFLECT_NAKED_MIN": ("number", "100", "裸数字阈值（小于它的整数不查）"),
     "REFLECT_STALE_DAYS": ("number", "", "测龄报警天数；空 = 该规则明说未启用"),

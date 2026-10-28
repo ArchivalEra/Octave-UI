@@ -87,7 +87,7 @@ describe('omc_load_msl 能力门（内容仓 093 绑定④：不许退化成静�
 
   it('★ ④ 全绿路径：走 omc_vfs_load_zip(默认库目录) 且返回体带装后自检（不静默成功）', async () => {
     const calls: Array<{ path: string; bytes: number }> = [];
-    // ★ 产物真实面（D12：omc_loadModel/omc_getVersion 不存在——只有 omc_eval）
+    // ★ 产物真实面（D12：自检曾调了两个产物里不存在的函数，现在只用 omc_eval）
     (window as any).__omc = {
       omc_vfs_load_zip: async (path: string, bytes: Uint8Array) => {
         calls.push({ path, bytes: bytes.length });

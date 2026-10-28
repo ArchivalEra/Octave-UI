@@ -77,12 +77,12 @@ pnpm build:lanes
 - 架构契约与语义边界见 [CONTEXT.md](CONTEXT.md)（含领域词汇表：物理对账 / 钓鱼判据 / 见证 / 对账器 / 降级信号）
 - Agent 纪律与硬规矩见 [AGENTS.md](AGENTS.md)
 - 开发方向与地图见 [maintaince.md](maintaince.md)
-- 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)（2026-10-24 起边缘为运行时 gzip + 分层缓存，Range 已撤除）；边缘申请与回执（五项+HTML 短缓存+三杠杆+双前缀修复；产地渠道线 083 全链 PASS 关闭；镜像表 17 packs 含 omc/MSL；form:file 单件交付；omc_load_msl 已上线；WebMCP 三服务在组合根注入（D11 修复）；omc_load_msl 自检走 omc_eval 真实 API 面（D12 修复）+ 版本判据；KNOWN 表定位为离线兜底副本）见 [SITE-ADMIN-REQUEST.md](SITE-ADMIN-REQUEST.md)
+- 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)（2026-10-24 起边缘为运行时 gzip + 分层缓存，Range 已撤除）；边缘申请与回执（五项+HTML 短缓存+三杠杆+双前缀修复；产地渠道线 083 全链 PASS 关闭；镜像表 17 packs 含 omc/MSL；form:file 单件交付；omc_load_msl 已上线；WebMCP 三服务在组合根注入（D11 修复）；omc_load_msl 自检走 omc_eval 真实 API 面（D12 修复）+ 版本判据；KNOWN 表定位为离线兜底副本；18 道闸门含 mock 面收敛）见 [SITE-ADMIN-REQUEST.md](SITE-ADMIN-REQUEST.md)
 - 跨 Agent 往来信箱见 [mail/README.md](mail/README.md)（与内容仓 Octave-Extra-Content 定稿纯下载模块规格）
 - 事实台账见 [FACTS.json](FACTS.json)
 - 安装 git hooks 守卫：`sh reflect-hooks/install.sh`
 - 闸门自证请运行：`sh gates-selftest.sh`
-- 17 道闸门运行：`. reflect-hooks/einfacht-env.sh && python3 zreflect/registry.py --run commit`
+- 18 道闸门运行：`. reflect-hooks/einfacht-env.sh && python3 zreflect/registry.py --run commit`
 - 交付契约：`node scripts/deploy-contract.mjs {base|adapt|verify}`（构建期重写根绝对引用 +
   注入分片 shim + **bridge 12 脚本打包为单 bundle**——边缘挂起幸存率 (1-p)^12 → (1-p)
   + **fetch 守卫**（同源 GET 响应头 10s 超时 + 单次重试——挂起概率 p → p²，浏览器端 AbortController 完好）
