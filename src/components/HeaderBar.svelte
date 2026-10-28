@@ -35,24 +35,46 @@
   type LanePhysicalState = { downloaded: boolean; integrity: EngineIntegrity };
   let physicalDownloaded = $state<Record<string, LanePhysicalState>>({});
 
-  async function checkAllPhysicalStatus() {
-    const lanes: EngineLane[] = ['wasm32-final', 'master', 'IllegalPerformance', 'omc'];
-    const results = await Promise.all(
-      lanes.map(async (l) => {
-        try {
-          const res = await EngineAssetResolver.getInstance().checkPhysicalStatus(l);
-          return { lane: l, downloaded: res.downloaded, integrity: res.integrity };
-        } catch {
-          // 对账失败 ⇒ 明说「没查到」：不冒充已下载，也不冒充损坏
-          return { lane: l, downloaded: false, integrity: 'unchecked' as const };
-        }
-      })
-    );
-    const updated: Record<string, LanePhysicalState> = {};
-    for (const r of results) {
-      updated[r.lane] = { downloaded: r.downloaded, integrity: r.integrity };
+  // ★ D13 单飞锁（内容仓 098）：对账是**查询**，并发重入只会放大开销。
+  // 实测（098）：一次双引擎启动里本函数被调 39,803 次、并发峰值 27——环在
+  // refresh() 无条件 _notify 上（已在 WorkspaceStorageManager 断掉），这里是第二道闸：
+  // 上一轮没跑完就复用同一个 Promise，不叠新的四车道对账；期间来的变化合并成「跑完补一次」。
+  let _checkAllInFlight: Promise<void> | null = null;
+  let _checkAllQueued = false;
+
+  async function checkAllPhysicalStatus(): Promise<void> {
+    if (_checkAllInFlight) {
+      _checkAllQueued = true;
+      return _checkAllInFlight;
     }
-    physicalDownloaded = updated;
+    _checkAllInFlight = (async () => {
+      const lanes: EngineLane[] = ['wasm32-final', 'master', 'IllegalPerformance', 'omc'];
+      const results = await Promise.all(
+        lanes.map(async (l) => {
+          try {
+            const res = await EngineAssetResolver.getInstance().checkPhysicalStatus(l);
+            return { lane: l, downloaded: res.downloaded, integrity: res.integrity };
+          } catch {
+            // 对账失败 ⇒ 明说「没查到」：不冒充已下载，也不冒充损坏
+            return { lane: l, downloaded: false, integrity: 'unchecked' as const };
+          }
+        })
+      );
+      const updated: Record<string, LanePhysicalState> = {};
+      for (const r of results) {
+        updated[r.lane] = { downloaded: r.downloaded, integrity: r.integrity };
+      }
+      physicalDownloaded = updated;
+    })();
+    try {
+      await _checkAllInFlight;
+    } finally {
+      _checkAllInFlight = null;
+      if (_checkAllQueued) {
+        _checkAllQueued = false;
+        void checkAllPhysicalStatus();
+      }
+    }
   }
 
   function lanePhysicalState(lane: string): LanePhysicalState {

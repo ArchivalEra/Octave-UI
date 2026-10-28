@@ -32,6 +32,8 @@ export class WorkspaceStorageManager {
   private _entries: EntryMeta[] = [];
   private _activeFile: string | null = null;
   private _listeners: Set<() => void> = new Set();
+  /** 上次 _notify 时的活跃文件（D13：活跃文件变化本身也要发声，条目集合相同但选中项变了） */
+  private _lastNotifiedActiveFile: string | null = null;
 
   constructor(preferredStore?: Store) {
     if (preferredStore) {
@@ -117,6 +119,19 @@ export class WorkspaceStorageManager {
       }
       collected.push(item);
     }
+
+    // ★ D13：只在**结果真变化**时通知（内容仓 098 的内存泄漏根因）。
+    //
+    // 旧行为：每次 refresh() 无条件 _notify() —— 而 refresh() 会被「查状态」触发
+    // （HeaderBar 的对账 → storage.list → refresh），于是形成自我放大环：
+    //   subscribe → checkAllPhysicalStatus → checkPhysicalStatus ×4 → storage.list
+    //     → refresh() → _notify() → ProjectWorkspace._notify → subscribe → 回到起点
+    // 实测（098）：一次双引擎启动里 checkAllPhysicalStatus 被调 39,803 次、
+    // storage.list 39,797 次（每次扫 2.6 万条目）⇒ RSS +8.9MB/s 无界爬升。
+    //
+    // 修法：查询式 refresh 变成**幂等**——条目集合与活跃文件都没变就静默返回。
+    // 这是「查询不应产生状态变更通知」的最小落地（不是加节流，是断环）。
+    const changed = this._entriesDiffer(collected) || this._activeFileChanged(collected);
     this._entries = collected;
     this._tree = this._buildTree(collected);
 
@@ -131,7 +146,27 @@ export class WorkspaceStorageManager {
       }
     }
 
-    this._notify();
+    if (changed || this._lastNotifiedActiveFile !== this._activeFile) {
+      this._lastNotifiedActiveFile = this._activeFile;
+      this._notify();
+    }
+  }
+
+  /** 条目集合是否与上次通知时不同（路径 + kind + size 三元组，顺序无关） */
+  private _entriesDiffer(next: EntryMeta[]): boolean {
+    if (next.length !== this._entries.length) return true;
+    for (let i = 0; i < next.length; i++) {
+      const a = next[i];
+      const b = this._entries[i];
+      if (!b || a.path !== b.path || a.kind !== b.kind || a.size !== b.size) return true;
+    }
+    return false;
+  }
+
+  /** 活跃文件是否会在本次 refresh 后被改变（删除/首次选中） */
+  private _activeFileChanged(collected: EntryMeta[]): boolean {
+    if (!this._activeFile) return false;
+    return !collected.some((e) => e.path === this._activeFile && e.kind === 'file');
   }
 
   private _buildTree(entries: EntryMeta[]): FileTreeNode[] {

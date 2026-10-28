@@ -109,3 +109,49 @@ describe('WorkspaceStorageManager Deep Module', () => {
     expect(text).toBe('computed 123');
   });
 });
+
+describe('D13 回归锁：refresh 是幂等查询，不得产生状态变更通知（内容仓 098）', () => {
+  it('★ 环不成立：连续两次 refresh（内容不变）⇒ 只通知一次', async () => {
+    const mgr = new WorkspaceStorageManager(new MemoryStore());
+    await mgr.init();
+    let notifyCount = 0;
+    mgr.subscribe(() => {
+      notifyCount += 1;
+    });
+    const afterInit = notifyCount;
+    await mgr.refresh(); // 内容没变
+    await mgr.refresh(); // 再来一次，仍未变
+    expect(notifyCount).toBe(afterInit); // 零新增通知——这就是断环
+  });
+
+  it('★ 内容真变时仍要通知（不能为了断环把功能修死）', async () => {
+    const store = new MemoryStore();
+    const mgr = new WorkspaceStorageManager(store);
+    await mgr.init();
+    let notifyCount = 0;
+    mgr.subscribe(() => {
+      notifyCount += 1;
+    });
+    const base = notifyCount;
+    await store.write('newfile.m', new TextEncoder().encode('x = 1;'));
+    await mgr.refresh();
+    expect(notifyCount).toBeGreaterThan(base);
+  });
+
+  it('★ 模拟 D13 反馈环：通知回调里再 refresh ⇒ 必须收敛（不是无限循环）', async () => {
+    const mgr = new WorkspaceStorageManager(new MemoryStore());
+    await mgr.init();
+    let refreshes = 0;
+    let reentered = 0;
+    mgr.subscribe(() => {
+      if (reentered++ < 50) {
+        refreshes += 1;
+        void mgr.refresh(); // 复刻 HeaderBar 的「通知 → 查状态 → 再通知」环
+      }
+    });
+    await mgr.refresh();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(refreshes).toBe(0); // 内容没变 ⇒ 一次通知都不该产生
+    expect(reentered).toBe(0);
+  });
+});
