@@ -70,9 +70,23 @@ export const capabilityPolicy = new CapabilityPolicy();
 export const graphicsSink = new GraphicsSink();
 
 export { pluginRegistry, pretextPlugin, searchPlugin, p5FigureOverlayPlugin, packageManagerPlugin, webMcpPlugin } from './plugins';
-import { packageManagerPlugin, p5FigureOverlayPlugin } from './plugins';
+import { packageManagerPlugin, p5FigureOverlayPlugin, webMcpPlugin } from './plugins';
 
 packageManagerPlugin.setDownloadStore(downloadStore);
+
+// ★ 组合根注入 WebMCP 三服务（内容仓 095 D11 修复）：
+// 此前 `plugins/index.ts` 里 `new WebMcpPlugin()` 无参，而 ctx.ts 的 require 回退在
+// 浏览器产物里恒失败（typeof require === 'undefined'，D11 实测）⇒ 三个服务恒 undefined
+// ⇒ 七个工具里五个线上全废（octave_eval / run_cell / list_packages / install_package /
+// omc_load_msl），且被能力门包装成「正常的能力不可用」，躲过了一轮复钓。
+// 在此注入：appContext 是唯一能同时看见 supervisor / projectWorkspace / packageManager
+// 的地方（plugins/index 先于它求值，构造期注入会成环）；injectServices 是后置合并，
+// resolveCtx 动态读取 options ⇒ 晚绑生效。
+webMcpPlugin.injectServices({
+  supervisor,
+  projectWorkspace,
+  packageManagerPlugin,
+});
 
 // 转发 P5 图表事件到 GraphicsSink 的 onFigure 面：面板订阅 sink 即可拿到
 // {imageDataUrl,...}（evt.url 是 Blob URL——PNG 渲染就绪）。

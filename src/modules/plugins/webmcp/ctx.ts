@@ -45,41 +45,36 @@ export type WebMcpCtxResolver = { readonly [K in keyof WebMcpCtx]: () => WebMcpC
 /**
  * 构造依赖解析器。
  * @param getServices 注入面读取器（传 `() => this.options` 以保持旧 getter 的动态读取语义）
+ * @param onAssemblyFault 装配缺陷回调（内容仓 095 D11）：注入与 require 回退**双双失败**时调用。
+ *   为什么需要它：require 回退在浏览器产物里恒失败（`typeof require === 'undefined'`，实测），
+ *   于是「服务没接上（装配 bug）」与「服务暂不可用（设计内降级）」在返回值上完全同形——
+ *   能力门会把前者包装成后者，让缺陷看起来像设计（D11 就是这么躲过复钓的）。
+ *   本回调只做**诊断**（console.error），不改返回面 ⇒ golden master 的服务缺席文案零变化。
  */
-export function resolveCtx(getServices: () => WebMcpPluginServices | undefined): WebMcpCtxResolver {
+export function resolveCtx(
+  getServices: () => WebMcpPluginServices | undefined,
+  onAssemblyFault?: (key: keyof WebMcpCtx) => void,
+): WebMcpCtxResolver {
+  const resolveKey = <K extends keyof WebMcpCtx>(key: K, from: keyof WebMcpPluginServices): WebMcpCtx[K] => {
+    const services = getServices();
+    const injected = services?.[from] as WebMcpCtx[K] | undefined;
+    if (injected) return injected;
+    try {
+      // 允许从全局环境惰性解析（旧 getter 逐字搬迁，mail/062 红线 1）
+      const ctx = require('../../appContext');
+      const viaRequire = ctx?.[from] as WebMcpCtx[K] | undefined;
+      if (viaRequire) return viaRequire;
+    } catch {
+      // 浏览器产物里 require 恒不存在 ⇒ 落到下面的装配缺陷上报
+    }
+    // 注入没给、回退也拿不到 ⇒ 这是**装配链路断了**，不是「运行期暂不可用」
+    onAssemblyFault?.(key);
+    return undefined;
+  };
+
   return {
-    supervisor: () => {
-      const services = getServices();
-      if (services?.supervisor) return services.supervisor;
-      try {
-        // 允许从全局环境惰性解析（旧 getter 逐字搬迁，mail/062 红线 1）
-        const ctx = require('../../appContext');
-        return ctx.supervisor;
-      } catch {
-        return undefined;
-      }
-    },
-    workspace: () => {
-      const services = getServices();
-      if (services?.projectWorkspace) return services.projectWorkspace;
-      try {
-        // 允许从全局环境惰性解析（旧 getter 逐字搬迁，mail/062 红线 1）
-        const ctx = require('../../appContext');
-        return ctx.projectWorkspace;
-      } catch {
-        return undefined;
-      }
-    },
-    packageManager: () => {
-      const services = getServices();
-      if (services?.packageManagerPlugin) return services.packageManagerPlugin;
-      try {
-        // 允许从全局环境惰性解析（旧 getter 逐字搬迁，mail/062 红线 1）
-        const ctx = require('../../appContext');
-        return ctx.packageManagerPlugin;
-      } catch {
-        return undefined;
-      }
-    },
+    supervisor: () => resolveKey('supervisor', 'supervisor'),
+    workspace: () => resolveKey('workspace', 'projectWorkspace'),
+    packageManager: () => resolveKey('packageManager', 'packageManagerPlugin'),
   };
 }

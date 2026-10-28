@@ -37,8 +37,37 @@ export class WebMcpPlugin implements OctavePlugin<WebMcpPluginServices>, WebMcpC
 
   constructor(services?: WebMcpPluginServices) {
     this.options = services;
-    this._resolve = resolveCtx(() => this.options);
+    // 装配缺陷诊断（内容仓 095 D11）：注入与 require 回退双失败时报一次——
+    // 「服务没接上」必须能被看见，不许伪装成「能力暂不可用」。
+    // 只 console.error（每键一次），返回面不变 ⇒ golden 的服务缺席文案零影响。
+    const reported = new Set<string>();
+    this._resolve = resolveCtx(
+      () => this.options,
+      (key) => {
+        if (reported.has(key)) return;
+        reported.add(key);
+        console.error(
+          `[WebMCP] assembly fault: ctx key "${key}" is neither injected nor resolvable — ` +
+            'tools depending on it will report CAPABILITY_UNAVAILABLE even though the service exists. ' +
+            'Inject services at the composition root (see plugins/index.ts / appContext.ts).'
+        );
+      },
+    );
     this._server = createServer(this._resolve);
+  }
+
+  /**
+   * 组合根后置注入（内容仓 095 D11 的修法）。
+   *
+   * 为什么不是构造时注入：`plugins/index.ts` 在 `appContext.ts` 之前求值，而
+   * supervisor / projectWorkspace 都在 appContext 里创建——构造期注入会成环。
+   * `resolveCtx` 的 getServices 是**每次访问动态读取** options（旧 getter 语义），
+   * 所以后置覆写天然生效，晚绑也能被工具解析到。
+   *
+   * 只合并不覆盖：已显式给的键保留（测试注入 mock 不受影响），缺的键补上。
+   */
+  injectServices(services: WebMcpPluginServices): void {
+    this.options = { ...(this.options || {}), ...services };
   }
 
   // --- WebMcpContextApi：全权委托 server（签名与语义与旧实现逐字保持） ---
