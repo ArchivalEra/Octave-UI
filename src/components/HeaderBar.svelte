@@ -5,6 +5,7 @@
   import type { EngineIntegrity } from '../modules/engine/EngineAssetResolver';
   import type { Locale } from '../modules/i18n/types';
   import type { WorkbenchMode } from '../modules/workspace/ProjectWorkspace';
+  import { formatAssetSize, getLaneSizeBytes } from '../modules/engine/laneSizes';
 
   let {
     onOpenBootModal,
@@ -515,9 +516,9 @@
                 </div>
                 <div class="lane-choice-group">
                   {#each [
-                    { id: 'wasm32-final', title: 'wasm32-final', desc: t('header.lane_wasm32_desc'), size: '~39.3MB', coi: false },
-                    { id: 'master', title: 'master', desc: t('header.lane_master_desc'), size: '~40.7MB', coi: true },
-                    { id: 'IllegalPerformance', title: 'IllegalPerformance', desc: t('header.lane_illegal_desc'), size: '~40.7MB', coi: true }
+                    { id: 'wasm32-final', title: 'wasm32-final', desc: t('header.lane_wasm32_desc'), coi: false },
+                    { id: 'master', title: 'master', desc: t('header.lane_master_desc'), coi: true },
+                    { id: 'IllegalPerformance', title: 'IllegalPerformance', desc: t('header.lane_illegal_desc'), coi: true }
                   ] as laneItem}
                     <div
                       class="menu-item-choice"
@@ -540,7 +541,9 @@
                         </span>
                         <span class="choice-desc">{laneItem.desc}</span>
                         <div class="lane-meta-row">
-                          <span class="size-hint">{laneItem.size}</span>
+                          <!-- 体量来自构建期注入真源（octave.build.json measured.files 求和，
+                               fix/lane-sizes 裁定）；真源缺失 ⇒ 显式降级文案，不编数 -->
+                          <span class="size-hint">{formatAssetSize(getLaneSizeBytes(laneItem.id), t)}</span>
                           {#if isEngineCorrupted(laneItem.id)}
                             <!-- 坏盘如实呈现：⚠ 是视觉提示，文字是可被读屏朗读的真值（不 aria-hidden） -->
                             <span class="dl-status damaged">⚠ {t('header.corrupted_badge')}</span>
@@ -604,6 +607,10 @@
                       </span>
                       <span class="choice-desc">{t('header.lane_omc_desc')}</span>
                       <div class="lane-meta-row">
+                        <!-- 已知遗留（fix/lane-sizes 如实边界）：OMC 体量仍是手写值——
+                             其真源两处对不上（catalog size=74735455 仅 wasm vs KNOWN_ENGINE_METADATA
+                             files 求和=74635990），另开小票裁定后再接 formatAssetSize。
+                             tests/engine/laneSizes.test.ts 钉死「组件内体量字面量 ≤ 这一处」。 -->
                         <span class="size-hint">~74.6MB</span>
                         {#if isEngineCorrupted('omc')}
                           <!-- 坏盘如实呈现：⚠ 是视觉提示，文字是可被读屏朗读的真值（不 aria-hidden） -->

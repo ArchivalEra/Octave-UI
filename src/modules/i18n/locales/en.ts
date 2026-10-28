@@ -89,7 +89,6 @@ export const en = {
   'boot.runtime_mode_label': 'Runtime Mode:',
   'boot.runtime_mode_val': 'WebAssembly Local Compute Kernel',
   'boot.asset_size_label': 'Asset Size:',
-  'boot.asset_size_val': 'On-demand loading (Static delivery)',
   'boot.data_privacy_label': 'Data Privacy:',
   'boot.data_privacy_val': 'Code and data stay strictly in local memory and IDBFS, never uploaded to cloud',
   'boot.status_ready': 'Ready. Click the button below to start on-demand loading.',
@@ -476,4 +475,10 @@ export const en = {
   'omc.status_simulating': 'OMC Simulating...',
   'omc.clear_console': 'Clear Output',
   'omc.run_sample': 'Load & Simulate BouncingBall',
+
+  // Common（跨组件共享：车道体量显示，BootModal 与 HeaderBar 共用）
+  // 数值来自构建期注入 __LANE_SIZES__（真源 = octave.build.json measured.files 求和），
+  // 真源缺失时显示显式降级文案——绝不显示编造的数字。
+  'common.asset_size_mb': '~{mb} MB',
+  'common.asset_size_unavailable': 'Size data not available',
 } as const;
