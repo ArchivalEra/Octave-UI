@@ -299,6 +299,31 @@ def measure_example():
           witness=bus_cmd, witness_expect=str(n_bus),
       )
 
+    # wayfinder/D 线的 gate 锚点（D11 / D13）
+    asm_cmd = "python3 -c \"import os; p='src/modules/plugins/webmcp/WebMcpPlugin.ts'; print(open(p).read().count('injectServices') if os.path.exists(p) else 'absent')\""
+    n_asm = _probe(asm_cmd)
+    if n_asm is not None:
+      facts["webmcp_assembly_chain"] = fact(
+          "WebMCP 三服务在组合根注入（appContext 调 injectServices；resolveCtx 的 onAssemblyFault 让装配缺陷与设计降级可区分）。D11 修复：七个工具从「五个线上全废」到全可用。反向断言 tests/plugins/webmcp-assembly.test.ts 5 用例（修复前 5/5 全红→修复后全绿，stash 对拍）",
+          asm_cmd,
+          "内容仓 095 (D11) / 097",
+          "票面 gate: 锚点；值是vitest一次采样（贵不逐字复跑）",
+          replay=False,
+          witness=asm_cmd, witness_expect=str(n_asm),
+      )
+
+    loop_cmd = "python3 -c \"import os; p='src/modules/storage/WorkspaceStorageManager.ts'; t=open(p).read() if os.path.exists(p) else ''; print(int('_lastAddpathKey' in t) + int('_lastNotifiedActiveFile' in t))\""
+    n_loop = _probe(loop_cmd)
+    if n_loop is not None:
+      facts["d13_loop_broken"] = fact(
+          "两条自我放大环已断（断环不靠节流）：① refresh() 幂等化（_lastNotifiedActiveFile + 条目三元组比对）——环 A subscribe→checkAll→checkPhysical×4→storage.list→refresh→notify 的闭合边；② addpath 按路径指纹去重（_lastAddpathKey）——环 B idle→syncToEngine→eval(addpath)→idle 的闭合边。实测：环 A 39,803 次对账 → RSS +8.9→-0.11 MB/s；环 B 200 次 sync/2s → 2 次 sync/1 次 eval。反向断言 5 条（★ 对旧实现红）",
+          loop_cmd,
+          "内容仓 098 (D13) / 架构扫描候选 1",
+          "票面 gate: 锚点；双计数器都应在（=2）",
+          replay=False,
+          witness=loop_cmd, witness_expect="2",
+      )
+
     return facts
 
 
