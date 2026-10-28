@@ -101,7 +101,8 @@ export const omcLoadMslTool = defineTool<'packageManager'>({
       checks.error = String(err?.message || err);
     }
 
-    const ok = checks.loadModel === true && checks.negative === false;
+    // 配方三条判据全参与（内容仓 095 §四建议：version 也在判据里——版本不符不该算成功）
+    const ok = checks.loadModel === true && checks.negative === false && checks.version === '4.1.0';
     return {
       isError: !ok,
       content: [
