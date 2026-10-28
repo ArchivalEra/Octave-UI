@@ -111,3 +111,15 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
   octave 面名册，避免 octave-only 构建的工具面被 omc 工具污染）。
 - **反向断言已备**：缺 packageManager ⇒ `CAPABILITY_UNAVAILABLE`；catalog 无 MSL 条目 ⇒ 明说
   未找到；`window.__omc` 缺席 ⇒ `CAPABILITY_UNAVAILABLE`（不冒充成功）。
+
+---
+
+## ⑤ 硬编码兜底口径（`KNOWN_ENGINE_METADATA`）—— **已确认（2026-10-28，内容仓 096 §4.1）**
+
+- **真源 = catalog 表**：`resolveEngineTarget` 的 omc 分支 `catalogProvider` 优先，
+  `pkg.files` 在 ⇒ 用表值。
+- `KNOWN_ENGINE_METADATA` = **离线兜底副本**（catalog 不可达/缺条目时才用），
+  **不是第二真源**——051/052 承诺的「表出条目就删全部硬编码」修正为「删**真源**角色，
+  保留兜底副本」，此口径经内容仓 096 §4.1 确认。
+- **可证伪判据**：catalog 给的 sha 与兜底不同 ⇒ 必须用 catalog 的（有测试钉住）。
+- 兜底值陈旧 ⇒ 下载时 sha 校验红（fail fast），注释在案。

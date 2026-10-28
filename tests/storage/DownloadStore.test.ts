@@ -841,3 +841,45 @@ describe('form:"file" 单件交付（内容仓 084 A2 / 086 裁定：MSL 形状�
     ).rejects.toMatchObject({ code: 'FLAVOR_UNAVAILABLE' });
   });
 });
+
+
+describe('catalog 优先于 KNOWN_ENGINE_METADATA 兜底（内容仓 096 §4.1 可证伪判据）', () => {
+  it('★ catalog 的 sha 与兜底不同 ⇒ 必须用 catalog 的（证明表是真源，兜底只是副本）', async () => {
+    const catalogSha = 'b'.repeat(64); // 与 KNOWN_ENGINE_METADATA 的 8287589e… 不同
+    const store = new DownloadStore({
+      storage: new MemoryStore(),
+      baseUrl: '',
+      catalogProvider: () => ({
+        schema: 2,
+        packs: [{
+          name: 'omc', version: 'unversioned', form: 'tree', kind: 'engine',
+          role: 'toolchain', arch: 'omc', consumer: ['omc'],
+          files: {
+            'OpenModelicaCompiler_bg.wasm': { bytes: 100, sha256: catalogSha },
+            'OpenModelicaCompiler.js': { bytes: 50, sha256: 'c'.repeat(64) },
+          },
+        } as any],
+      }),
+    });
+    const seen: string[] = [];
+    // mock 按 catalog 的**逐件** sha 返回（js 件用 cccc…，wasm 件用 bbbb…）
+    (store as any).fetchPort = {
+      fetchBytes: async (url: string) => {
+        seen.push(url);
+        const isJs = url.endsWith('.js');
+        return {
+          ok: true,
+          status: 200,
+          data: new Uint8Array(isJs ? 50 : 100),
+          sha256: isJs ? 'c'.repeat(64) : catalogSha,
+          totalBytes: isJs ? 50 : 100,
+        };
+      },
+    };
+    await store.download({ name: 'omc', version: '-rust', kind: 'engine', arch: 'omc' });
+    const rec = store.getRecord({ name: 'omc', version: '-rust', kind: 'engine', arch: 'omc' } as any);
+    // 记账里的 sha 必须是 catalog 的（不是兜底的 8287589e…）
+    expect(rec?.files.some((f) => f.sha256 === catalogSha)).toBe(true);
+    expect(rec?.files.every((f) => !f.sha256.startsWith('8287589e'))).toBe(true);
+  });
+});
