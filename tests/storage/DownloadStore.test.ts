@@ -955,4 +955,237 @@ describe('catalog 优先于 KNOWN_ENGINE_METADATA 兜底（内容仓 096 §4.1 �
     expect(rec?.files.some((f) => f.sha256 === catalogSha)).toBe(true);
     expect(rec?.files.every((f) => !f.sha256.startsWith('8287589e'))).toBe(true);
   });
+
+  // ── 096 §4.1 判据的完整证伪面（verify/nochange-switch 验证轮新增）──────────
+  // 判据（DEVIATIONS ⑤ / mail 086 §2.4「catalog 优先、有则用」）：
+  //   ① catalog files[] 的 sha/bytes 与 KNOWN_ENGINE_METADATA 不同 ⇒ 下载全链
+  //     （配额预检 / 校验环 / 记账）用 catalog 值；
+  //   ② catalog 缺条目（或条目无 files[]、provider 不可达）⇒ 才落兜底；
+  //   ③ 兜底陈旧 ⇒ 下载 sha 校验红（fail fast，不静默收下坏字节）。
+  // 复跑方式：CI=true npx vitest run tests/storage/DownloadStore.test.ts
+
+  const FALLBACK_FILES = KNOWN_ENGINE_METADATA['omc'].files;
+  const WASM_KEY = 'OpenModelicaCompiler_bg.wasm';
+  const JS_KEY = 'OpenModelicaCompiler.js';
+
+  /** 记录请求 URL 的假 fetch：字节按内容真算 sha（或显式 override）参与校验环。
+   *  「预期 sha（catalog 或兜底给的）× 实际字节 sha」的比对发生在 DownloadStore 内部
+   *  （DownloadStore.ts 校验环），这里只让两侧都可注入、请求面可观测。 */
+  function recordingPort(files: Record<string, { content: string; sha256?: string }>) {
+    const requested: string[] = [];
+    return {
+      requested,
+      fetchBytes: async (url: string, opts?: any) => {
+        requested.push(url);
+        const entry = files[url];
+        if (!entry) {
+          return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
+        }
+        const data = new TextEncoder().encode(entry.content);
+        opts?.onProgress?.({ receivedBytes: data.length, totalBytes: data.length });
+        return {
+          ok: true,
+          status: 200,
+          data,
+          sha256: entry.sha256 ?? sha256OfNode(data),
+          totalBytes: data.length,
+        };
+      },
+      fetchJSON: async () => {
+        throw new Error('recordingPort: fetchJSON not expected in omc engine path');
+      },
+    };
+  }
+
+  function omcCatalogWithFiles(files: Record<string, { bytes: number; sha256: string }>): ForgeCatalog {
+    return {
+      schema: 2,
+      packs: [
+        {
+          name: 'omc',
+          version: 'unversioned',
+          form: 'tree',
+          content: [],
+          files,
+        } as any,
+      ],
+    };
+  }
+
+  it('★ 判据①：catalog files[] 的 sha/bytes 与兜底都不同 ⇒ 校验环/记账/配额预检全用 catalog 值', async () => {
+    const catWasm = sha256OfNode('catalog-omc-wasm-v2');
+    const catJs = sha256OfNode('catalog-omc-js-v2');
+    // 前置自证：给定的确实与兜底不同（判据前提；兜底值被人改掉时这条先红）
+    expect(catWasm).not.toBe(FALLBACK_FILES[WASM_KEY].sha256);
+    expect(catJs).not.toBe(FALLBACK_FILES[JS_KEY].sha256);
+
+    const store = new DownloadStore({
+      storage: new MemoryStore(),
+      baseUrl: '',
+      catalogProvider: () =>
+        omcCatalogWithFiles({
+          [WASM_KEY]: { bytes: 100, sha256: catWasm },
+          [JS_KEY]: { bytes: 50, sha256: catJs },
+        }),
+    });
+    // 字节按内容真算 sha：serve 的内容就是 catalog 指纹对应的那份（正向路径）
+    const port = recordingPort({
+      [store.resolveUrl(`/omc/${WASM_KEY}`)]: { content: 'catalog-omc-wasm-v2' },
+      [store.resolveUrl(`/omc/${JS_KEY}`)]: { content: 'catalog-omc-js-v2' },
+    });
+    (store as any).fetchPort = port;
+
+    const totals: Array<number | null> = [];
+    const rec = await store.downloadEngine('omc', { onProgress: (p) => totals.push(p.totalBytes) });
+
+    // 请求打到 /omc/ 两件、顺序同 items（wasm → js）
+    expect(port.requested).toEqual([store.resolveUrl(`/omc/${WASM_KEY}`), store.resolveUrl(`/omc/${JS_KEY}`)]);
+    // 校验环放行 + 记账 sha = catalog 值（预期 sha 来自 catalog 才会放行这两份字节）
+    expect(rec.files.map((f) => f.sha256)).toEqual([catWasm, catJs]);
+    // catalog bytes（100+50）进配额预检/进度 totalBytes——不是兜底和（74579404+56586）
+    expect(Math.max(...(totals as number[]))).toBe(150);
+    expect(Math.max(...(totals as number[]))).not.toBe(FALLBACK_FILES[WASM_KEY].bytes + FALLBACK_FILES[JS_KEY].bytes);
+    // 实际下到的字节长度（'catalog-omc-wasm-v2' 19B + 'catalog-omc-js-v2' 17B）——
+    // record.bytes 是实际字节数不是元数据声明值（已有用例 #12 Q12.2 钉过该语义）；
+    // catalog 声称的 bytes 走配额预检 ⇒ 上面 totalBytes=150 那条已验。
+    expect(rec.bytes).toBe(19 + 17);
+  });
+
+  it('★ 判据①反向芯：catalog sha ≠ 兜底时，喂「兜底指纹的旧字节」必须校验红（catalog 是被验的那个值）', async () => {
+    // catalog 宣称新指纹；镜像上还是旧 blob（fetch 返回字节的 sha = 兜底值）。
+    // catalog 优先 ⇒ 预期(catalog) ≠ 实际(兜底) ⇒ STORAGE_WRITE_FAILED；
+    // 若实现反了（兜底优先，或「记 catalog 验兜底」），这里会假绿 —— 本测试红。
+    const catWasm = sha256OfNode('catalog-omc-wasm-v2');
+    const catJs = sha256OfNode('catalog-omc-js-v2');
+    const store = new DownloadStore({
+      storage: new MemoryStore(),
+      baseUrl: '',
+      catalogProvider: () =>
+        omcCatalogWithFiles({
+          [WASM_KEY]: { bytes: 100, sha256: catWasm },
+          [JS_KEY]: { bytes: 50, sha256: catJs },
+        }),
+    });
+    const port = recordingPort({
+      [store.resolveUrl(`/omc/${WASM_KEY}`)]: { content: 'stale-blob', sha256: FALLBACK_FILES[WASM_KEY].sha256 },
+      [store.resolveUrl(`/omc/${JS_KEY}`)]: { content: 'stale-js', sha256: FALLBACK_FILES[JS_KEY].sha256 },
+    });
+    (store as any).fetchPort = port;
+
+    const err = await store.downloadEngine('omc').then(
+      () => null,
+      (e) => e
+    );
+    expect(err).toBeInstanceOf(DownloadError);
+    // 红的原因必须是 sha 不匹配（不是 404 / intake 拦截 / 别的错）
+    expect(err.code).toBe('STORAGE_WRITE_FAILED');
+    expect(err.message).toMatch(/SHA256 mismatch/);
+    // I2：失败不留账
+    const snap = await store.index();
+    expect(snap.count).toBe(0);
+  });
+
+  it('★ 判据②：catalog 缺 omc 条目 ⇒ 才落兜底（校验/记账用 KNOWN_ENGINE_METADATA 值）', async () => {
+    const store = new DownloadStore({
+      storage: new MemoryStore(),
+      baseUrl: '',
+      // 表在、但没有 omc 条目（如 085 信里 15 packs 时代的镜像表形状）
+      catalogProvider: () => ({
+        schema: 2,
+        packs: [{ name: 'llvm-wasm', version: '6.0.12', form: 'tree', content: [] } as any],
+      }),
+    });
+    const port = recordingPort({
+      [store.resolveUrl(`/omc/${WASM_KEY}`)]: { content: 'offline-blob', sha256: FALLBACK_FILES[WASM_KEY].sha256 },
+      [store.resolveUrl(`/omc/${JS_KEY}`)]: { content: 'offline-js', sha256: FALLBACK_FILES[JS_KEY].sha256 },
+    });
+    (store as any).fetchPort = port;
+
+    const rec = await store.downloadEngine('omc');
+    expect(rec.files.map((f) => f.sha256)).toEqual([
+      FALLBACK_FILES[WASM_KEY].sha256,
+      FALLBACK_FILES[JS_KEY].sha256,
+    ]);
+  });
+
+  it('★ 判据②补：omc 条目在但无 files[]（086 之前的宿主形状）⇒ 同样落兜底', async () => {
+    const store = new DownloadStore({
+      storage: new MemoryStore(),
+      baseUrl: '',
+      catalogProvider: () => ({
+        schema: 2,
+        packs: [{ name: 'omc', version: '1.25.0', form: 'tree', content: [] } as any],
+      }),
+    });
+    const port = recordingPort({
+      [store.resolveUrl(`/omc/${WASM_KEY}`)]: { content: 'offline-blob', sha256: FALLBACK_FILES[WASM_KEY].sha256 },
+      [store.resolveUrl(`/omc/${JS_KEY}`)]: { content: 'offline-js', sha256: FALLBACK_FILES[JS_KEY].sha256 },
+    });
+    (store as any).fetchPort = port;
+
+    const rec = await store.downloadEngine('omc');
+    expect(rec.files.map((f) => f.sha256)).toEqual([
+      FALLBACK_FILES[WASM_KEY].sha256,
+      FALLBACK_FILES[JS_KEY].sha256,
+    ]);
+  });
+
+  it('★ 判据③：离线兜底值陈旧（字节 sha ≠ 兜底指纹）⇒ 下载 sha 校验红，fail fast 不静默', async () => {
+    // DownloadStore.ts:50 的注释断言「兜底值陈旧 ⇒ 下载时 sha 校验红」——这里钉行为：
+    // 无 catalogProvider，serve 的字节指纹与手抄表不符 ⇒ 必须红。
+    // 若有人改成「收下字节、记账真算值」的静默降级，本测试红。
+    const store = new DownloadStore({ storage: new MemoryStore(), baseUrl: '' });
+    const port = recordingPort({
+      [store.resolveUrl(`/omc/${WASM_KEY}`)]: { content: 'stale-offline-blob' }, // 真 sha ≠ 兜底指纹
+      [store.resolveUrl(`/omc/${JS_KEY}`)]: { content: 'stale-offline-js' },
+    });
+    (store as any).fetchPort = port;
+
+    const err = await store.downloadEngine('omc').then(
+      () => null,
+      (e) => e
+    );
+    expect(err).toBeInstanceOf(DownloadError);
+    expect(err.code).toBe('STORAGE_WRITE_FAILED');
+    expect(err.message).toMatch(/SHA256 mismatch/);
+    const snap = await store.index();
+    expect(snap.count).toBe(0);
+  });
+
+  it('★ 反向断言（不混用）：catalog files[] 残缺（只有 wasm 一件）⇒ 响亮 FLAVOR_UNAVAILABLE，不逐件回落兜底', async () => {
+    // resolveEngineTarget 是整表替换（omcMeta = { files: pkg.files }），不是逐件合并：
+    // 残缺 files[] 缺件 ⇒ 如实报缺件名（DownloadStore.ts:843-848）。
+    // 若有人改成「缺的件回落兜底」的合并实现，这里会假成功 —— 本测试红。
+    const store = new DownloadStore({
+      storage: new MemoryStore(),
+      baseUrl: '',
+      catalogProvider: () =>
+        omcCatalogWithFiles({
+          [WASM_KEY]: { bytes: 100, sha256: sha256OfNode('catalog-omc-wasm-v2') },
+        }),
+    });
+    await expect(store.downloadEngine('omc')).rejects.toMatchObject({ code: 'FLAVOR_UNAVAILABLE' });
+    await expect(store.downloadEngine('omc')).rejects.toThrow(new RegExp(JS_KEY));
+  });
+
+  it('★ 反向断言：catalogProvider 抛错 ⇒ 降级兜底（不可达是合法路径，校验/记账仍走通）', async () => {
+    const store = new DownloadStore({
+      storage: new MemoryStore(),
+      baseUrl: '',
+      catalogProvider: () => {
+        throw new Error('Failed to fetch');
+      },
+    });
+    const port = recordingPort({
+      [store.resolveUrl(`/omc/${WASM_KEY}`)]: { content: 'offline-blob', sha256: FALLBACK_FILES[WASM_KEY].sha256 },
+      [store.resolveUrl(`/omc/${JS_KEY}`)]: { content: 'offline-js', sha256: FALLBACK_FILES[JS_KEY].sha256 },
+    });
+    (store as any).fetchPort = port;
+
+    const rec = await store.downloadEngine('omc');
+    expect(rec.files.map((f) => f.sha256)).toEqual([
+      FALLBACK_FILES[WASM_KEY].sha256,
+      FALLBACK_FILES[JS_KEY].sha256,
+    ]);
+  });
 });
