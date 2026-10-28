@@ -777,6 +777,79 @@ describe('DownloadStore Deep Module', () => {
       EngineAssetResolver.resetInstance();
     }
   });
+
+  // ══ 候选 3：拆掉 new EngineAssetResolver 这条绕过（grilling Q6/Q7）══════════════
+  // 根因不是「契约没写清」，是「可以 new 一个实例来绕过」这个结构允许了绕过：
+  // 新实例只失效它自己的空缓存，单例里那条 verified 结论照样活着 ⇒ 对账被架空。
+  //
+  // 行为判据（不测私有字段）——观测点必须是「有没有重新对账」，不能只看结论：
+  // 「删了又按原尺寸装回」时字节与账重新一致，重对账的结论**本来就是 verified**
+  // （旧实现返回 verified 是蒙对的）。真正的差别是盘内容读取次数：必须重验。
+  it('候选3: removeEngine 后按原尺寸装回 ⇒ 必须重新对账（真读盘，不许吃单例缓存）', async () => {
+    const resolver = EngineAssetResolver.getInstance(memoryStore);
+    EngineAssetResolver.setInstance(resolver);
+    try {
+      const engineStore = new DownloadStore({
+        storage: memoryStore,
+        fetchPort: new MockFetchAdapter(),
+        baseUrl: 'https://octave.test',
+        catalogProvider: () => sampleCatalog,
+        engineBuildProvider: () => sampleEngineBuild,
+        laneProvider: () => 'master',
+        maxQuotaBytes: 100 * 1024 * 1024,
+      });
+      await engineStore.init();
+
+      const wasmBytes = 'wasm-content';
+      const dataBytes = 'data-content';
+      // 账与盘手工铺好后再让 store 重读清单（初始化时清单还不存在）
+      await memoryStore.write('downloads/engine/master/w64/octave.wasm', new TextEncoder().encode(wasmBytes));
+      await memoryStore.write('downloads/engine/master/w64/octave.data', new TextEncoder().encode(dataBytes));
+      await memoryStore.write(
+        'downloads/manifest.json',
+        new TextEncoder().encode(
+          JSON.stringify({
+            schema: 1,
+            items: {
+              'engine:octave@11.3.0:master/w64': {
+                ref: { name: 'octave', version: '11.3.0', kind: 'engine', arch: 'master/w64' },
+                sha256: 'combined',
+                bytes: wasmBytes.length + dataBytes.length,
+                files: [
+                  { path: 'downloads/engine/master/w64/octave.wasm', sha256: sha256OfNode(wasmBytes), bytes: wasmBytes.length },
+                  { path: 'downloads/engine/master/w64/octave.data', sha256: sha256OfNode(dataBytes), bytes: dataBytes.length },
+                ],
+                downloadedAt: '2026-10-22T00:00:00.000Z',
+              },
+            },
+          })
+        )
+      );
+
+      // ① 先验一次：verified 进单例缓存
+      expect((await resolver.checkPhysicalStatus('master')).integrity).toBe('verified');
+
+      // ② 删引擎：removeEngine 是生产里唯一的物理删除入口
+      const readSpy = vi.spyOn(memoryStore, 'read');
+      await engineStore.removeEngine('master');
+
+      // ③ 物理删除必须真的发生（证明单例与写路径同盘——不是 evict 到了另一份盘）
+      expect(await memoryStore.stat('downloads/engine/master/w64/octave.wasm')).toBeFalsy();
+
+      // ④ 按原尺寸装回：stat size 与缓存时逐字相同 ⇒ 光看指纹看不出盘动过
+      await memoryStore.write('downloads/engine/master/w64/octave.wasm', new TextEncoder().encode(wasmBytes));
+      await memoryStore.write('downloads/engine/master/w64/octave.data', new TextEncoder().encode(dataBytes));
+
+      const readsBefore = readSpy.mock.calls.length;
+      const after = await resolver.checkPhysicalStatus('master');
+      expect(after.integrity).toBe('verified');
+      // ★ 关键判据：必须重新读盘对账。旧实现（new 一个实例 evict）会命中单例旧缓存 ⇒ 零新增读。
+      expect(readSpy.mock.calls.length).toBeGreaterThan(readsBefore);
+      readSpy.mockRestore();
+    } finally {
+      EngineAssetResolver.resetInstance();
+    }
+  });
 });
 
 

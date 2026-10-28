@@ -231,6 +231,25 @@
       "desc": "spec #19 红线 1：钩子去重标记必须挂在包装函数上（对象级标记在 OctaveP5 重赋值后失聪）",
       "file": "src/modules/plugins/figure/P5FigureOverlayPlugin.ts",
       "must_contain": "__overlay_hooked = true"
+    },
+    {
+      "ticket": 23,
+      "desc": "候选 3：单例不可绕过 —— src/ 里不许出现 new EngineAssetResolver(（绕过单例 = 另起一套缓存，对账被静默架空）",
+      "dir": "src",
+      "ext": ".ts",
+      "must_not_contain": "new EngineAssetResolver("
+    },
+    {
+      "ticket": 23,
+      "desc": "候选 3：DownloadStore.removeEngine 必须走消费侧共享单例（evict 清的才是同一份盘）",
+      "file": "src/modules/storage/DownloadStore.ts",
+      "must_contain": "EngineAssetResolver.getInstance().evict"
+    },
+    {
+      "ticket": 23,
+      "desc": "候选 3 前置：组合根把单例绑到写路径同一个 store（否则 OPFS 不可用时 evict 清的是另一份盘）",
+      "file": "src/modules/appContext.ts",
+      "must_contain": "EngineAssetResolver.getInstance(workspaceStorage.store)"
     }
   ]
 }

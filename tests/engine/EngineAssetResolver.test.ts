@@ -419,6 +419,87 @@ describe('EngineAssetResolver Deep Module', () => {
     expect(countDiskReads()).toBeGreaterThan(before);
   });
 
+  // ══ 候选 2：会话缓存三态化（grilling Q4 = A）══════════════════════════════════
+  // 旧形状只缓存 verified ⇒ corrupted / unchecked 每次 checkPhysicalStatus 都重走全量
+  // 对账（corrupted 要重读约 40MB 引擎字节；unchecked 要重读 manifest）。
+  // 新形状：三态都入缓存，判据仍是「盘面指纹没变」。反向断言（该报的必须报）：
+  // 盘真的变了 ⇒ 缓存必须失活，不许把旧结论当成新结论。
+
+  it('候选2: corrupted 结论也进缓存——同一份坏盘连查 5 次，只有第一次读盘内容', async () => {
+    const { wasm } = await writeVerifiedEngine();
+    // 造一份 size 对得上、sha 对不上的坏盘（走 sha 复验环，不是 size 硬判短路）
+    const tampered = new Uint8Array(wasm);
+    tampered[0] = tampered[0] ^ 0xff;
+    await memoryStore.write('downloads/engine/master/w64/octave.wasm', tampered);
+
+    expect((await resolver.checkPhysicalStatus('master')).integrity).toBe('corrupted');
+    const readsAfterFirst = countDiskReads();
+    expect(readsAfterFirst).toBeGreaterThan(0); // 第一次真的读了盘（manifest + 各件）
+
+    for (let i = 0; i < 4; i++) {
+      const status = await resolver.checkPhysicalStatus('master');
+      expect(status.integrity).toBe('corrupted'); // 结论不许被缓存洗白
+    }
+    // 余下 4 次全部命中缓存：零新增盘内容读取（stat 允许——指纹靠它）
+    expect(countDiskReads()).toBe(readsAfterFirst);
+  });
+
+  it('候选2 反向断言: 坏盘被换成尺寸不同的另一份 ⇒ 缓存必须失活并重新对账', async () => {
+    const { wasm } = await writeVerifiedEngine();
+    const tampered = new Uint8Array(wasm);
+    tampered[0] = tampered[0] ^ 0xff;
+    await memoryStore.write('downloads/engine/master/w64/octave.wasm', tampered);
+    expect((await resolver.checkPhysicalStatus('master')).integrity).toBe('corrupted');
+
+    // 盘真的变了：截断成一半（size 变 ⇒ 指纹变 ⇒ 必须重验，不许吃缓存）
+    await memoryStore.write('downloads/engine/master/w64/octave.wasm', wasm.slice(0, wasm.length >> 1));
+    const before = countDiskReads();
+    const after = await resolver.checkPhysicalStatus('master');
+    expect(after.integrity).toBe('corrupted');
+    expect(countDiskReads()).toBeGreaterThan(before); // 重验真的发生了
+
+    // 再把字节修回原样（size 又与「截断版」不同 ⇒ 仍须重验；修好后应报 verified）
+    await memoryStore.write('downloads/engine/master/w64/octave.wasm', wasm);
+    expect((await resolver.checkPhysicalStatus('master')).integrity).toBe('verified');
+  });
+
+  it('候选2: unchecked 结论也进缓存——无该车道记账的盘连查 3 次，manifest 只读一次', async () => {
+    // 两件物理在，manifest 也在，但账里没有 master/w64 的条目 ⇒ 无账可对 ⇒ unchecked。
+    // （不用「manifest 完全不在」那种形状：那条路径在 stat 就短路了，连 manifest 都不读，
+    //  测不出缓存省了什么。）
+    await memoryStore.write('downloads/engine/master/w64/octave.wasm', new Uint8Array(64));
+    await memoryStore.write('downloads/engine/master/w64/octave.data', new Uint8Array(32));
+    await memoryStore.write(
+      manifestPath,
+      new TextEncoder().encode(
+        JSON.stringify({
+          schema: 1,
+          items: {
+            'engine:octave@11.3.0:wasm32-final/w32': {
+              ref: { name: 'octave', version: '11.3.0', kind: 'engine', arch: 'wasm32-final/w32' },
+              sha256: 'combined',
+              bytes: 96,
+              files: [
+                { path: 'downloads/engine/wasm32-final/w32/octave.wasm', sha256: 'a'.repeat(64), bytes: 64 },
+              ],
+              downloadedAt: '2026-10-22T00:00:00.000Z',
+            },
+          },
+        })
+      )
+    );
+
+    expect((await resolver.checkPhysicalStatus('master')).integrity).toBe('unchecked');
+    const readsAfterFirst = countDiskReads();
+    expect(readsAfterFirst).toBeGreaterThan(0); // 第一次真读了 manifest
+
+    for (let i = 0; i < 2; i++) {
+      expect((await resolver.checkPhysicalStatus('master')).integrity).toBe('unchecked');
+    }
+    // 余下 2 次命中缓存：不再重读 manifest（stat 允许——指纹靠它）
+    expect(countDiskReads()).toBe(readsAfterFirst);
+  });
+
   it('integrity: 无 manifest 记账 ⇒ unchecked 且 downloaded 按 size>0 旧语义', async () => {
     // 只写两文件，不写 manifest（manifest 被手删 / 从未下载记账的盘面）
     await memoryStore.write('downloads/engine/master/w64/octave.wasm', new Uint8Array(64));

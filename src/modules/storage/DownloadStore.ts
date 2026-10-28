@@ -195,8 +195,12 @@ export class DownloadStore {
 
     // 物理清理：即使清单未记录或损坏，也彻底物理清除存储中的残留文件
     try {
-      const resolver = new EngineAssetResolver(this.storage);
-      await resolver.evict(lane as any, v);
+      // 必须走**消费侧共享的单例**（HeaderBar / ProjectWorkspace / OmcBridge / boot
+      // 的 assertBootable 全走 getInstance()）。此前这里另开了一个 resolver 实例：
+      // 新实例只失效它自己的空缓存，单例里那条 verified 结论照样存活 ——
+      // 「删了又按原尺寸装回」时指纹相同 ⇒ 缓存继续报 verified（假绿），对账被绕过。
+      // 同盘性由组合根保证：appContext 用同一个 store 绑单例（见那里的注释）。
+      await EngineAssetResolver.getInstance().evict(lane as any, v);
     } catch {
       // 容错处理
     }

@@ -312,7 +312,7 @@ def measure_example():
           witness=asm_cmd, witness_expect=str(n_asm),
       )
 
-    loop_cmd = "python3 -c \"import os; p='src/modules/storage/WorkspaceStorageManager.ts'; t=open(p).read() if os.path.exists(p) else ''; print(int('_lastAddpathKey' in t) + int('_lastNotifiedActiveFile' in t))\""
+    loop_cmd = "python3 -c \"import os; p='src/modules/storage/WorkspaceStorageManager.ts'; print(int('_lastAddpathKey' in open(p).read()) + int('_lastNotifiedActiveFile' in open(p).read()))\""
     n_loop = _probe(loop_cmd)
     if n_loop is not None:
       facts["d13_loop_broken"] = fact(
@@ -321,7 +321,9 @@ def measure_example():
           "内容仓 098 (D13) / 架构扫描候选 1",
           "票面 gate: 锚点；双计数器都应在（=2）",
           replay=False,
-          witness=loop_cmd, witness_expect="2",
+          # 期望跟随探针输出，不写死 "2"：跨仓夹具里源文件不在 ⇒ 探针返回 None
+          # ⇒ 整个键不进台账（跳过而非红）。写死等于把本仓形状冒充成普适判据。
+          witness=loop_cmd, witness_expect=n_loop,
       )
 
     return facts

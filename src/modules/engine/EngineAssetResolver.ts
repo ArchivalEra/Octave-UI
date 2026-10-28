@@ -131,10 +131,15 @@ export class EngineAssetResolver implements IEngineAssetResolver {
   private static _instance: EngineAssetResolver | null = null;
   private _store: Store;
 
-  // 会话内 integrity 缓存：key = `${lane}/${variant}`，值为该车道全部文件验毕的指纹与时间。
-  // 已验且盘未变（stat size 与缓存时一致）⇒ 不再重算哈希（一次 30MB 哈希数百 ms，会话内复用）。
+  // 会话内 integrity 缓存：key = `${lane}/${variant}`，值为**三态结论** + 结论作出时的盘面指纹。
+  // 三态都进缓存：corrupted 的可缓存性完全由指纹决定（指纹变 = 盘变了 = 该重验），
+  // 不需要第二套失效逻辑；unchecked（无账可对）同理——盘没变就不必再读一遍 manifest。
+  // 缓存命中路径只花 stat 的钱（指纹只拼 stat size），不读盘内容。
   // 失效只走显式 invalidateCache() / evict()，不用事件监听。
-  private _integrityCache = new Map<string, { sha: string; at: number }>();
+  private _integrityCache = new Map<
+    string,
+    { verdict: EngineIntegrity; fingerprint: string; at: number }
+  >();
 
   constructor(store?: Store) {
     if (store) {
@@ -151,7 +156,10 @@ export class EngineAssetResolver implements IEngineAssetResolver {
 
   static getInstance(store?: Store): EngineAssetResolver {
     if (!EngineAssetResolver._instance || store) {
-      EngineAssetResolver._instance = new EngineAssetResolver(store);
+      // 实例化唯一产地：写成 `new this(...)` 而非类名，好让静态断言
+      // 「src/ 里另开 EngineAssetResolver 实例的写法必须为 0」真的成立——绕过单例
+      // 就等于另起一个缓存，对账会被静默架空（候选 3 的根因）。
+      EngineAssetResolver._instance = new this(store);
     }
     return EngineAssetResolver._instance;
   }
@@ -424,12 +432,16 @@ export class EngineAssetResolver implements IEngineAssetResolver {
   }
 
   /**
-   * 车道级三步对账（stat 已由调用方完成，这里收全部 stat 结果）：
-   * 1. size 硬判：盘上 size === manifest files[] 记账 bytes（逐文件）；
-   * 2. sha 复验：盘上字节重算 SHA-256 与记账 sha256 比对；
-   * 3. 会话缓存：全文件验毕后记指纹；盘未变（stat size 与缓存时一致）⇒ 不再重算哈希，
-   *    也不重读 manifest——缓存命中路径只花 stat 的钱。
-   * 无 manifest 记账（manifest 缺失/损坏/无该车道条目）⇒ 'unchecked'（退回 size>0 旧存在语义）。
+   * 车道级对账入口：先看会话缓存，miss 才走三步对账。
+   *
+   * 缓存键是**三态结论**（verified / corrupted / unchecked），判据只有一个：
+   * 盘面指纹（stat size 拼接）与结论作出时是否一致。指纹变 ⇒ 盘变了 ⇒ 重验。
+   * 三种结论都入缓存——corrupted 命中时不再重读约 40MB 引擎字节，
+   * unchecked 命中时不再重读 manifest（盘没变，账也不会变）。
+   *
+   * 边界（如实写明）：指纹只覆盖**引擎文件**的 stat size，不含 downloads/manifest.json。
+   * 账本身变化必须靠写路径显式 invalidateCache()——本仓所有 manifest 写入都在
+   * DownloadStore 里成对带失效（download 终态 / removeEngine→evict）。
    */
   private async _checkLaneIntegrity(
     lane: EngineLane,
@@ -439,12 +451,29 @@ export class EngineAssetResolver implements IEngineAssetResolver {
     const cacheKey = `${lane}/${variant}`;
     const fingerprint = this._fingerprintOf(physicals);
 
-    // 缓存命中：已验过且每个文件 stat size 与缓存时一致 ⇒ 盘未变（stat size 是唯一便宜的变更信号）
+    // 缓存命中：结论与当时指纹都还在，且每个文件 stat size 与缓存时一致 ⇒ 盘未变
     const cached = this._integrityCache.get(cacheKey);
-    if (cached && cached.sha === fingerprint) {
-      return 'verified';
+    if (cached && cached.fingerprint === fingerprint) {
+      return cached.verdict;
     }
 
+    const verdict = await this._reconcileLane(lane, variant, physicals);
+    this._integrityCache.set(cacheKey, { verdict, fingerprint, at: Date.now() });
+    return verdict;
+  }
+
+  /**
+   * 车道级三步对账（stat 已由调用方完成，这里收全部 stat 结果）：
+   * 1. size 硬判：盘上 size === manifest files[] 记账 bytes（逐文件）；
+   * 2. sha 复验：盘上字节重算 SHA-256 与记账 sha256 比对；
+   * 3. 无 manifest 记账（缺失/损坏/无该车道条目）⇒ 'unchecked'（退回 size>0 旧存在语义）。
+   * 结论由调用方进缓存。
+   */
+  private async _reconcileLane(
+    lane: EngineLane,
+    variant: EngineVariant,
+    physicals: Array<{ stat: { size?: number }; path: string }>
+  ): Promise<EngineIntegrity> {
     const entries = await this._readManifestFilesForLane(lane, variant);
     if (!entries || entries.length === 0) {
       // 无账可对：不猜好坏，如实标记 unchecked（downloaded 仍是 size>0 的存在语义）
@@ -484,7 +513,6 @@ export class EngineAssetResolver implements IEngineAssetResolver {
       }
     }
 
-    this._integrityCache.set(cacheKey, { sha: fingerprint, at: Date.now() });
     return 'verified';
   }
 

@@ -18,6 +18,7 @@ import { SafePlotSinkPolyfill } from './semantic/SafePlotSinkPolyfill';
 
 import { WorkspaceStorageManager } from './storage/WorkspaceStorageManager';
 import { DownloadStore } from './storage/DownloadStore';
+import { EngineAssetResolver } from './engine/EngineAssetResolver';
 import { DockLayoutStore } from './dock/DockLayoutStore';
 import { PanelRegistry, panelRegistryInstance } from './dock/PanelRegistry';
 import { toastService } from './ui/ToastService.svelte';
@@ -58,6 +59,15 @@ export const downloadStore = new DownloadStore({
   },
 });
 export const projectWorkspace = new ProjectWorkspace(supervisor, undefined, workspaceStorage, downloadStore);
+
+// 单例 resolver 必须与写路径同盘（候选 3 的前置条件；grilling Q6 点名「落地时要验的第一件事」）：
+// workspaceStorage 自己挑 store（OPFS 可用 ⇒ OpfsStore，否则 MemoryStore），而
+// EngineAssetResolver.getInstance() 无参时**也**自己挑一遍 —— 两边各自 new 一个
+// MemoryStore 时，DownloadStore 写的盘与 resolver 验的盘不是同一个（对账恒 unchecked，
+// 且 removeEngine 的 evict 清的是另一份盘）。生产环境两者都落到同一个 OPFS 目录句柄，
+// 问题被掩盖；OPFS 不可用（隐私模式 / 非安全上下文）时才暴露。
+// 这里一次性绑死：写路径、对账、evict 从此同源。
+EngineAssetResolver.getInstance(workspaceStorage.store);
 export const terminalController = new TerminalController(historyStore, supervisor as any);
 export const workspaceStore = new WorkspaceStore(supervisor as any);
 export const filesystemStore = new FilesystemStore(supervisor as any);

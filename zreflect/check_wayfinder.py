@@ -278,13 +278,18 @@ def _cases():
     _w(os.path.join(d, "src/modules/engine/OmcBridge.ts"),
        "export function onOmcFlavorError(cb) {}\n")
     _w(APPCTX, "import { onOmcFlavorError } from './engine/OmcBridge';\n"
-               "onOmcFlavorError((err) => {});\n")
+               "onOmcFlavorError((err) => {});\n"
+               # #23 候选 3 前置断言的夹具目标（组合根把单例绑到写路径同一个 store）
+               "EngineAssetResolver.getInstance(workspaceStorage.store);\n")
     _w(DOWNLOAD, "const meta = { sha256: 'ab'.repeat(8) };\n")
     # #6 五件套断言的夹具目标（形状与真仓一致：两拦截键 + boot 前置对账 + 平铺存储名）
     RESOLVER = os.path.join(d, "src/modules/engine/EngineAssetResolver.ts")
     EMBED = os.path.join(d, "src/modules/engine/WasmEmbedAdapter.ts")
+    # #23 候选 3 夹具：resolver 侧唯一实例化产地写成 new this(（与真仓同形——
+    # 夹具若写类名，「src/ 里不许另开实例」这条断言会在良好输入上误红）
     _w(RESOLVER, "const STORAGE_NAME = 'assets-manifest.json';"
-                 " const INTERCEPT = 'octave.build.json';\n")
+                 " const INTERCEPT = 'octave.build.json';\n"
+                 "EngineAssetResolver._instance = new this(store);\n")
     _w(EMBED, "const gate = 'assertBootable';\n")
     # #12 去装饰化断言的夹具目标（形状与真仓一致：平铺存储名 + 瘦身后的
     # KNOWN_ENGINE_METADATA 键 omc——combinedSha / 128hex 都不在，断言该绿）
@@ -295,7 +300,9 @@ def _cases():
     # 失效挂点字面量——两条 must_contain 断言在夹具上可判，反向用例就地改写）
     _w(DOWNLOAD, DOWNLOAD and open(DOWNLOAD, encoding="utf-8").read()
        + "// download() 内 finally 零 broadcastChange\n"
-         "EngineAssetResolver.getInstance().invalidateCache(lane as any);\n")
+         "EngineAssetResolver.getInstance().invalidateCache(lane as any);\n"
+       # #23 候选 3：removeEngine 走单例 evict 的夹具目标
+         "EngineAssetResolver.getInstance().evict(lane as any, v);\n")
     # #14 包管理器错误呈现链断言的夹具目标（形状与真仓一致：DX3 forge 复制行 +
     # DX1 toast 双呈现 + DX2 互斥/重试 + R1 终端净化接线）
     _w(SYNCLANES, "# 夹具 sync-lanes.sh\n"
@@ -489,6 +496,26 @@ def _cases():
          lambda: _mutate(TERMC,
                          "const text = String(err);\n",
                          good_reg, "ErrorSanitizer.sanitize")),
+        # #23 候选 3 的三条断言各自的「该报的必须报」
+        ("★ #23 src 里另开 resolver 实例（绕过单例）⇒ 必须报（候选 3：对账被架空）",
+         lambda: _mutate(BADLANE,
+                         "const r = new EngineAssetResolver(store);\n",
+                         good_reg, "被禁片段")),
+        ("★ #23 removeEngine 走回另开实例 ⇒ 必须报（evict 清的不是同一份盘）",
+         lambda: _mutate(DOWNLOAD,
+                         "const meta = { sha256: 'ab'.repeat(8) };\n"
+                         "const FLAT = 'assets-manifest.json';\n"
+                         "let omcMeta = KNOWN_ENGINE_METADATA['omc'];\n"
+                         "// download() 内 finally 零 broadcastChange\n"
+                         "EngineAssetResolver.getInstance().invalidateCache(lane as any);\n"
+                         "const resolver = new EngineAssetResolver(this.storage);\n"
+                         "await resolver.evict(lane, v);\n",
+                         good_reg, "EngineAssetResolver.getInstance().evict")),
+        ("★ #23 组合根不绑同一 store ⇒ 必须报（OPFS 不可用时 evict 清的是另一份盘）",
+         lambda: _mutate(APPCTX,
+                         "import { onOmcFlavorError } from './engine/OmcBridge';\n"
+                         "onOmcFlavorError((err) => {});\n",
+                         good_reg, "getInstance(workspaceStorage.store)")),
         ("★ src/lib/engine 壳存在 ⇒ 必须报（#10 已生效：壳回潮真的会红）",
          lambda: _lib_case()),
         ("★ 断言无判据字段 ⇒ 必须报（登记了却不查 = 装饰）",
