@@ -34,6 +34,8 @@ export class WorkspaceStorageManager {
   private _listeners: Set<() => void> = new Set();
   /** 上次 _notify 时的活跃文件（D13：活跃文件变化本身也要发声，条目集合相同但选中项变了） */
   private _lastNotifiedActiveFile: string | null = null;
+  /** 上次成功 addpath 的路径指纹（候选 1：idle→sync→eval→idle 环的断点——路径没变不重跑） */
+  private _lastAddpathKey: string | null = null;
 
   constructor(preferredStore?: Store) {
     if (preferredStore) {
@@ -380,12 +382,25 @@ export class WorkspaceStorageManager {
     }
 
     // 在 Octave 中注册 workspace 路径
-    if (syncedCount > 0) {
+    //
+    // ★ 候选 1 环（架构扫描实测，2026-10-28）：`eval` 会把 supervisor 推到 busy 再回 idle，
+    // 而 appContext 的 `onStateChange(idle) → syncToEngine` 又在 idle 时再进来
+    // ⇒ **只要工作区有 ≥1 个文件就永不收敛**。实测（MockEmbedAdapter 真状态机）：2 秒
+    // 200 次 syncToEngine / 199 次 addpath eval（瓶颈上限撞满）；浏览器侧副作用是
+    // 空闲时每秒 58 次 busy/idle 翻转、用户 eval 吞吐劣化 6.44×。
+    //
+    // 断环：addpath **只在路径集合真变化时**跑一次（路径没变 = 已注册过，再跑是无意义的
+    // 状态机抖动）。文件内容变了仍会重写 MEMFS（上面那步），但不再触发 eval。
+    const pathKey = `${syncedCount}:${this._entries.length}:${WORKSPACE_MOUNT_DIR}`;
+    if (syncedCount > 0 && this._lastAddpathKey !== pathKey) {
+      this._lastAddpathKey = pathKey;
       try {
         await supervisor.eval(
           `addpath('${WORKSPACE_MOUNT_DIR}'); if exist('${WORKSPACE_MOUNT_DIR}', 'dir'), addpath(genpath('${WORKSPACE_MOUNT_DIR}')); endif;`
         );
       } catch (e) {
+        // 失败不记 key ⇒ 下次还会重试（不让一次瞬时失败永久跳过 addpath）
+        this._lastAddpathKey = null;
         console.warn('[WorkspaceStorageManager] Failed to run addpath in engine:', e);
       }
     }

@@ -155,3 +155,60 @@ describe('D13 回归锁：refresh 是幂等查询，不得产生状态变更通�
     expect(reentered).toBe(0);
   });
 });
+
+describe('候选1 回归锁：idle→syncToEngine→eval→idle 环必须收敛', () => {
+  it('★ 路径集合不变时 addpath 只跑一次（环的断点）', async () => {
+    const { EngineSupervisor } = await import('../../src/modules/engine/EngineSupervisor');
+    const { MockEmbedAdapter } = await import('../../src/modules/engine/MockEmbedAdapter');
+    const store = new MemoryStore();
+    await store.write('a.m', new TextEncoder().encode('x = 1;'));
+    const mgr = new WorkspaceStorageManager(store);
+    await mgr.init();
+
+    const adapter = new MockEmbedAdapter();
+    let evalCalls = 0;
+    const orig = adapter.eval.bind(adapter);
+    (adapter as any).eval = async (code: string) => {
+      if (String(code).includes('addpath')) evalCalls += 1;
+      return orig(code);
+    };
+    const sup = new EngineSupervisor({ adapter, adapterFactory: () => adapter, skipPreflight: true });
+    await sup.boot();
+
+    let syncCalls = 0;
+    sup.onStateChange((state) => {
+      if (state === 'idle' && syncCalls < 100) {
+        syncCalls += 1;
+        void mgr.syncToEngine(sup);
+      }
+    });
+    await new Promise((r) => setTimeout(r, 600));
+    // 断环前：syncCalls 撞满 100 / evalCalls ~99；断环后：evalCalls 应为 1
+    expect(evalCalls).toBe(1);
+  });
+
+  it('★ 路径集合真变时 addpath 要重跑（不能为了断环把功能修死）', async () => {
+    const { EngineSupervisor } = await import('../../src/modules/engine/EngineSupervisor');
+    const { MockEmbedAdapter } = await import('../../src/modules/engine/MockEmbedAdapter');
+    const store = new MemoryStore();
+    await store.write('a.m', new TextEncoder().encode('x = 1;'));
+    const mgr = new WorkspaceStorageManager(store);
+    await mgr.init();
+    const adapter = new MockEmbedAdapter();
+    let evalCalls = 0;
+    const orig = adapter.eval.bind(adapter);
+    (adapter as any).eval = async (code: string) => {
+      if (String(code).includes('addpath')) evalCalls += 1;
+      return orig(code);
+    };
+    const sup = new EngineSupervisor({ adapter, adapterFactory: () => adapter, skipPreflight: true });
+    await sup.boot();
+
+    await mgr.syncToEngine(sup);
+    expect(evalCalls).toBe(1);
+    await store.write('b.m', new TextEncoder().encode('y = 2;'));
+    await mgr.refresh();
+    await mgr.syncToEngine(sup);
+    expect(evalCalls).toBe(2); // 文件数变了 ⇒ 路径集合变了 ⇒ 重跑
+  });
+});
