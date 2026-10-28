@@ -123,3 +123,12 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
   保留兜底副本」，此口径经内容仓 096 §4.1 确认。
 - **可证伪判据**：catalog 给的 sha 与兜底不同 ⇒ 必须用 catalog 的（有测试钉住）。
 - 兜底值陈旧 ⇒ 下载时 sha 校验红（fail fast），注释在案。
+- **2026-10-29 全判据面实测钉死**（`tests/storage/DownloadStore.test.ts`，commit `449a3c0`），
+  两条 096 口径没写到、实测确认的**精确边界**：
+  1. **全有或全无**：catalog `files[]` 残缺（只有一件 / `files:{}`）⇒ 硬报
+     `FLAVOR_UNAVAILABLE`，**不**逐件回落兜底——混用形状被反向断言钉死；
+  2. **「缺条目」的精确触发集** = 缺条目 ∨ 条目无 `files[]` ∨ catalogProvider
+     不可达/抛错（抛错静默落兜底，仅代码缺陷形状响亮打日志）。
+  另：catalog 顶层 `sha256`/`size` 被有意忽略（Q12.2，只取 `files[]`）——与口径一致。
+  **变异实测**：兜底优先变异体 ⇒ 8 红；逐件合并变异体 ⇒ 恰 1 红。
+  复跑：`CI=true npx vitest run tests/storage/DownloadStore.test.ts`（34/34 绿）。
