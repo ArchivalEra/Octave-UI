@@ -54,19 +54,40 @@ def measure_example():
     facts = {}
 
     # 1. 前端与组件资产统计
-    ts_cmd = "find . \\( -path './src/*' -o -path './tests/*' \\) -name '*.ts' | wc -l"
+    # 复跑面 = 仓库面（与 md/py 同款修正，先例 5d0f9da / 68e4a12）：git 工作树里
+    # cmd 只数**已跟踪**的 ts/svelte/astro/test（git ls-files）——旧 `find` 把未
+    # 跟踪的同扩展名文件（探针 / 草稿）也数进去，台账值在含未跟踪文件的 checkout
+    # 上复跑永不收敛（复跑判据必须只依赖已入库的面）。pathspec 与原 find 语义逐字
+    # 等价、不收窄不放宽：`src/*.ts` 的 `*` 跨目录 ⇒ 递归等价 `-path './src/*'
+    # -name '*.ts'`（ts 用 `'src/*.ts' 'tests/*.ts'` 保住原双目录限定——仓里另有
+    # 5 个跟踪 .ts 在面外：pyodide/omc 的 .d.ts + vitest.config.ts，裸 '*.ts' 会
+    # 放宽 +5）；`tests/*.test.ts` 等价 `-path './tests/*' -name '*.test.ts'`（全部
+    # 跟踪的 *.test.ts 都在 tests/ 下，50=50）。非 git 处境（跨仓夹具自证）没有
+    # 「已跟踪面」这个概念，退回 find 数全量 —— 仪器随处境选，**选了什么就写在
+    # cmd 字段里**（判据强度随环境变化不许静默 —— runner.py 的 bash→/bin/sh 同款
+    # 先例）。反向验证：git 仓里造未跟踪 ts/svelte/astro/test 探针后这四条 cmd
+    # 输出不变。
+    if _probe("git rev-parse --is-inside-work-tree") is not None:
+      ts_cmd = "git ls-files -- 'src/*.ts' 'tests/*.ts' | wc -l"
+      svelte_cmd = "git ls-files -- 'src/*.svelte' | wc -l"
+      astro_cmd = "git ls-files -- 'src/*.astro' | wc -l"
+      test_cmd = "git ls-files -- 'tests/*.test.ts' | wc -l"
+    else:
+      print("⚠ GATE_REPO 不是 git 工作树 ⇒ ts/svelte/astro/test 计数退回 find"
+            "（数全量，无「已跟踪面」可依）—— 仪器选择已写进 cmd 字段", file=sys.stderr)
+      ts_cmd = "find . \\( -path './src/*' -o -path './tests/*' \\) -name '*.ts' | wc -l"
+      svelte_cmd = "find . -path './src/*' -name '*.svelte' | wc -l"
+      astro_cmd = "find . -path './src/*' -name '*.astro' | wc -l"
+      test_cmd = "find . -path './tests/*' -name '*.test.ts' | wc -l"
     n_ts = int(subprocess.run(ts_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
     facts["ts_files"] = fact(n_ts, ts_cmd, "repo", "TypeScript 源码与测试文件数")
 
-    svelte_cmd = "find . -path './src/*' -name '*.svelte' | wc -l"
     n_svelte = int(subprocess.run(svelte_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
     facts["svelte_files"] = fact(n_svelte, svelte_cmd, "repo", "Svelte 5 组件与 Islands 数量")
 
-    astro_cmd = "find . -path './src/*' -name '*.astro' | wc -l"
     n_astro = int(subprocess.run(astro_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
     facts["astro_files"] = fact(n_astro, astro_cmd, "repo", "Astro 静态页面与布局数")
 
-    test_cmd = "find . -path './tests/*' -name '*.test.ts' | wc -l"
     n_test = int(subprocess.run(test_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
     facts["test_files"] = fact(n_test, test_cmd, "repo", "Vitest 单元测试套件数")
 
