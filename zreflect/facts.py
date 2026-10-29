@@ -79,12 +79,25 @@ def measure_example():
     lines_py = int(subprocess.run(py_lines_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
     facts["py_lines"] = fact(lines_py, py_lines_cmd, "repo", "刻意 ≥100，用来示范裸数字判据")
 
-    md_files_cmd = "find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l"
+    # 复跑面 = 仓库面（「测量输入含未跟踪状态」的修正）：git 工作树里 cmd 只数
+    # **已跟踪**的 md（git ls-files）——旧 `find` 把未跟踪的 md（草稿 / scratch /
+    # 需求稿）也数进去，台账值在干净 checkout 上复跑永不收敛（复跑判据必须只依赖
+    # 已入库的面）。非 git 处境（跨仓夹具自证）没有「已跟踪面」这个概念，退回
+    # find 数全量 —— 仪器随处境选，**选了什么就写在 cmd 字段里**（判据强度随环境
+    # 变化不许静默 —— runner.py 的 bash→/bin/sh 同款先例）。反向验证：git 仓里
+    # 造未跟踪 md 后这两条 cmd 输出不变。
+    if _probe("git rev-parse --is-inside-work-tree") is not None:
+      md_files_cmd = "git ls-files -- '*.md' | wc -l"
+      md_lines_cmd = ("git ls-files -z -- '*.md'"
+                      " | xargs -0 -r awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' | wc -l")
+    else:
+      print("⚠ GATE_REPO 不是 git 工作树 ⇒ md 计数退回 find（数全量，无「已跟踪面」"
+            "可依）—— 仪器选择已写进 cmd 字段", file=sys.stderr)
+      md_files_cmd = "find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' | wc -l"
+      md_lines_cmd = ("find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*'"
+                      " -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l")
     n_md = int(subprocess.run(md_files_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
     facts["md_files"] = fact(n_md, md_files_cmd, "repo")
-
-    md_lines_cmd = ("find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*'"
-                    " -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l")
     facts["md_lines"] = fact(
         int(subprocess.run(md_lines_cmd, shell=True, capture_output=True,
                            text=True, check=True,
