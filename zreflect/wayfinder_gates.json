@@ -250,6 +250,59 @@
       "desc": "候选 3 前置：组合根把单例绑到写路径同一个 store（否则 OPFS 不可用时 evict 清的是另一份盘）",
       "file": "src/modules/appContext.ts",
       "must_contain": "EngineAssetResolver.getInstance(workspaceStorage.store)"
+    },
+    {
+      "ticket": 24,
+      "desc": "清洗 C1：死单例不许回潮（workspaceStore/filesystemStore/workbenchController/engineSession 四个 appContext 导出）",
+      "file": "src/modules/appContext.ts",
+      "must_not_contain_re": "export const (workspaceStore|filesystemStore|workbenchController|engineSession)\\b"
+    },
+    {
+      "ticket": 24,
+      "desc": "清洗 C1：WorkbenchController 整类物理删除（平行 Notebook，产品 0 消费）",
+      "path_must_not_exist": "src/modules/workbench/WorkbenchController.ts"
+    },
+    {
+      "ticket": 24,
+      "desc": "清洗 C1：WorkspaceStore 整类物理删除（octave_workspace_snapshots key 冲突随之解除）",
+      "path_must_not_exist": "src/modules/workspace/WorkspaceStore.ts"
+    },
+    {
+      "ticket": 24,
+      "desc": "清洗 C5：FilesystemStore 整类物理删除（唯一消费者是已删的死单例）",
+      "path_must_not_exist": "src/modules/filesystem/FilesystemStore.ts"
+    },
+    {
+      "ticket": 24,
+      "desc": "清洗 C2：omc:simulate-progress 断链不许回潮（监听已删、全仓 0 发射点）",
+      "dir": "src",
+      "ext": ".svelte",
+      "must_not_contain": "omc:simulate-progress"
+    },
+    {
+      "ticket": 24,
+      "desc": "清洗 C3：octave:figure-rendered 单一产地（常量 FIGURE_BUS_EVENT，字面量只许出现在 GraphicsSink.ts 定义处）",
+      "file": "src/modules/plugins/figure/P5FigureOverlayPlugin.ts",
+      "must_not_contain": "'octave:figure-rendered'"
+    },
+    {
+      "ticket": 24,
+      "desc": "清洗 C1/C4：下划线 public 跨模块调用不许回潮（_flushBufferedOutput 已改真名）",
+      "dir": "src",
+      "ext": ".ts",
+      "must_not_contain": "_flushBufferedOutput"
+    },
+    {
+      "ticket": 24,
+      "desc": "清洗 C4：注入缺失必须响亮失败（装配故障码在案）",
+      "file": "src/modules/plugins/package/PackageManagerPlugin.ts",
+      "must_contain": "ASSEMBLY_FAULT"
+    },
+    {
+      "ticket": 24,
+      "desc": "清洗 C6+spec#19：页面级总线红线仍在（wireFigureBusToSink 不许被收窄/删除）",
+      "file": "src/modules/figure/GraphicsSink.ts",
+      "must_contain": "wireFigureBusToSink"
     }
   ]
 }

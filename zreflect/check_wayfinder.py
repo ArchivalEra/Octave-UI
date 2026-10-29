@@ -324,7 +324,17 @@ def _cases():
     os.makedirs(os.path.join(d, "src/modules/plugins/figure"), exist_ok=True)
     _w(os.path.join(d, "src/modules/plugins/figure/P5FigureOverlayPlugin.ts"),
        "const wrapped = () => {};\n"
-       "wrapped.__overlay_hooked = true;\n")
+       "wrapped.__overlay_hooked = true;\n"
+       # #24：事件名产地化——发射方必须引用常量、不许写字面量
+       "import { FIGURE_BUS_EVENT } from '../../figure/GraphicsSink';\n"
+       "window.dispatchEvent(new CustomEvent(FIGURE_BUS_EVENT));\n")
+    # #24 清洗票的夹具目标（形状与真仓一致；反向用例把这些造回来的东西再塞进去）：
+    #   · PackageManagerPlugin 必须有装配故障码（注入缺失响亮失败）
+    #   · appContext 不许有四个死单例导出
+    #   · 三个被整类删除的文件不许存在（夹具里本就不建 ⇒ 良好用例天然绿）
+    _w(os.path.join(d, "src/modules/plugins/package/PackageManagerPlugin.ts"),
+       "export function getAssetsPort() { return 1; }\n"
+       "throw Object.assign(new Error('x'), { code: 'ASSEMBLY_FAULT' });\n")
     # 夹具台账键集（A 面）。gate 锚点在夹具里指向不存在的文件（zreflect/ 不在
     # 夹具根）⇒ 良好用例须先把该锚点换成夹具内在册的路径。
     keys = {"integrity_check_physical", "get_assets_port_alive",
@@ -359,10 +369,24 @@ def _cases():
         return None
 
     def _mutate(path, text, reg, word):
-        """就地改写一个夹具文件 → 跑 problems() → 恢复原状（原本不存在 ⇒ 查完删除）。"""
+        """就地改写一个夹具文件 → 跑 problems() → 恢复原状（原本不存在 ⇒ 查完删除）。
+
+        「造回来」型用例（#24：把删掉的类文件重新造出来）目标文件的父目录可能
+        在夹具里本就不存在——按需建目录是台架职责，不是放宽判据（断言本身仍
+        严格判「文件存在 ⇒ 红」）。清理时把**自己新建的目录**一并拆掉，
+        不给后续用例留副作用（空目录不该留下）。
+        """
         backup = None
+        made_dirs = []
         if os.path.exists(path):
             backup = open(path, encoding="utf-8").read()
+        else:
+            parent = os.path.dirname(path)
+            while parent and not os.path.isdir(parent):
+                made_dirs.append(parent)
+                parent = os.path.dirname(parent)
+            for dr in reversed(made_dirs):
+                os.makedirs(dr, exist_ok=True)
         _w(path, text)
         try:
             return any(word in x for x in problems(reg, root=d, facts=keys)[0])
@@ -371,6 +395,11 @@ def _cases():
                 _w(path, backup)
             else:
                 os.remove(path)
+                for dr in made_dirs:            # 深的先删（made_dirs 已是深→浅）
+                    try:
+                        os.rmdir(dr)
+                    except OSError:
+                        break
 
     # 各坏用例的登记表变体（纯 dict 改写，无文件副作用）
     miss_key_reg = _clone()
@@ -382,6 +411,11 @@ def _cases():
     _assertion(hex_reg, 12).pop("pending", None)          # 保险：#12 已生效，无 pending 可翻
     lib_reg = _clone()
     _assertion(lib_reg, 10).pop("pending", None)          # 保险：#10 已生效，无 pending 可翻
+    # ══ #24 接口大清洗的防回潮断言：每条都要能证明「该报的会报」══
+    # 反向做法：把被删的东西**造回来**（文件/字面量），断言必须红。
+    # 不造回「死类整份内容」——只需让目标文件重新出现或让被禁片段出现，
+    # 判据面就成立（path_must_not_exist / must_not_contain 各自咬合）。
+    clean_reg = _clone()
     # pending 语义夹具（#10/#12 执行后真表无 pending 原文 ⇒ 合成一条考「跳过执行
     # 并如实注明」——防的是 pending 机制被无声拆掉后没人发现）
     pending_reg = _clone()
@@ -516,6 +550,36 @@ def _cases():
                          "import { onOmcFlavorError } from './engine/OmcBridge';\n"
                          "onOmcFlavorError((err) => {});\n",
                          good_reg, "getInstance(workspaceStorage.store)")),
+        # ── #24 接口大清洗的六条防回潮断言，各配一条「造回来必须报」──
+        ("★ #24 死单例回潮（workspaceStore 加回 appContext）⇒ 必须报",
+         lambda: _mutate(APPCTX,
+                         "import { onOmcFlavorError } from './engine/OmcBridge';\n"
+                         "onOmcFlavorError((err) => {});\n"
+                         "EngineAssetResolver.getInstance(workspaceStorage.store);\n"
+                         "export const workspaceStore = makeStore();\n",
+                         clean_reg, "死单例不许回潮")),
+        ("★ #24 WorkbenchController 复活 ⇒ 必须报（平行 Notebook 产品 0 消费）",
+         lambda: _mutate(os.path.join(d, "src/modules/workbench/WorkbenchController.ts"),
+                         "export class WorkbenchController {}\n",
+                         clean_reg, "仍存在")),
+        ("★ #24 WorkspaceStore 复活 ⇒ 必须报（octave_workspace_snapshots key 冲突会回来）",
+         lambda: _mutate(os.path.join(d, "src/modules/workspace/WorkspaceStore.ts"),
+                         "export class WorkspaceStore {}\n",
+                         clean_reg, "仍存在")),
+        ("★ #24 FilesystemStore 复活 ⇒ 必须报（唯一消费者是已删的死单例）",
+         lambda: _mutate(os.path.join(d, "src/modules/filesystem/FilesystemStore.ts"),
+                         "export class FilesystemStore {}\n",
+                         clean_reg, "仍存在")),
+        ("★ #24 断链事件回潮（omc:simulate-progress 监听加回）⇒ 必须报",
+         lambda: _mutate(os.path.join(d, "src/components/dock/panels/OmcShellPanel.svelte"),
+                         "window.addEventListener('omc:simulate-progress', h);\n",
+                         clean_reg, "omc:simulate-progress 断链不许回潮")),
+        ("★ #24 事件名字面量回潮（发射方写回 'octave:figure-rendered'）⇒ 必须报",
+         lambda: _mutate(os.path.join(d, "src/modules/plugins/figure/P5FigureOverlayPlugin.ts"),
+                         "const wrapped = () => {};\n"
+                         "wrapped.__overlay_hooked = true;\n"
+                         "window.dispatchEvent(new CustomEvent('octave:figure-rendered'));\n",
+                         clean_reg, "单一产地")),
         ("★ src/lib/engine 壳存在 ⇒ 必须报（#10 已生效：壳回潮真的会红）",
          lambda: _lib_case()),
         ("★ 断言无判据字段 ⇒ 必须报（登记了却不查 = 装饰）",
