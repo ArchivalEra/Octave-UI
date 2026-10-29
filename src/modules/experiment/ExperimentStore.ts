@@ -4,7 +4,6 @@
 import type { RecipeId } from './types';
 import { ExampleRegistry } from './ExampleRegistry';
 import type { EngineSupervisor } from '../engine/EngineSupervisor';
-import type { WorkbenchController } from '../workbench/WorkbenchController';
 import type { ProjectWorkspace } from '../workspace/ProjectWorkspace';
 import { SafePlotSinkPolyfill } from '../semantic/SafePlotSinkPolyfill';
 
@@ -12,7 +11,7 @@ export class ExperimentStore {
   static async launch(
     id: RecipeId,
     supervisor: EngineSupervisor,
-    workbench: ProjectWorkspace | WorkbenchController
+    workbench: ProjectWorkspace
   ): Promise<boolean> {
     const recipe = ExampleRegistry.getById(id);
     if (!recipe) return false;

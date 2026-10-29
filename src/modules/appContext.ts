@@ -4,14 +4,11 @@ import { EngineSupervisor } from './engine/EngineSupervisor';
 import { onOmcFlavorError } from './engine/OmcBridge';
 import { TerminalController } from './terminal/TerminalController';
 import { HistoryStore } from './history/HistoryStore';
-import { WorkspaceStore } from './workspace/WorkspaceStore';
-import { FilesystemStore } from './filesystem/FilesystemStore';
 import { ThemeManager } from './theme/ThemeManager';
 import { CapabilityPolicy } from './figure/CapabilityPolicy';
 import { GraphicsSink, wireFigureSource, wireFigureBusToSink } from './figure/GraphicsSink';
 import { i18n, t } from './i18n/I18nManager.svelte';
 
-import { WorkbenchController } from './workbench/WorkbenchController';
 import { ProjectWorkspace } from './workspace/ProjectWorkspace';
 import { VariableInspectorStore } from './inspector/VariableInspectorStore';
 import { SafePlotSinkPolyfill } from './semantic/SafePlotSinkPolyfill';
@@ -27,8 +24,6 @@ export { toastService };
 
 export const historyStore = new HistoryStore();
 export const supervisor = new EngineSupervisor();
-// 兼容性别名：支持已有引用
-export const engineSession = supervisor as any;
 
 export const dockLayoutStore = new DockLayoutStore();
 export const panelRegistry = panelRegistryInstance;
@@ -69,10 +64,7 @@ export const projectWorkspace = new ProjectWorkspace(supervisor, undefined, work
 // 这里一次性绑死：写路径、对账、evict 从此同源。
 EngineAssetResolver.getInstance(workspaceStorage.store);
 export const terminalController = new TerminalController(historyStore, supervisor as any);
-export const workspaceStore = new WorkspaceStore(supervisor as any);
-export const filesystemStore = new FilesystemStore(supervisor as any);
 export const themeManager = new ThemeManager();
-export const workbenchController = new WorkbenchController();
 export const variableInspectorStore = new VariableInspectorStore();
 export { i18n, t, SafePlotSinkPolyfill };
 

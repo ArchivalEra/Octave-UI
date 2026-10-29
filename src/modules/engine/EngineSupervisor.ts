@@ -249,12 +249,17 @@ export class EngineSupervisor {
     this._bufferedStdout.push(chunk);
     if (!this._stdoutFlushTimer) {
       this._stdoutFlushTimer = setTimeout(() => {
-        this._flushBufferedOutput();
+        this.flushBufferedOutput();
       }, 16);
     }
   }
 
-  public _flushBufferedOutput() {
+  // 公开面：eval() 内部已自行冲刷，但调用方在「eval 返回 → 等 DOM MutationObserver
+  // 沉降 → 再取 cell.streamingOutput」之间需要在定时器到期前强制交付——ProjectWorkspace
+  // 就是这条路径的唯一跨模块消费者。它曾带下划线前缀（= 私有约定）却被跨模块直接调，
+  // 与类型面自相矛盾；这里给出真名，私有性由命名诚实表达。
+  // （静态防回潮锁见 tests/workspace/dead-singletons-absence.test.ts：下划线旧名零命中。）
+  public flushBufferedOutput() {
     if (this._adapter && typeof (this._adapter as any).flushOutput === 'function') {
       try { (this._adapter as any).flushOutput(); } catch {}
     }
@@ -301,7 +306,7 @@ export class EngineSupervisor {
     this._crashCause = cause;
 
     // 1. 优先冲刷 stdout 缓冲
-    this._flushBufferedOutput();
+    this.flushBufferedOutput();
 
     // 2. 清除 Kill Ladder 定时器
     this._clearAbort();
@@ -541,7 +546,7 @@ export class EngineSupervisor {
       try {
         res = await this._adapter!.eval(code);
       } finally {
-        this._flushBufferedOutput();
+        this.flushBufferedOutput();
         try {
           await this._silentRefreshWorkspace();
         } catch {}

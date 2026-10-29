@@ -655,7 +655,7 @@ export class ProjectWorkspace {
       const evalRes = await this._supervisor.eval(codeToEval);
       // 等待 DOM MutationObserver 与引擎 stdout 缓冲完全沉降
       await new Promise((resolve) => setTimeout(resolve, 60));
-      this._supervisor._flushBufferedOutput();
+      this._supervisor.flushBufferedOutput();
       const durationMs = Date.now() - startTime;
 
       // 1. 优先提取原生 WebGL toolkit 图形输出（Issue #2 权威化管线）
