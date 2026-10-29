@@ -1,18 +1,18 @@
 // src/modules/figure/CapabilityPolicy.ts
 // 输入侧策略分析模块：绘图语法意图探测与出队时（Time-of-Dequeue）宿主能力核验，不持有引擎适配器
-export interface PolicyDecision {
+interface PolicyDecision {
   allowed: boolean;
   isPlot: boolean;
   matchedCommand?: string;
   reason?: string;
 }
 
-export interface CapabilityStatus {
+interface CapabilityStatus {
   webgpuSupported: boolean;
   reason?: string;
 }
 
-export type InterceptListener = (decision: PolicyDecision) => void;
+type InterceptListener = (decision: PolicyDecision) => void;
 
 export class CapabilityPolicy {
   // 危险绘图指令正则：涵盖常见图形生成与渲染触发词（包含 subplot、fplot、ezplot、contourf 等高频画图指令）

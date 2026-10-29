@@ -4,7 +4,7 @@
 
 import type { OctavePlugin } from '../types';
 
-export interface PretextPluginOptions {
+interface PretextPluginOptions {
   minColWidth?: number;
   maxColWidth?: number;
   codeLineHeight?: number;

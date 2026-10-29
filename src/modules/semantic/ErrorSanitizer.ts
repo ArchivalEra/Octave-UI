@@ -4,7 +4,7 @@
 
 import type { Locale } from '../i18n/types';
 
-export type ErrorCategory =
+type ErrorCategory =
   | 'syntax'
   | 'undefined_variable'
   | 'dimension_mismatch'

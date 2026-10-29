@@ -21,7 +21,7 @@ export type ExtractPlaceholders<S extends string> =
  * 根据模板字符串字面量推导所需的参数对象类型
  * 若无占位符，则推导为 void | Record<string, string | number>（允许省略参数）
  */
-export type ParamsOf<S extends string> =
+type ParamsOf<S extends string> =
   [ExtractPlaceholders<S>] extends [never]
     ? Record<string, string | number> | void
     : { [K in ExtractPlaceholders<S>]: string | number };

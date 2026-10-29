@@ -3,12 +3,12 @@
 
 import type { DownloadProgressCallback } from './downloadTypes';
 
-export interface FetchOptions {
+interface FetchOptions {
   onProgress?: DownloadProgressCallback;
   signal?: AbortSignal;
 }
 
-export interface FetchResult {
+interface FetchResult {
   ok: boolean;
   status: number;
   data: Uint8Array;

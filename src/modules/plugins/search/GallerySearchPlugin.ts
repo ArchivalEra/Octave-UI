@@ -5,9 +5,9 @@
 import type { OctavePlugin } from '../types';
 import type { ExperimentRecipe } from '../../experiment/types';
 
-export const CJK_CLASS = '\\u3000-\\u303f\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff\\uff00-\\uffef';
-export const ALNUM_CLASS = '0-9a-z';
-export const CJK_RE_SRC = `[${CJK_CLASS}]`;
+const CJK_CLASS = '\\u3000-\\u303f\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff\\uff00-\\uffef';
+const ALNUM_CLASS = '0-9a-z';
+const CJK_RE_SRC = `[${CJK_CLASS}]`;
 
 /**
  * 纯函数：查询与索引共用的规范化折叠（逐字匹配基础）。
@@ -124,7 +124,7 @@ export interface SearchHit<T = ExperimentRecipe> {
   highlightedCode: string;
 }
 
-export interface GallerySearchPluginOptions {
+interface GallerySearchPluginOptions {
   debounceMs?: number;
 }
 

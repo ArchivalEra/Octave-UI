@@ -26,7 +26,7 @@ export interface EngineAssetStatus {
   readonly integrity: EngineIntegrity;
 }
 
-export interface IEngineAssetResolver {
+interface IEngineAssetResolver {
   /**
    * 物理对账检查目标引擎是否已完整持久化于 OPFS：
    * stat 查文件在 → size 硬判（与 manifest 记账 bytes 逐一相等；无记账退回 size>0 旧判）→

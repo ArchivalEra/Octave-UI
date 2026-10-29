@@ -2,7 +2,7 @@
 // 工作区变量同步仓储：结构化表格解析、变量大小与字节格式化、命名工作区与快照管理、响应式订阅
 import type { WorkspaceVariable, EngineSessionLike } from '../engine/types';
 
-export interface WorkspaceSnapshot {
+interface WorkspaceSnapshot {
   id: string;
   name: string;
   timestamp: number;
@@ -10,8 +10,8 @@ export interface WorkspaceSnapshot {
   description?: string;
 }
 
-export type WorkspaceListener = (vars: WorkspaceVariable[]) => void;
-export type SnapshotListener = (snapshots: WorkspaceSnapshot[]) => void;
+type WorkspaceListener = (vars: WorkspaceVariable[]) => void;
+type SnapshotListener = (snapshots: WorkspaceSnapshot[]) => void;
 
 const STORAGE_KEY_SNAPSHOTS = 'octave_workspace_snapshots';
 const STORAGE_KEY_ACTIVE = 'octave_active_workspace';

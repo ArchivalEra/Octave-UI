@@ -12,7 +12,7 @@
 //
 // 环形缓冲容量 512（流量分布观测足够；溢出丢最旧——环形语义即此）。
 
-export interface WebMcpCallRecord {
+interface WebMcpCallRecord {
   readonly name: string;
   readonly ok: boolean;
   readonly ms: number;

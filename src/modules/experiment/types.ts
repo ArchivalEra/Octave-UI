@@ -3,7 +3,7 @@
 
 export type RecipeCategory = 'signal' | 'algebra' | 'simulation' | 'statistics';
 
-export type ExpectedOutputKind = 'plot' | 'matrix' | 'scalar' | 'stream';
+type ExpectedOutputKind = 'plot' | 'matrix' | 'scalar' | 'stream';
 
 export type RecipeId =
   | 'sine-wave'

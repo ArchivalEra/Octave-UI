@@ -1,7 +1,7 @@
 // src/modules/ui/ToastService.svelte.ts
 // 响应式轻量 Toast 通知服务：替换浏览器原生阻塞 alert()，结构化呈现 7 封闭错误码 [state, cause]
 
-export interface ToastItem {
+interface ToastItem {
   id: string;
   type: 'info' | 'success' | 'warning' | 'error';
   title?: string;
@@ -10,7 +10,7 @@ export interface ToastItem {
   timeoutMs?: number;
 }
 
-export class ToastService {
+class ToastService {
   toasts = $state<ToastItem[]>([]);
 
   show(item: Omit<ToastItem, 'id'>): string {

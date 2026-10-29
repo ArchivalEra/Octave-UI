@@ -5,7 +5,7 @@ import type { SemanticResult } from '../semantic/SemanticResultRenderer';
 
 export type WorkbenchMode = 'notebook' | 'script' | 'console';
 
-export type CellStatus = 'idle' | 'running' | 'success' | 'error' | 'aborted';
+type CellStatus = 'idle' | 'running' | 'success' | 'error' | 'aborted';
 
 export interface NotebookCell {
   id: string;
