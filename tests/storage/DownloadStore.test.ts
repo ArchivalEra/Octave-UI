@@ -1,5 +1,8 @@
 // tests/storage/DownloadStore.test.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath, URL as NodeURL } from 'node:url';
+import * as nodePath from 'node:path';
 import { DownloadStore, KNOWN_ENGINE_METADATA } from '../../src/modules/storage/DownloadStore';
 import { MemoryStore } from '../../src/modules/storage/MemoryStore';
 import { MockFetchAdapter } from '../../src/modules/storage/FetchPort';
@@ -13,6 +16,16 @@ import * as nodeCrypto from 'node:crypto';
 // sha 一律真算（同 EngineAssetResolver.test.ts 的 sha256OfNode 写法）。
 function sha256OfNode(data: string | Uint8Array): string {
   return nodeCrypto.createHash('sha256').update(data).digest('hex');
+}
+
+/** 仓根相对路径定位：必须用 node:url 的 URL（happy-dom 把全局 URL 补丁坏了，
+ *  相对解析会产 http://localhost/@fs/... 垃圾）；仍失败则退 process.cwd()（vitest 从仓根起跑）。 */
+function repoFile(relFromRepoRoot: string): string {
+  try {
+    return fileURLToPath(new NodeURL(`../../${relFromRepoRoot}`, import.meta.url));
+  } catch {
+    return nodePath.resolve(process.cwd(), relFromRepoRoot);
+  }
 }
 
 describe('DownloadStore Deep Module', () => {
@@ -604,6 +617,73 @@ describe('DownloadStore Deep Module', () => {
     expect(rec.files.map((f) => f.sha256)).toEqual([
       omc.files['OpenModelicaCompiler_bg.wasm'].sha256,
       omc.files['OpenModelicaCompiler.js'].sha256,
+    ]);
+  });
+
+  it('#12 Q12.2(钉死, investigate/omc-size): 兜底副本求和 === OM 产物台账真值；mirror catalog 顶层 size 是目录和，不一致以 files[] 为准', async () => {
+    // ── 真源（OpenModelica-Full-Wasm 台账 build/FACTS.json，上游仓只读）──
+    // 复跑（2026-10-29 实测，逐字；与台账键 omc_web_wasm_bytes / omc_web_js_bytes 同值）：
+    //   stat -c%s /mnt/hdd/openmodelica-wasm-build/build/omc-out-web/web/omc/OpenModelicaCompiler_bg.wasm  ⇒ 74579404
+    //   stat -c%s /mnt/hdd/openmodelica-wasm-build/site-omc/omc/OpenModelicaCompiler.js                    ⇒ 56586
+    // 逐件 sha 对账台账 omc_web_wasm_sha / omc_web_js_sha ⇒ 与本表逐件一致
+    //   （8287589e… / 56c399bd…；sha256sum 同路径可复跑）。
+    const OM_LEDGER_WASM_BYTES = 74_579_404;
+    const OM_LEDGER_JS_BYTES = 56_586;
+    const omcMeta = KNOWN_ENGINE_METADATA['omc'];
+    const fallbackSum = Object.values(omcMeta.files).reduce((s, f) => s + f.bytes, 0);
+    // 兜底副本逐件 + 求和 === 产物台账真值：离线兜底不是「差不多」，是逐字节对账。
+    // 手抄表漂移（任何一件改版没重测）⇒ 此处红。
+    expect(omcMeta.files['OpenModelicaCompiler_bg.wasm'].bytes).toBe(OM_LEDGER_WASM_BYTES);
+    expect(omcMeta.files['OpenModelicaCompiler.js'].bytes).toBe(OM_LEDGER_JS_BYTES);
+    expect(fallbackSum).toBe(OM_LEDGER_WASM_BYTES + OM_LEDGER_JS_BYTES);
+
+    // ── mirror 站点表（仓内真文件，不读副本/不改写）──
+    const catalogPath = repoFile('public/bridge/assets/forge-catalog.json');
+    const mirrorCatalog = JSON.parse(readFileSync(catalogPath, 'utf8')) as ForgeCatalog;
+    const omcPack = (mirrorCatalog.packs || []).find((p) => p.name === 'omc') as any;
+    expect(omcPack).toBeDefined();
+    // catalog 顶层 size = **整个 omc/ 目录**字节和（该条目 note 自述
+    // 「size = omc/ 目录字节和」），含浏览器永不下载的两件 TS 声明。
+    // 复跑（OpenModelica 侧产物树，只读；2026-10-29 实测）：
+    //   stat -c%s /mnt/hdd/openmodelica-wasm-build/site-omc/omc/OpenModelicaCompiler.d.ts         ⇒ 55625
+    //   stat -c%s /mnt/hdd/openmodelica-wasm-build/site-omc/omc/OpenModelicaCompiler_bg.wasm.d.ts ⇒ 43840
+    //   find /mnt/hdd/openmodelica-wasm-build/site-omc/omc/ -type f -exec stat -c%s {} \; \
+    //     | python3 -c "import sys;print(sum(int(l) for l in sys.stdin))"                         ⇒ 74735455
+    expect(omcPack.size).toBe(74_735_455);
+    // 两口径之差恰 = 两件 .d.ts 的字节和——目录口径 vs 下载闭包口径，不是数据损坏。
+    // 钉成形状：catalog 刷新 / 引擎改版后此处红 ⇒ 强制重对账上游台账再改字面量。
+    expect(omcPack.size - fallbackSum).toBe(55_625 + 43_840);
+
+    // ── 裁定语义（Q12.2 既定：顶层 size 有意忽略，files[] 为准）──
+    // mirror omc 条目无 files[] ⇒ resolveEngineTarget 落回 KNOWN_ENGINE_METADATA；
+    // 反向断言在紧随的 Q12.4 用例（catalog 给 size:999 + 真 files[] ⇒ 记账 = files 和）。
+    // 这里补行为钉：配额给到**安全带**——大于兜底求和 50 000 B（覆盖 manifest 记账
+    // 开销），但比 catalog 顶层 size 小 ~49 465 B。正确实现（记账 = files[] 求和
+    // 74 635 990）能走完；谁把顶层 size（74 735 455）接进 resolved.bytes 谁撞墙
+    // （STORAGE_QUOTA_EXCEEDED ⇒ 此处红）。
+    const probe = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: mockFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: () => mirrorCatalog,
+      maxQuotaBytes: fallbackSum + 50_000,
+    });
+    await probe.init();
+    mockFetch.setFile(
+      'https://octave.test/omc/OpenModelicaCompiler_bg.wasm',
+      'omc-wasm-pin',
+      omcMeta.files['OpenModelicaCompiler_bg.wasm'].sha256
+    );
+    mockFetch.setFile(
+      'https://octave.test/omc/OpenModelicaCompiler.js',
+      'omc-js-pin',
+      omcMeta.files['OpenModelicaCompiler.js'].sha256
+    );
+    const rec = await probe.downloadEngine('omc');
+    expect(rec.files.length).toBe(2);
+    expect(rec.files.map((f) => f.sha256)).toEqual([
+      omcMeta.files['OpenModelicaCompiler_bg.wasm'].sha256,
+      omcMeta.files['OpenModelicaCompiler.js'].sha256,
     ]);
   });
 
