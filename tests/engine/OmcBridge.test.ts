@@ -2,6 +2,9 @@
 // OMC 桥抽离契约：导出形状、双引擎失败上抛 + code、纯 omc lane 上抛、
 // engine 层不碰 UI 面（无 toastService import）、__omcError 旁路取消、
 // WasmEmbedAdapter.boot 的双引擎降级接线（FLAVOR_UNAVAILABLE 吞掉、其余上抛）。
+// 另有两条成功路径锁（回归锁，见文件末尾 describe）：
+//   ① 装配成功 ⇒ window.__omc 被赋为该模块 namespace + init 调用顺序 + blobUrl 回收；
+//   ② embed 无 mod.FS ⇒ 静默早退的现状记录（本票只加断言，不改产品行为）。
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as OmcBridge from '../../src/modules/engine/OmcBridge';
 import { setupOmcBridge, onOmcFlavorError } from '../../src/modules/engine/OmcBridge';
@@ -182,5 +185,190 @@ describe('WasmEmbedAdapter boot integration', () => {
       code: 'FLAVOR_UNAVAILABLE',
     });
     expect((window as any).__omcError).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 成功路径回归锁（票：test/omc-boot-success）
+//
+// 背景：内容仓 092 §二 曾据「151 秒观察窗内 window.__omc 恒 undefined」判定
+// 「双引擎 boot 到 omc 可用从未走通」。真浏览器复跑（点 BootModal 的
+// 「Start Engine Now」）3 秒内即得 __omc=object / omc_eval=function，说明探针
+// 点错了元素（把模态 h3 标题当按钮）。但本文件当时只有失败路径覆盖 ——
+// 「装配成功时 __omc 被赋值」在单测层没有任何锁，这正是误判能溜过去的结构原因。
+// 下面两条用例补上这个锁；产品行为零改动。
+//
+// 假 OMC 模块放在 tests/engine/fixtures/omc/OpenModelicaCompiler.js：
+// 形状对齐 wasm-bindgen ESM 产物（default = 异步加载器 + 具名导出），
+// 调用全部转记到 globalThis.__omcFixtureState.calls，便于断言顺序与传参。
+// 网络 import 的 URL 由 site-base 推导：置 window.__siteBase 指向 fixtures 目录
+// ⇒ vitest 的 vite-node 解析到 fixture 模块（源码零改动，不 mock import()）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FIXTURE_BASE = '/tests/engine/fixtures/';
+const FIXTURE_OMC_PATH = `${FIXTURE_BASE}omc/OpenModelicaCompiler.js`;
+const FIXTURE_OMC_WASM_URL = `${FIXTURE_BASE}omc/OpenModelicaCompiler_bg.wasm`;
+
+function resetOmcFixture(): void {
+  (globalThis as any).__omcFixtureState = { calls: [] as any[][] };
+  // OmcBridge 优先读 <meta name="site-base">，因此测试里清掉可能残留的 meta，
+  // 让 __siteBase 成为唯一基址来源（离线降级用例会改用不可解析的基址）
+  document.querySelectorAll('meta[name="site-base"]').forEach((m) => m.remove());
+  (window as any).__siteBase = FIXTURE_BASE;
+  delete (window as any).__octaveHosts;
+  delete (window as any).Module;
+}
+
+function fixtureCalls(): any[][] {
+  return (globalThis as any).__omcFixtureState.calls;
+}
+
+describe('OmcBridge success path (assembly success ⇒ window.__omc assigned)', () => {
+  afterEach(() => {
+    delete (globalThis as any).__omcFixtureState;
+    delete (window as any).__siteBase;
+    delete (window as any).__octaveHosts;
+    delete (window as any).Module;
+  });
+
+  it('assigns window.__omc to the loaded module namespace (same reference) and makes omc_eval callable', async () => {
+    installEmptyResolver();
+    resetOmcFixture();
+    const embed = makeEmbed();
+
+    await setupOmcBridge(embed, 'wasm32-final');
+
+    // 同一对象引用：不是拷贝、不是包装壳——后续宿主代码按此引用调 omc_eval
+    const expectedNamespace = await import(/* @vite-ignore */ FIXTURE_OMC_PATH);
+    expect((window as any).__omc).toBe(expectedNamespace);
+    expect(typeof (window as any).__omc.omc_eval).toBe('function');
+
+    // omc_eval 真能调：调用落进 fixture 的调用日志
+    const rc = (window as any).__omc.omc_eval('1+1');
+    expect(rc).toBe('eval:1+1');
+    expect(fixtureCalls()).toContainEqual(['omc_eval', '1+1']);
+  });
+
+  it('runs default(wasmUrl) → omc_set_env → omc_init → omc_set_inwasm_driver exactly once each, in that order', async () => {
+    installEmptyResolver();
+    resetOmcFixture();
+    const embed = makeEmbed();
+
+    await setupOmcBridge(embed, 'wasm32-final');
+
+    // 顺序即实现里的固定装配次序：先加载 wasm（default 收显式 wasmUrl，
+    // 防 blob: 作用域下 new URL(bg, import.meta.url) 抛 Invalid URL），再环境变量，
+    // 再 init，最后接 in-wasm driver。
+    expect(fixtureCalls()).toEqual([
+      ['default', FIXTURE_OMC_WASM_URL],
+      ['omc_set_env', 'OPENMODELICAHOME', '/usr'],
+      ['omc_init'],
+      ['omc_set_inwasm_driver', 1],
+    ]);
+
+    // MEMFS 前置接线同样发生：mkdir('/tmp') + addpath('/tmp')
+    expect(embed.mod.FS.mkdir).toHaveBeenCalledWith('/tmp');
+    expect(embed.eval).toHaveBeenCalledWith("addpath('/tmp');");
+  });
+
+  it('revokes the OPFS blob URL on the success path (fallback import succeeded ⇒ still cleaned up)', async () => {
+    // 网络 import 必修失败：基址指向不存在的目录 ⇒ vite-node 解析报错；
+    // 随后走 OPFS 降级，createObjectURL 被改成 data: URL（内容 = fixture 源码），
+    // 使降级 import 成功 —— 这正是真实离线环境里「成功也必须回收 blobUrl」的形状。
+    const resolver = new EngineAssetResolver(new MemoryStore());
+    EngineAssetResolver.setInstance(resolver);
+    await resolver.store.init();
+    await resolver.store.write(
+      'downloads/engine/omc/w32/OpenModelicaCompiler.js',
+      new TextEncoder().encode('// opfs omc glue placeholder')
+    );
+
+    resetOmcFixture();
+    (window as any).__siteBase = '/definitely-missing-base/';
+
+    const fixtureSource = readFileSync(
+      resolvePath(__dirname, './fixtures/omc/OpenModelicaCompiler.js'),
+      'utf-8'
+    );
+    const dataUrl =
+      'data:text/javascript;base64,' + Buffer.from(fixtureSource, 'utf-8').toString('base64');
+    const createSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue(dataUrl);
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+    const embed = makeEmbed();
+    await setupOmcBridge(embed, 'wasm32-final');
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(revokeSpy).toHaveBeenCalledTimes(1);
+    // 回收的正是刚创建的那个句柄
+    expect(revokeSpy).toHaveBeenCalledWith(createSpy.mock.results[0].value);
+    // 且成功路径仍然完成装配
+    expect((window as any).__omc).toBeTruthy();
+    expect(typeof (window as any).__omc.omc_eval).toBe('function');
+  });
+
+  it('does not re-import when window.__omc is already set (idempotent guard)', async () => {
+    const resolver = new EngineAssetResolver(new MemoryStore());
+    EngineAssetResolver.setInstance(resolver);
+    const withLocalSpy = vi.spyOn(resolver, 'withLocalAssets');
+    resetOmcFixture();
+    const existing = { omc_eval: () => 'existing' };
+    (window as any).__omc = existing;
+
+    await setupOmcBridge(makeEmbed(), 'wasm32-final');
+
+    // 已装配 ⇒ 不重走资产作用域、不重放 init 调用
+    expect(withLocalSpy).not.toHaveBeenCalled();
+    expect((window as any).__omc).toBe(existing);
+    expect(fixtureCalls()).toEqual([]);
+  });
+});
+
+describe('OmcBridge silent early-return when embed has no mod.FS (current behavior, pinned)', () => {
+  // ⚠️ 这是**现状记录**，不是期望语义。
+  // setupOmcBridge 第一行 `const FS = embed?.mod?.FS || ...; if (!FS) return;` ——
+  // embed 无 FS 时**静默返回**：__omc 永不设置、不抛错、不通知 flavor 失败。
+  // 这正是「用户勾了 omc 但什么也没发生」的形状（内容仓 092 §二 观察到的
+  // window.__omc 恒 undefined 还有这一条真路径；102 §二 建议「失败则明确报
+  // omc flavor 启动失败而不是静默留在 undefined」）。
+  // 本票只加断言、不改产品行为；此处是否该改成显式报错，待裁定。
+  afterEach(() => {
+    delete (window as any).__siteBase;
+    delete (window as any).__octaveHosts;
+    delete (window as any).Module;
+  });
+
+  it('resolves without throwing, leaves window.__omc undefined, and never touches assets', async () => {
+    const resolver = new EngineAssetResolver(new MemoryStore());
+    EngineAssetResolver.setInstance(resolver);
+    const withLocalSpy = vi.spyOn(resolver, 'withLocalAssets');
+    const getBlobSpy = vi.spyOn(resolver, 'getBlob');
+    resetOmcFixture();
+    const seen: OmcBridge.OmcFlavorError[] = [];
+    const unsub = onOmcFlavorError((err) => seen.push(err));
+
+    // 无 mod.FS；window 上也没有 __octaveHosts[0].mod.FS / Module.FS
+    const embedWithoutFs: any = { eval: vi.fn() };
+
+    // 反向断言的一体两面：既不 reject，也不 resolve 成「已装配」的样子
+    await expect(setupOmcBridge(embedWithoutFs, 'wasm32-final')).resolves.toBeUndefined();
+
+    expect((window as any).__omc).toBeUndefined();
+    expect(withLocalSpy).not.toHaveBeenCalled();
+    expect(getBlobSpy).not.toHaveBeenCalled();
+    // 静默：不走 flavor 失败通知通道，也不碰 MEMFS
+    expect(seen.length).toBe(0);
+    expect(embedWithoutFs.eval).not.toHaveBeenCalled();
+    unsub();
+  });
+
+  it('takes the same silent path when embed is undefined / null', async () => {
+    installEmptyResolver();
+    resetOmcFixture();
+
+    await expect(setupOmcBridge(undefined, 'wasm32-final')).resolves.toBeUndefined();
+    await expect(setupOmcBridge(null, 'omc')).resolves.toBeUndefined();
+
+    expect((window as any).__omc).toBeUndefined();
   });
 });
