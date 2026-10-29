@@ -607,11 +607,11 @@
                       </span>
                       <span class="choice-desc">{t('header.lane_omc_desc')}</span>
                       <div class="lane-meta-row">
-                        <!-- 已知遗留（fix/lane-sizes 如实边界）：OMC 体量仍是手写值——
-                             其真源两处对不上（catalog size=74735455 仅 wasm vs KNOWN_ENGINE_METADATA
-                             files 求和=74635990），另开小票裁定后再接 formatAssetSize。
-                             tests/engine/laneSizes.test.ts 钉死「组件内体量字面量 ≤ 这一处」。 -->
-                        <span class="size-hint">~74.6MB</span>
+                        <!-- OMC 体量与三车道同缝（fix/omc-display）：构建期注入
+                             __LANE_SIZES__.omc（public/omc/ 下载闭包 wasm+js 两件
+                             真实字节和，裁定见 scripts/lane-sizes.mjs 头注）；缺失 ⇒
+                             formatAssetSize 显式降级文案，不编数。 -->
+                        <span class="size-hint">{formatAssetSize(getLaneSizeBytes('omc'), t)}</span>
                         {#if isEngineCorrupted('omc')}
                           <!-- 坏盘如实呈现：⚠ 是视觉提示，文字是可被读屏朗读的真值（不 aria-hidden） -->
                           <span class="dl-status damaged">⚠ {t('header.corrupted_badge')}</span>

@@ -19,9 +19,26 @@
 // 读不到（裸仓 / 车道未同步 / build.json 损坏或形状不对）⇒ 该车道值 = null，
 // UI 经 formatAssetSize 显式显示「体量数据缺失」文案——绝不退回任何编造的数。
 //
+// ── OMC 档（fix/omc-display）────────────────────────────────────────────────
+// OMC 的下载闭包 = 两件：OpenModelicaCompiler_bg.wasm + OpenModelicaCompiler.js
+// （DownloadStore.resolveEngineTarget 同款名单；deploy-contract.mjs verify 也按
+// 这两件断产物）。其产物树在 OM 仓，本仓没有 octave.build.json 可读，故改测
+// **将被服务的真实文件字节**（fs.stat public/omc/ 下两件）注入 __LANE_SIZES__.omc：
+//   - OpenModelicaCompiler.js 在 git 树内 ⇒ 任何检出必然在；
+//   - wasm 被 .gitignore 排除，但部署构建只在 CI 发生，pages.yml「Sync OMC engine
+//     assets」fail-loud 步骤在 pnpm build **之前**拉取并 sha256 钉死（指纹与下载侧
+//     KNOWN_ENGINE_METADATA 同值）⇒ 「CI 无产物还在构建」的路径不存在；
+//   - 显示值与下载记账（同两件求和）由同一 sha 钉强制一致，无漂移路径。
+// 红线：catalog 顶层 size 是目录口径（多两件 .d.ts），绝不读。
+// 降级：任一件读不到（本地裸检出 / 未同步）⇒ null ⇒ 显式降级文案，同车道契约；
+// 部分在场不许部分求和冒充真值。
+//
 // 复跑（显示值 = 真源的实测）：在已跑 sync-lanes 的检出里
 //   python3 -c "import json,glob;print({p.split('/')[2]:sum(v['bytes'] for v in json.load(open(p))['measured']['files'].values()) for p in glob.glob('public/lanes/*/octave.build.json')})"
 //   ⇒ 三车道同为 39807224（2026-10-28 实测；tests/engine/laneSizes.test.ts 用同一形状钉住）
+// OMC 闭包复跑（wasm 在场的检出，如 CI / 已跑 pages.yml OMC 同步步的工作区）：
+//   python3 -c "import os;print(sum(os.stat('public/omc/'+n).st_size for n in ['OpenModelicaCompiler_bg.wasm','OpenModelicaCompiler.js']))"
+//   ⇒ 74635990（结案真值，commit bf0c9e4；= KNOWN_ENGINE_METADATA['omc'].files 求和）
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -68,4 +85,31 @@ export function readLaneSizes(repoRoot, lanesRelDir = path.join('public', 'lanes
     }
   }
   return out;
+}
+
+/**
+ * OMC 下载闭包的两件文件名（与 DownloadStore.resolveEngineTarget /
+ * deploy-contract.mjs verify 同一名单——闭包口径的三个消费点必须一字不差）。
+ */
+export const OMC_CLOSURE_FILES = ['OpenModelicaCompiler_bg.wasm', 'OpenModelicaCompiler.js'];
+
+/**
+ * OMC 下载闭包字节和：stat <root>/public/omc/ 下两件真实文件求和。
+ * 任一件读不到 / 不是常规文件 / size 非有限非负 ⇒ null（缺一件 = 没有完整闭包
+ * 真值，不许拿部分和冒充）。目录不存在 ⇒ null。由 astro.config.mjs 经
+ * vite define 注入 __LANE_SIZES__.omc。
+ */
+export function readOmcSize(repoRoot, omcRelDir = path.join('public', 'omc')) {
+  const omcDir = path.join(repoRoot, omcRelDir);
+  let total = 0;
+  for (const name of OMC_CLOSURE_FILES) {
+    try {
+      const st = fs.statSync(path.join(omcDir, name));
+      if (!st.isFile() || !Number.isFinite(st.size) || st.size < 0) return null;
+      total += st.size;
+    } catch {
+      return null;
+    }
+  }
+  return total;
 }

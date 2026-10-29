@@ -283,11 +283,12 @@ describe('HeaderBar 引擎徽标三态（spec #19 红线 2）', () => {
 // 判据落在 .size-hint 的可见文本上：注入真源变 ⇒ 显示变（对修复前写死
 // ~39.3/~40.7MB 的代码必红）；真源缺失 ⇒ 显式降级文案，不出现编造数字。
 describe('HeaderBar 车道体量显示（fix/lane-sizes）', () => {
-  it('注入真源 ⇒ 每档 size-hint 各自显示自己的字节（per-lane 映射）', async () => {
+  it('注入真源 ⇒ 每档 size-hint 各自显示自己的字节（per-lane 映射，含 OMC）', async () => {
     setLaneSizeBytes({
       'wasm32-final': 1024 * 1024,
       master: 2 * 1024 * 1024,
       IllegalPerformance: 3 * 1024 * 1024,
+      omc: 4 * 1024 * 1024,
     });
     const ctx = mountHeader();
     await flush();
@@ -296,14 +297,14 @@ describe('HeaderBar 车道体量显示（fix/lane-sizes）', () => {
     const hints = Array.from(ctx.target.querySelectorAll('.lane-meta-row .size-hint')).map(
       (el) => (el.textContent || '').trim()
     );
-    // 前 3 个 = Octave 三档（来自注入真源），第 4 个 = OMC（已登记手写遗留）
-    expect(hints).toEqual(['~1.0 MB', '~2.0 MB', '~3.0 MB', '~74.6MB']);
+    // 前 3 个 = Octave 三档，第 4 个 = OMC（fix/omc-display 起同走注入缝）
+    expect(hints).toEqual(['~1.0 MB', '~2.0 MB', '~3.0 MB', '~4.0 MB']);
 
     teardown(ctx);
   });
 
-  it('真源变 ⇒ 显示跟着变（同一批组件重新渲染取新值）', async () => {
-    setLaneSizeBytes({ 'wasm32-final': 39807224, master: null, IllegalPerformance: null });
+  it('真源变 ⇒ 显示跟着变（同一批组件重新渲染取新值；OMC 同判）', async () => {
+    setLaneSizeBytes({ 'wasm32-final': 39807224, master: null, IllegalPerformance: null, omc: 74635990 });
     let ctx = mountHeader();
     await flush();
     await openMenu(ctx.target);
@@ -311,9 +312,10 @@ describe('HeaderBar 车道体量显示（fix/lane-sizes）', () => {
       (el) => (el.textContent || '').trim()
     );
     expect(hints[0]).toBe('~38.0 MB');
+    expect(hints[3]).toBe('~71.2 MB');
     teardown(ctx);
 
-    setLaneSizeBytes({ 'wasm32-final': 5 * 1024 * 1024, master: null, IllegalPerformance: null });
+    setLaneSizeBytes({ 'wasm32-final': 5 * 1024 * 1024, master: null, IllegalPerformance: null, omc: 74 * 1024 * 1024 });
     ctx = mountHeader();
     await flush();
     await openMenu(ctx.target);
@@ -321,10 +323,11 @@ describe('HeaderBar 车道体量显示（fix/lane-sizes）', () => {
       (el) => (el.textContent || '').trim()
     );
     expect(hints[0]).toBe('~5.0 MB');
+    expect(hints[3]).toBe('~74.0 MB');
     teardown(ctx);
   });
 
-  it('真源缺失 ⇒ 显式降级文案，不编一个数（无 MB、无 ~）', async () => {
+  it('真源缺失 ⇒ 显式降级文案，不编一个数（无 MB、无 ~；OMC 档同判）', async () => {
     setLaneSizeBytes({}); // 裸构建：什么都没注入
     const ctx = mountHeader();
     await flush();
@@ -333,9 +336,9 @@ describe('HeaderBar 车道体量显示（fix/lane-sizes）', () => {
     const hints = Array.from(ctx.target.querySelectorAll('.lane-meta-row .size-hint')).map(
       (el) => (el.textContent || '').trim()
     );
-    // 前 3 个（Octave 档）降级；第 4 个是 OMC 已登记手写遗留
+    // 4 档（Octave 三档 + OMC）全部走显式降级，无一处编造数字
     expect(hints.length).toBe(4);
-    for (const text of hints.slice(0, 3)) {
+    for (const text of hints) {
       expect(text).toBe(t('common.asset_size_unavailable'));
       expect(text).not.toMatch(/MB/);
       expect(text).not.toContain('~');

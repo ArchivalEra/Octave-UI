@@ -1,10 +1,11 @@
-// src/modules/engine/laneSizes.ts — 车道体量的运行期缝（fix/lane-sizes）
+// src/modules/engine/laneSizes.ts — 车道体量的运行期缝（fix/lane-sizes；fix/omc-display 扩 OMC）
 // Copyright (C) 2026 ArchivalEra
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // ── 真源与注入 ───────────────────────────────────────────────────────────────
 // 真源 = 各车道 octave.build.json 的 measured.files 字节和（与 DownloadStore 下载
-// 记账同裁定，scripts/lane-sizes.mjs 头注有完整证据链）。astro.config.mjs 在构建期
+// 记账同裁定，scripts/lane-sizes.mjs 头注有完整证据链）+ omc 键 = 下载闭包两件
+// （wasm+js）真实字节和（同文件头注「OMC 档」节）。astro.config.mjs 在构建期
 // 经 vite define 注入 `__LANE_SIZES__`（Record<lane, bytes | null>）；运行期零网络
 // 依赖——用户断网时值仍在。
 //
