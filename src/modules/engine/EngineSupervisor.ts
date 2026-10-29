@@ -98,10 +98,6 @@ export class EngineSupervisor {
     return this._pending.size;
   }
 
-  get inFlightTaskId(): string | null {
-    return this._inFlightId;
-  }
-
   private _currentLane: EngineLane = 'wasm32-final';
 
   get currentLane(): EngineLane {
@@ -597,18 +593,6 @@ export class EngineSupervisor {
         try { cb(vars); } catch {}
       }
     } catch {}
-  }
-
-  async queryDocumentation(name: string): Promise<string> {
-    if (!this._adapter) {
-      throw new Error('EngineSupervisor: Engine is not booted.');
-    }
-    const safeName = name.replace(/'/g, "''");
-    const jsonRes = await this.evalJSON<string>(`get_help_text('${safeName}')`);
-    if (jsonRes.ok && typeof jsonRes.value === 'string' && jsonRes.value.trim().length > 0) {
-      return jsonRes.value;
-    }
-    return `Simulated or fallback documentation for '${name}'.`;
   }
 
   interrupt(): boolean {

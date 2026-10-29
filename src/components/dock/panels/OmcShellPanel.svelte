@@ -16,7 +16,6 @@
   let isOmcEnabled = $state(projectWorkspace.isOmcEnabled);
   let engineState = $state(supervisor.state);
   let history = $state<ShellHistoryEntry[]>([]);
-  let simulationProgress = $state<{ seq?: number; phase?: string; elapsedMs?: number } | null>(null);
 
   $effect(() => {
     const unsubPw = projectWorkspace.subscribe(() => {
@@ -26,22 +25,9 @@
       engineState = s;
     });
 
-    function handleProgress(e: any) {
-      if (e.detail) {
-        simulationProgress = e.detail;
-      }
-    }
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('omc:simulate-progress', handleProgress);
-    }
-
     return () => {
       unsubPw();
       unsubSup();
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('omc:simulate-progress', handleProgress);
-      }
     };
   });
 
@@ -63,7 +49,6 @@
     history = [...history, newEntry];
     inputCmd = '';
     isExecuting = true;
-    simulationProgress = null;
 
     try {
       if (engineState !== 'idle' && engineState !== 'busy') {
@@ -198,11 +183,7 @@
         </div>
         {#if entry.status === 'pending'}
           <div class="output-pending">
-            {#if simulationProgress}
-              ⏳ {simulationProgress.phase || t('omc.status_simulating')} ({simulationProgress.elapsedMs || 0}ms)
-            {:else}
-              ⏳ {t('omc.status_simulating')}
-            {/if}
+            ⏳ {t('omc.status_simulating')}
           </div>
         {:else if entry.output}
           <pre class="output-content">{entry.output}</pre>

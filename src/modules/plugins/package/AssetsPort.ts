@@ -31,11 +31,6 @@ export interface IAssetsPort {
   isReady(): boolean;
 
   /**
-   * 获取当前宿主架构（wasm64 或 wasm32）
-   */
-  getHostArch(): string;
-
-  /**
    * 委托宿主编译扩展包 (host-008 OctaveAssets.compileExtension)
    */
   compileExtension?(name: string, options?: CompileOptions): Promise<CompileResult>;
