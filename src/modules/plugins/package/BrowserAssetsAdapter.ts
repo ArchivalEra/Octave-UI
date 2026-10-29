@@ -193,16 +193,6 @@ export class BrowserAssetsAdapter implements IAssetsPort {
     return typeof window !== 'undefined' && (window as any).__octaveReady === true;
   }
 
-  getHostArch(): string {
-    if (typeof window !== 'undefined') {
-      const lane = (window as any).octaveLaneState?.lane || '';
-      return /^w64/.test(lane) || lane === 'master' || lane === 'IllegalPerformance'
-        ? 'wasm64'
-        : 'wasm32';
-    }
-    return 'wasm64';
-  }
-
   async compileExtension(name: string, options?: import('./types').CompileOptions): Promise<import('./types').CompileResult> {
     if (typeof window === 'undefined' || !(window as any).OctaveAssets?.compileExtension) {
       return {

@@ -81,10 +81,6 @@ export class I18nManager {
     return this._locale;
   }
 
-  get locale(): Locale {
-    return this._locale;
-  }
-
   /**
    * 仅在用户显式触发切换操作时持久化到 localStorage
    */

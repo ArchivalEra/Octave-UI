@@ -164,16 +164,4 @@ describe('BrowserAssetsAdapter Deep Module', () => {
     expect(res.why).toBe('LAYER_NOT_IMPLEMENTED');
     expect(res.cause).toBe('LAYER_NOT_IMPLEMENTED');
   });
-
-  it('resolves host architecture based on lane state', () => {
-    (globalThis as any).window = {
-      octaveLaneState: { lane: 'w64-base' },
-    };
-    expect(adapter.getHostArch()).toBe('wasm64');
-
-    (globalThis as any).window = {
-      octaveLaneState: { lane: 'wasm32-final' },
-    };
-    expect(adapter.getHostArch()).toBe('wasm32');
-  });
 });

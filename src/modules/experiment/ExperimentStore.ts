@@ -1,7 +1,7 @@
 // src/modules/experiment/ExperimentStore.ts
 // 实验画廊动作调度器：串联引擎预热、影子绘图安装、Notebook 模式切换与首个单元格执行
 
-import type { RecipeId, ExperimentRecipe } from './types';
+import type { RecipeId } from './types';
 import { ExampleRegistry } from './ExampleRegistry';
 import type { EngineSupervisor } from '../engine/EngineSupervisor';
 import type { WorkbenchController } from '../workbench/WorkbenchController';
@@ -9,14 +9,6 @@ import type { ProjectWorkspace } from '../workspace/ProjectWorkspace';
 import { SafePlotSinkPolyfill } from '../semantic/SafePlotSinkPolyfill';
 
 export class ExperimentStore {
-  static getRecipes(): ExperimentRecipe[] {
-    return ExampleRegistry.getAll();
-  }
-
-  static getRecipe(id: RecipeId): ExperimentRecipe | undefined {
-    return ExampleRegistry.getById(id);
-  }
-
   static async launch(
     id: RecipeId,
     supervisor: EngineSupervisor,
