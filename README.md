@@ -77,6 +77,7 @@ pnpm build:lanes
 - 架构契约与语义边界见 [CONTEXT.md](CONTEXT.md)（含领域词汇表：物理对账 / 钓鱼判据 / 见证 / 对账器 / 降级信号）
 - Agent 纪律与硬规矩见 [AGENTS.md](AGENTS.md)
 - 开发方向与地图见 [maintaince.md](maintaince.md)
+- 工具面贡献规矩见 [CONTRIBUTING.md](CONTRIBUTING.md)（剪枝判据「能否被 `eval` 一行表达」+ 加工具的正确形状 + deps 能力门 + wire 面登记）
 - 网站管理员交接手册见 [HANDOFF.md](HANDOFF.md)（2026-10-24 起边缘为运行时 gzip + 分层缓存，Range 已撤除）；边缘申请与回执（五项+HTML 短缓存+三杠杆+双前缀修复；产地渠道线 083 全链 PASS 关闭；镜像表 17 packs 含 omc/MSL；form:file 单件交付；omc_load_msl 已上线；WebMCP 三服务在组合根注入（D11 修复）；omc_load_msl 自检走 omc_eval 真实 API 面（D12 修复）+ 版本判据；KNOWN 表定位为离线兜底副本；18 道闸门含 mock 面收敛；D13 断两环：refresh 幂等 + 对账单飞 + addpath 路径指纹；架构审查 6 候选在案，其中 2/3/6 已落地：对账缓存三态化 + 单例不可绕过 + 跨模块频率断言；接口大清洗已落地（删三个平行整类与四个死单例、断链事件、孤儿类型、49 处多余 export，净删约 344 行，9 条静态断言防回潮）；STATE.md 已补 WebMCP/D11-D13 与清洗活状态）见 [SITE-ADMIN-REQUEST.md](SITE-ADMIN-REQUEST.md)
 - 跨 Agent 往来信箱见 [mail/README.md](mail/README.md)（与内容仓 Octave-Extra-Content 定稿纯下载模块规格）
 - 事实台账见 [FACTS.json](FACTS.json)
