@@ -98,6 +98,10 @@ describe('WasmEmbedAdapter boot with EngineAssetResolver', () => {
     const mockEmbedInstance = {
       id: 'test-omc',
       state: 'idle',
+      // ★ 真实 embed 必带 MEMFS 入口；此前本 fixture 缺 mod.FS，只是被
+      //   setupOmcBridge 的静默早退「放行」了（本用例的考察点仅是 lane 路由）。
+      //   静默早退改成响亮失败后，fixture 必须照契约给 FS，否则测的就不是路由而是装配失败。
+      mod: { FS: { mkdir: vi.fn() } },
       eval: vi.fn(),
       on: { output: vi.fn(), error: vi.fn(), state: vi.fn(), figure: vi.fn() },
       fs: { read: vi.fn(), write: vi.fn(), ls: vi.fn(), rm: vi.fn(), download: vi.fn() },
@@ -109,6 +113,10 @@ describe('WasmEmbedAdapter boot with EngineAssetResolver', () => {
         create: vi.fn().mockResolvedValue(mockEmbedInstance),
       },
     };
+    // lane='omc' 下 setupOmcBridge 不再可能静默跳过；用既有幂等守卫（__omc 已在场）
+    // 让 OMC 装配直接成功，使本用例只考察 Octave lane 的路由（OMC 装配本身由
+    // tests/engine/OmcBridge.test.ts 的成功/失败路径锁覆盖）。
+    (globalThis as any).window.__omc = { omc_eval: vi.fn() };
 
     const existingScript = document.createElement('script');
     existingScript.setAttribute('data-lane', 'wasm32-final-base');
@@ -120,6 +128,7 @@ describe('WasmEmbedAdapter boot with EngineAssetResolver', () => {
     // 对于 omc 车道，底层的 Octave 宿主必须是 wasm32-final (w32)
     expect(interceptedCalls[0]).toEqual({ lane: 'wasm32-final', variant: 'w32' });
 
+    delete (globalThis as any).window.__omc;
     existingScript.remove();
     vi.restoreAllMocks();
   });

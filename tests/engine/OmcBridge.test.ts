@@ -2,9 +2,9 @@
 // OMC 桥抽离契约：导出形状、双引擎失败上抛 + code、纯 omc lane 上抛、
 // engine 层不碰 UI 面（无 toastService import）、__omcError 旁路取消、
 // WasmEmbedAdapter.boot 的双引擎降级接线（FLAVOR_UNAVAILABLE 吞掉、其余上抛）。
-// 另有两条成功路径锁（回归锁，见文件末尾 describe）：
+// 另有成功路径锁（回归锁，见文件末尾 describe）：
 //   ① 装配成功 ⇒ window.__omc 被赋为该模块 namespace + init 调用顺序 + blobUrl 回收；
-//   ② embed 无 mod.FS ⇒ 静默早退的现状记录（本票只加断言，不改产品行为）。
+//   ② 装配前置失败（embed 无 mod.FS）⇒ 响亮失败 FLAVOR_UNAVAILABLE，不许静默早退。
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as OmcBridge from '../../src/modules/engine/OmcBridge';
 import { setupOmcBridge, onOmcFlavorError } from '../../src/modules/engine/OmcBridge';
@@ -186,6 +186,53 @@ describe('WasmEmbedAdapter boot integration', () => {
     });
     expect((window as any).__omcError).toBeUndefined();
   });
+
+  // ── 无 mod.FS 的前置失败不许升级成「勾了 omc 就整个 boot 失败」 ──
+  // 早退改 throw 之前这条形状根本走不到 catch（静默 resolve），boot 也不会降级通知。
+  // 现在它必须走既有的 FLAVOR_UNAVAILABLE 降级分支：adapter 照常返回、toast 一次。
+  function installMockEmbedHostWithoutFs(): void {
+    (globalThis as any).window = {
+      OctaveEmbed: {
+        create: vi.fn().mockResolvedValue({
+          id: 'dual-engine-no-fs',
+          state: 'idle',
+          // ★ 无 mod.FS、无 eval —— 模拟 lane 模块形状与桥接契约不符
+          on: { output: vi.fn(), error: vi.fn(), state: vi.fn(), figure: vi.fn() },
+          fs: { read: vi.fn(), write: vi.fn(), ls: vi.fn(), rm: vi.fn(), download: vi.fn() },
+          figures: { export: vi.fn() },
+        }),
+      },
+    };
+    const existingScript = document.createElement('script');
+    existingScript.setAttribute('data-lane', 'wasm32-final-base');
+    document.head.appendChild(existingScript);
+  }
+
+  it('dual-engine mode with FS-less embed still boots Octave-only and notifies once', async () => {
+    installEmptyResolver();
+    installMockEmbedHostWithoutFs();
+    const flavorErrors: OmcBridge.OmcFlavorError[] = [];
+    const unsub = onOmcFlavorError((err) => flavorErrors.push(err));
+
+    const adapter = await WasmEmbedAdapter.boot({ lane: 'wasm32-final', enableOmc: true });
+
+    expect(adapter).toBeInstanceOf(WasmEmbedAdapter);
+    expect(flavorErrors.length).toBe(1);
+    expect(flavorErrors[0].code).toBe('FLAVOR_UNAVAILABLE');
+    expect(flavorErrors[0].message).toMatch(/mod\.FS/);
+    expect((window as any).__omc).toBeUndefined();
+    unsub();
+  });
+
+  it('pure omc lane with FS-less embed fails boot (no Octave fallback to downgrade to)', async () => {
+    installEmptyResolver();
+    installMockEmbedHostWithoutFs();
+
+    await expect(WasmEmbedAdapter.boot({ lane: 'omc' })).rejects.toMatchObject({
+      code: 'FLAVOR_UNAVAILABLE',
+    });
+    expect((window as any).__omc).toBeUndefined();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -324,50 +371,105 @@ describe('OmcBridge success path (assembly success ⇒ window.__omc assigned)', 
   });
 });
 
-describe('OmcBridge silent early-return when embed has no mod.FS (current behavior, pinned)', () => {
-  // ⚠️ 这是**现状记录**，不是期望语义。
-  // setupOmcBridge 第一行 `const FS = embed?.mod?.FS || ...; if (!FS) return;` ——
-  // embed 无 FS 时**静默返回**：__omc 永不设置、不抛错、不通知 flavor 失败。
-  // 这正是「用户勾了 omc 但什么也没发生」的形状（内容仓 092 §二 观察到的
-  // window.__omc 恒 undefined 还有这一条真路径；102 §二 建议「失败则明确报
-  // omc flavor 启动失败而不是静默留在 undefined」）。
-  // 本票只加断言、不改产品行为；此处是否该改成显式报错，待裁定。
+describe('OmcBridge prerequisite failure when embed has no mod.FS (must fail loudly)', () => {
+  // ⚠️ 这是**期望语义**，不是现状记录。
+  // 历史实现第一行 `const FS = embed?.mod?.FS || ...; if (!FS) return;` —— embed 无 FS 时
+  // 静默返回：__omc 永不设置、不抛错、不通知 flavor 失败。这正是「用户勾了 omc 但什么也
+  // 没发生」的形状（内容仓 092 §二 / 102 §二；104 §三 附议改）。
+  // 现裁定为响亮失败：与文件内其余失败同一条分叉路径 —— lane='omc' 原样上抛（boot 失败），
+  // 双引擎模式带 code=FLAVOR_UNAVAILABLE 上抛 + 经 onOmcFlavorError 通知一次（调用方降级）。
+  // 反向咬合：把 `if (!FS) return;` 改回静默 ⇒ 下面所有 rejects 断言立刻变红。
   afterEach(() => {
     delete (window as any).__siteBase;
     delete (window as any).__octaveHosts;
     delete (window as any).Module;
   });
 
-  it('resolves without throwing, leaves window.__omc undefined, and never touches assets', async () => {
+  /** 无 mod.FS；window 上也没有 __octaveHosts[0].mod.FS / Module.FS */
+  function embedWithoutFs(): any {
+    return { eval: vi.fn() };
+  }
+
+  it('rejects with code=FLAVOR_UNAVAILABLE instead of silently resolving', async () => {
+    installEmptyResolver();
+    resetOmcFixture();
+
+    const err = await setupOmcBridge(embedWithoutFs(), 'wasm32-final').then(
+      () => {
+        throw new Error('setupOmcBridge resolved — the silent early return is back');
+      },
+      (e: any) => e
+    );
+
+    expect(err).toBeInstanceOf(Error);
+    expect(err.code).toBe('FLAVOR_UNAVAILABLE');
+    // 错误信息必须说清是哪一环，不许只写 "unavailable"
+    expect(err.message).toMatch(/mod\.FS/);
+    expect(err.message).toMatch(/MEMFS/);
+  });
+
+  it('leaves no half-assembled state: __omc undefined and asset scope never entered', async () => {
     const resolver = new EngineAssetResolver(new MemoryStore());
     EngineAssetResolver.setInstance(resolver);
     const withLocalSpy = vi.spyOn(resolver, 'withLocalAssets');
     const getBlobSpy = vi.spyOn(resolver, 'getBlob');
     resetOmcFixture();
-    const seen: OmcBridge.OmcFlavorError[] = [];
-    const unsub = onOmcFlavorError((err) => seen.push(err));
+    const embed = embedWithoutFs();
 
-    // 无 mod.FS；window 上也没有 __octaveHosts[0].mod.FS / Module.FS
-    const embedWithoutFs: any = { eval: vi.fn() };
+    await expect(setupOmcBridge(embed, 'wasm32-final')).rejects.toMatchObject({
+      code: 'FLAVOR_UNAVAILABLE',
+    });
 
-    // 反向断言的一体两面：既不 reject，也不 resolve 成「已装配」的样子
-    await expect(setupOmcBridge(embedWithoutFs, 'wasm32-final')).resolves.toBeUndefined();
-
+    // 失败时不许留半个装配：既不设 __omc，也没碰资产 / MEMFS 接线
     expect((window as any).__omc).toBeUndefined();
     expect(withLocalSpy).not.toHaveBeenCalled();
     expect(getBlobSpy).not.toHaveBeenCalled();
-    // 静默：不走 flavor 失败通知通道，也不碰 MEMFS
-    expect(seen.length).toBe(0);
-    expect(embedWithoutFs.eval).not.toHaveBeenCalled();
+    expect(embed.eval).not.toHaveBeenCalled();
+  });
+
+  it('dual-engine mode notifies the flavor-error channel exactly once with the coded error', async () => {
+    installEmptyResolver();
+    resetOmcFixture();
+    const seen: OmcBridge.OmcFlavorError[] = [];
+    const unsub = onOmcFlavorError((err) => seen.push(err));
+
+    await expect(setupOmcBridge(embedWithoutFs(), 'wasm32-final')).rejects.toMatchObject({
+      code: 'FLAVOR_UNAVAILABLE',
+    });
+
+    // 订阅者真收到：恰好一次、带 code、带说清环节的信息（toast 用它）
+    expect(seen.length).toBe(1);
+    expect(seen[0].code).toBe('FLAVOR_UNAVAILABLE');
+    expect(seen[0].message).toMatch(/mod\.FS/);
     unsub();
   });
 
-  it('takes the same silent path when embed is undefined / null', async () => {
+  it('pure omc lane (main flavor) rethrows as-is without flavor notification', async () => {
+    installEmptyResolver();
+    resetOmcFixture();
+    const seen: OmcBridge.OmcFlavorError[] = [];
+    const unsub = onOmcFlavorError((err) => seen.push(err));
+
+    await expect(setupOmcBridge(embedWithoutFs(), 'omc')).rejects.toMatchObject({
+      code: 'FLAVOR_UNAVAILABLE',
+    });
+    // 主 flavor 失败 = boot 失败，无降级可言：不走路由通知，也不写旁路
+    expect(seen.length).toBe(0);
+    expect((window as any).__omc).toBeUndefined();
+    expect((window as any).__omcError).toBeUndefined();
+    unsub();
+  });
+
+  it('takes the same loud path when embed is undefined / null', async () => {
     installEmptyResolver();
     resetOmcFixture();
 
-    await expect(setupOmcBridge(undefined, 'wasm32-final')).resolves.toBeUndefined();
-    await expect(setupOmcBridge(null, 'omc')).resolves.toBeUndefined();
+    await expect(setupOmcBridge(undefined, 'wasm32-final')).rejects.toMatchObject({
+      code: 'FLAVOR_UNAVAILABLE',
+    });
+    await expect(setupOmcBridge(null, 'omc')).rejects.toMatchObject({
+      code: 'FLAVOR_UNAVAILABLE',
+    });
 
     expect((window as any).__omc).toBeUndefined();
   });
