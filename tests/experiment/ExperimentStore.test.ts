@@ -2,18 +2,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ExampleRegistry } from '../../src/modules/experiment/ExampleRegistry';
 import { ExperimentStore } from '../../src/modules/experiment/ExperimentStore';
-import { WorkbenchController } from '../../src/modules/workbench/WorkbenchController';
 import { EngineSupervisor } from '../../src/modules/engine/EngineSupervisor';
 import { MockEmbedAdapter } from '../../src/modules/engine/MockEmbedAdapter';
 
 describe('ExperimentStore & ExampleRegistry', () => {
-  let workbench: WorkbenchController;
   let supervisor: EngineSupervisor;
-  let adapter: MockEmbedAdapter;
 
   beforeEach(() => {
-    workbench = new WorkbenchController();
-    adapter = new MockEmbedAdapter();
+    const adapter = new MockEmbedAdapter();
     supervisor = new EngineSupervisor({ adapter, skipPreflight: true });
   });
 
@@ -41,24 +37,6 @@ describe('ExperimentStore & ExampleRegistry', () => {
       // 确保配方代码块中不含任何 % 或 # 注释字符
       expect(r.code).not.toMatch(/%|#/);
     }
-  });
-
-  it('launches recipe by booting engine, creating dedicated cell, and executing it', async () => {
-    const initialCellId = workbench.cells[0].id;
-    const launched = await ExperimentStore.launch('solve-linear', supervisor, workbench);
-    expect(launched).toBe(true);
-    expect(workbench.mode).toBe('notebook');
-    expect(supervisor.state).toBe('idle');
-
-    // 验证不再覆盖 1 号默认单元格，而是追加新单元格
-    expect(workbench.cells.length).toBe(2);
-    expect(workbench.cells[0].id).toBe(initialCellId);
-    expect(workbench.cells[0].code).toContain('A \\ b'); // 默认模板代码不受破坏覆盖
-
-    const targetCell = workbench.cells[1];
-    expect(targetCell.code).toContain('x = A \\ b');
-    expect(targetCell.code).not.toMatch(/%|#/);
-    expect(targetCell.status).toBe('success');
   });
 
   it('launches recipe into ProjectWorkspace by appending dedicated cell', async () => {
