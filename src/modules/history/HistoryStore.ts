@@ -1,12 +1,6 @@
 // src/modules/history/HistoryStore.ts
 // 历史记录自治仓储：1000 条上限硬截断、连续去重、localStorage 存取与上下翻找光标
 
-export interface HistoryItem {
-  id: number;
-  command: string;
-  timestamp: number;
-}
-
 export class HistoryStore {
   public static readonly STORAGE_KEY = 'octave_ui_history';
   public static readonly MAX_ITEMS = 1000;

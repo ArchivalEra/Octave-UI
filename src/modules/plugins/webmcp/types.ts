@@ -18,11 +18,6 @@ export interface WebMcpToolDefinition {
   };
 }
 
-export interface WebMcpToolCallRequest {
-  name: string;
-  arguments?: Record<string, unknown>;
-}
-
 export interface WebMcpTextContent {
   type: 'text';
   text: string;

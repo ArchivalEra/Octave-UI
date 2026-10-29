@@ -91,16 +91,6 @@ export interface DownloadManifest {
   items: Record<string, DownloadRecord>;
 }
 
-/**
- * 装载界面取件单元（句柄/二进制块，非物理路径）
- */
-export interface DownloadUnit {
-  ref: DownloadRef;
-  record: DownloadRecord;
-  data: Uint8Array;
-  subFiles?: Map<string, Uint8Array>;
-}
-
 export interface DownloadSnapshot {
   manifest: DownloadManifest;
   totalBytes: number;
@@ -129,12 +119,6 @@ export type DownloadErrorCode =
   | 'STORAGE_QUOTA_EXHAUSTED';
 
 export type ErrorState = 'not-found' | 'failed' | 'cannot-know';
-
-export interface ErrorCodeMeta {
-  code: DownloadErrorCode;
-  state: ErrorState;
-  cause: string;
-}
 
 export const DOWNLOAD_ERROR_SPECS: Record<DownloadErrorCode, { state: ErrorState; cause: string }> = {
   NOT_DOWNLOADED: { state: 'not-found', cause: 'not-downloaded' },

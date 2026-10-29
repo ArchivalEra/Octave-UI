@@ -3,10 +3,8 @@
 import type { en } from './locales/en';
 
 export type Locale = 'en' | 'zh-Hans' | 'de';
-export type CanonicalLocale = 'en';
 
 export const SUPPORTED_LOCALES: readonly Locale[] = ['en', 'zh-Hans', 'de'] as const;
-export const CANONICAL_LOCALE: CanonicalLocale = 'en';
 
 export type EnDictionary = typeof en;
 export type TranslationKey = keyof EnDictionary;

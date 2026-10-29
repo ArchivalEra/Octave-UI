@@ -963,7 +963,3 @@ export class DownloadStore {
     };
   }
 }
-
-export function createDownloadStore(options?: DownloadStoreOptions): DownloadStore {
-  return new DownloadStore(options);
-}
