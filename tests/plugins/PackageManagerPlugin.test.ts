@@ -123,8 +123,17 @@ describe('PackageManagerPlugin Deep Module', () => {
 
   beforeEach(() => {
     mockAdapter = new MockAssetsAdapter(sampleCatalog);
-    plugin = new PackageManagerPlugin(mockAdapter);
+    plugin = new PackageManagerPlugin(mockAdapter, makeStore());
   });
+
+  /**
+   * 测试用 store：与组合根同形（显式 storage），**不是**插件自带 fallback。
+   * 旧实现对「无注入」的唯一出路是构造器静默 new 一个无 storage 的 DownloadStore，
+   * 那条路已删（装配缺陷必须响亮）。
+   */
+  function makeStore(): DownloadStore {
+    return new DownloadStore({ storage: new MemoryStore(), baseUrl: 'https://octave.test' });
+  }
 
   it('initializes with correct plugin metadata and state', () => {
     expect(plugin.id).toBe('package-manager');
@@ -598,5 +607,106 @@ describe('PackageManagerPlugin Deep Module', () => {
       (c) => typeof c[0] === 'string' && c[0].includes('catalog provider is broken')
     );
     expect(deBrokenCalls.length).toBe(0);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 装配缺陷可见（内容仓 095 D11 落到本插件）：store 未注入 ⇒ 响亮失败。
+  //
+  // 旧实现的病灶：构造器静默 `new DownloadStore({catalogProvider})` 造出**第二个
+  // 无 storage 的 store**（wayfinder #10 旁路实例），于是「忘了 setDownloadStore」
+  // 不报错、不 throw —— 插件的写盘与 EngineAssetResolver 的验盘不是同一份盘，
+  // 对账恒 unchecked、evict 清错盘，而测试全绿。
+  //
+  // 反向断言（旧代码必须红）：无注入 + 直接用 ⇒ throw + console.error；
+  // 正向断言（行为零变化）：有注入 ⇒ 完全照旧。
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('无注入 + 首次使用 store ⇒ 响亮失败（throw ASSEMBLY_FAULT，不许静默造 fallback store）', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const bare = new PackageManagerPlugin(mockAdapter);
+
+      // 构造期**不许** throw —— 启动序是「先 new，后 setDownloadStore」，
+      // 构造期判死会把正常启动序当缺陷。
+      expect(() => new PackageManagerPlugin(mockAdapter)).not.toThrow();
+
+      // 首次使用才判死：三条 store 消费路径逐一验证
+      expect(() => bare.getDownloadStore()).toThrow(/assembly fault/i);
+      await expect(bare.hasLLVM()).rejects.toThrow(/assembly fault/i);
+      await expect(
+        bare.downloadPackage({ name: 'llvm-wasm', version: '6.0.12', kind: 'pre', arch: null })
+      ).rejects.toMatchObject({ code: 'ASSEMBLY_FAULT' });
+
+      // 判定为「装配缺陷」而非「能力暂不可用」：console.error 必须出过声
+      const faults = errSpy.mock.calls
+        .map((c) => String(c[0]))
+        .filter((m) => m.includes('[PackageManagerPlugin] assembly fault'));
+      expect(faults.length).toBeGreaterThan(0);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('装配缺陷只报一次/实例（不刷屏）', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const bare = new PackageManagerPlugin(mockAdapter);
+      for (let i = 0; i < 3; i++) {
+        expect(() => bare.getDownloadStore()).toThrow();
+      }
+      const faults = errSpy.mock.calls
+        .map((c) => String(c[0]))
+        .filter((m) => m.includes('[PackageManagerPlugin] assembly fault'));
+      expect(faults.length).toBe(1);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('后置 setDownloadStore 生效：注入前响亮失败，注入后同一实例照常工作（启动序回归锁）', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      // appContext.ts 的形状：plugins/index.ts 先无参 new，之后才后置注入
+      const late = new PackageManagerPlugin(mockAdapter);
+      expect(() => late.getDownloadStore()).toThrow(/assembly fault/i);
+
+      const injected = makeStore();
+      await injected.init();
+      late.setDownloadStore(injected);
+
+      // 注入后行为零变化：拿到的是**同一个** store 实例（不是又造一个）
+      expect(late.getDownloadStore()).toBe(injected);
+      expect(await late.hasLLVM()).toBe(false);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('有注入 ⇒ 行为零变化：store 就是注入的那一个，且不报装配缺陷', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const injected = makeStore();
+      const wired = new PackageManagerPlugin(mockAdapter, injected);
+      expect(wired.getDownloadStore()).toBe(injected);
+      expect(await wired.hasLLVM()).toBe(false);
+      const faults = errSpy.mock.calls
+        .map((c) => String(c[0]))
+        .filter((m) => m.includes('assembly fault'));
+      expect(faults.length).toBe(0);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  // ── 组合根接线锁（D11 的直接回归锁，与 webmcp-assembly ★① 同款）──────────
+  // 上面四条只证明「插件自身会响亮失败」；本条证明**产物真的把 store 接上了**
+  // —— 否则插件会在真实运行里响亮地炸，而单测全绿（D11 的原始形状）。
+  it('★ 组合根真装配：appContext 后置注入的就是那个 store（删 appContext:85 则本用例红）', async () => {
+    vi.resetModules();
+    const app = await import('../../src/modules/appContext');
+    // 插件持有的 store 必须**严格等于**组合根创建的 downloadStore 单例
+    expect(app.packageManagerPlugin.getDownloadStore()).toBe(app.downloadStore);
+    // 且可以真的用（不是拿了个空壳）
+    expect(await app.packageManagerPlugin.hasLLVM()).toBe(false);
   });
 });

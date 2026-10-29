@@ -189,10 +189,6 @@ export class BrowserAssetsAdapter implements IAssetsPort {
     }
   }
 
-  isReady(): boolean {
-    return typeof window !== 'undefined' && (window as any).__octaveReady === true;
-  }
-
   async compileExtension(name: string, options?: import('./types').CompileOptions): Promise<import('./types').CompileResult> {
     if (typeof window === 'undefined' || !(window as any).OctaveAssets?.compileExtension) {
       return {

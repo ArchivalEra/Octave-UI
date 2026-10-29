@@ -15,7 +15,7 @@ import type {
   CompileOptions,
   CompileResult,
 } from './types';
-import { DownloadStore } from '../../storage/DownloadStore';
+import type { DownloadStore } from '../../storage/DownloadStore';
 import type { DownloadRef, DownloadRecord, DownloadProgressCallback } from '../../storage/downloadTypes';
 import { refToKey } from '../../storage/downloadTypes';
 
@@ -27,7 +27,15 @@ export class PackageManagerPlugin implements OctavePlugin {
   enabled = true;
 
   private port: IAssetsPort;
-  private downloadStore: DownloadStore;
+  /**
+   * store 的唯一来源是注入面：构造参数，或组合根后置 `setDownloadStore`。
+   * **绝不自带 fallback** —— 构造器静默 `new DownloadStore({catalogProvider})`
+   * 会让插件持有第二个无 storage 的 store（wayfinder #10 旁路实例形状），
+   * 写盘与 resolver 验盘从此不同源，而「忘了调 setDownloadStore」不报错。
+   */
+  private downloadStore: DownloadStore | null = null;
+  /** 装配缺陷只报一次（不刷屏）—— 与 WebMcpPlugin 的 onAssemblyFault 同款 */
+  private storeFaultReported = false;
   private catalog: ForgeCatalog | null = null;
   private byName = new Map<string, ForgePackageItem>();
   private installingPackages = new Set<string>();
@@ -38,11 +46,42 @@ export class PackageManagerPlugin implements OctavePlugin {
 
   constructor(port?: IAssetsPort, downloadStore?: DownloadStore) {
     this.port = port || new BrowserAssetsAdapter();
-    this.downloadStore =
-      downloadStore ||
-      new DownloadStore({
-        catalogProvider: () => this.catalog || { packs: [] },
-      });
+    // 启动序（别在这里 throw）：`plugins/index.ts` 先 `new PackageManagerPlugin()`，
+    // 而 `downloadStore` 在 `appContext.ts` 里才创建并后置注入。构造期判死会把
+    // 正常启动序判成缺陷 ⇒ 判据落在**首次使用 store 时**（resolveDownloadStore）。
+    this.downloadStore = downloadStore ?? null;
+  }
+
+  /**
+   * 取 store：注入面仍为空 ⇒ 装配缺陷，**响亮失败**（内容仓 095 D11）。
+   *
+   * 为什么不是静默 fallback：`new DownloadStore({catalogProvider})` 造出的第二个
+   * store 没有 storage（OPFS/Memory 各挑一份）⇒ 插件写盘与 EngineAssetResolver
+   * 验盘不是同一个盘，对账恒 unchecked、evict 清错盘。这属于「服务没接上」，
+   * 不许伪装成「服务暂不可用」。
+   *
+   * 可见性双通道：console.error（每实例一次，照 WebMcpPlugin onAssemblyFault 不刷屏）
+   * + throw（让调用点当场红，不返回空对象假装成功）。
+   */
+  private resolveDownloadStore(): DownloadStore {
+    if (this.downloadStore) return this.downloadStore;
+
+    if (!this.storeFaultReported) {
+      this.storeFaultReported = true;
+      console.error(
+        '[PackageManagerPlugin] assembly fault: downloadStore is neither injected in the constructor ' +
+          'nor set via setDownloadStore() — download / install / LLVM-gate paths cannot run. ' +
+          'Inject it at the composition root (appContext.ts: packageManagerPlugin.setDownloadStore(downloadStore)).'
+      );
+    }
+
+    const err: any = new Error(
+      '[PackageManagerPlugin] assembly fault: downloadStore was never injected ' +
+        '(constructor or setDownloadStore). Refusing to create a fallback store — ' +
+        'it would have no storage and would diverge from the resolver\u2019s disk.'
+    );
+    err.code = 'ASSEMBLY_FAULT';
+    throw err;
   }
 
   setPort(port: IAssetsPort): void {
@@ -59,10 +98,15 @@ export class PackageManagerPlugin implements OctavePlugin {
 
   setDownloadStore(store: DownloadStore): void {
     this.downloadStore = store;
+    this.storeFaultReported = false;
   }
 
+  /**
+   * 取 store 的公开口：未注入 ⇒ throw（装配缺陷可见）。
+   * 调用方要么经组合根注入，要么就得处理这个明确的失败。
+   */
   getDownloadStore(): DownloadStore {
-    return this.downloadStore;
+    return this.resolveDownloadStore();
   }
 
   async init(context?: PluginContext): Promise<void> {
@@ -307,10 +351,10 @@ export class PackageManagerPlugin implements OctavePlugin {
   }
 
   /**
-   * 获取指定引用的下载记录
+   * 获取指定引用的下载记录（store 未注入 ⇒ throw 装配缺陷）
    */
   getDownloadRecord(ref: DownloadRef): DownloadRecord | null {
-    return this.downloadStore.getRecord(ref);
+    return this.resolveDownloadStore().getRecord(ref);
   }
 
   /**
@@ -325,7 +369,7 @@ export class PackageManagerPlugin implements OctavePlugin {
     this.notify();
 
     try {
-      const rec = await this.downloadStore.download(ref, options);
+      const rec = await this.resolveDownloadStore().download(ref, options);
       this.downloadingKeys.delete(key);
       this.notify();
       return rec;
@@ -340,7 +384,7 @@ export class PackageManagerPlugin implements OctavePlugin {
    * 检查 LLVM 编译工具链是否已下载就绪（裁决⑤ 必要条件）
    */
   async hasLLVM(): Promise<boolean> {
-    const snap = await this.downloadStore.index();
+    const snap = await this.resolveDownloadStore().index();
     for (const rec of Object.values(snap.manifest.items)) {
       if (rec.ref.name === 'llvm-wasm' || rec.ref.name === 'llvm') {
         return true;
