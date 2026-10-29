@@ -16,6 +16,11 @@ export const octaveRunCellTool = defineTool({
   description: 'Execute a specific notebook cell by cell ID or 0-based cell index.',
   parameters: runCellArgs.schema,
   deps: ['workspace'],
+  // effects = sandbox-escape（与 octave_eval 同档理由）：跑 cell 就是执行那段任意
+  // Octave 代码（executeCell → supervisor.eval），代码能做的它都能做。额外的写面还有：
+  // cell 运行态（status / streamingOutput / executionCount / durationMs）、引擎未 boot
+  // 时顺手 boot、结束后的 syncVariables + _autoSave（有活动文件时写盘）。效应面只增不减。
+  effects: 'sandbox-escape',
   run: async (args, ctx) => {
     const ws = ctx.workspace;
     if (!ws) {

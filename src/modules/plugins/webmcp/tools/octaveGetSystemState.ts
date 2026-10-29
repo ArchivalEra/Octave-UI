@@ -11,6 +11,9 @@ export const octaveGetSystemStateTool = defineTool({
   description: 'Get engine supervisor state, active computation lane, open file, mode, and workspace metrics.',
   parameters: args().build().schema,
   deps: ['supervisor', 'workspace'],
+  // effects = read：纯同步取值（七个键全是属性读，连一次 awaited 服务调用都没有），
+  // 不 syncVariables、不 boot、不写盘、不出网。副作用面 = 0 —— 标杆 readonly 工具。
+  effects: 'read',
   run: async (_args, ctx) => {
     const sup = ctx.supervisor;
     const ws = ctx.workspace;

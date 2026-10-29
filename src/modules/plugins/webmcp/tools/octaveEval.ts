@@ -23,6 +23,13 @@ export const octaveEvalTool = defineTool({
   description: 'Evaluate GNU Octave code directly in WebAssembly engine and return execution output.',
   parameters: evalArgs.schema,
   deps: ['supervisor', 'workspace'],
+  // effects = sandbox-escape（保守取最大档）：本工具执行**任意** Octave 代码，代码能做的
+  // 一切都算它的副作用面 —— 改工作区只是最小项。宿主的 pkg shim 使 eval 内的
+  // `pkg install` / `pkg load` 直接触发 OctaveAssets.install（下载/写盘/装包，与
+  // octave_install_package 同等效应），`urlread` 经 webnet 桥出网（2026-10-23 spec
+  // 「effects 修正」明文：eval 归 sandbox-escape，保守）。eval 之后还会 syncVariables
+  // 回写工作区缓存。把它标 readonly 就是假装沙箱是围墙。
+  effects: 'sandbox-escape',
   run: async (args, ctx) => {
     const code = String(args.code || '').trim();
     if (!code) {

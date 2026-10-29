@@ -43,6 +43,23 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
   （记录在终态之后，对调用结果零影响）。反向断言 10 用例
   （webmcp-call-stats.test.ts）。
 
+- **effects 表内元数据**（spec v2 · B.3「新增 wire 面：不上 wire」）：
+  `WebMcpToolSpec.effects?: 'read' | 'mutates-workspace' | 'sandbox-escape'` ——
+  **只在表里**（`defineTool.ts` 的接口 + 七个工具各自标注），**不进 `listTools()` 返回、
+  不进 `ready` 载荷**，**零运行期消费者**（dispatcher / server / channels 都不读它），
+  没有权限检查逻辑、没有 registry。spec 原文：等第一个消费者（权限机制）出现再暴露上 wire。
+  取值按**调用面最大档**保守标注：`octave_get_system_state` / `octave_get_workspace` /
+  `octave_list_packages` = `read`；`octave_eval` / `octave_run_cell`（任意代码执行，
+  含 pkg shim 触发的下载装包面与 urlread 出网）/ `octave_install_package`（planOnly
+  之外的 install 分支真下载写盘）/ `omc_load_msl`（fetch zip + 写 omc 库目录）= `sandbox-escape`。
+  `mutates-workspace` 当前在册工具无人使用（保留给将来只改引擎工作区的工具）。
+  **golden 零变化即证**：88 用例快照文件 sha256 在改动前后一致（`83b40b7…390e`）；
+  直接判据在反向断言 8 用例（`tests/plugins/webmcp-effects-nonwire.test.ts`：
+  表内七工具全标注 / listTools JSON 无 `effects` 字样 / 每个 wire 定义仅三键 /
+  ready 同判 / 源码无 `.effects` 消费者 / **`{ ...tool }` 摊平违规变体必红** /
+  空输入安静）。变异实测：server.ts 改成 `tools.map((tool) => ({ ...tool }))` ⇒
+  本文件 3 红 + golden 2 红；还原后全绿。
+
 - **适用面**：工具调用在 timeoutMs（缺省 120_000，表项可覆盖）内未完成 ⇒ TIMEOUT 信封。
   计时**含排队**（从调用发起算——machine 在 supervisor 之上看不到执行起点，首版如实承认）。
 - **不碰 supervisor**（实施仓归属纪律）：Promise.race 在 machine 层；超时后底层任务
