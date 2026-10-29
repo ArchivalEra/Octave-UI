@@ -2,7 +2,7 @@
 // 虚拟文件系统操作与路径状态管理：MEMFS 树状视图、文件读写、下载与刷新
 import type { FsEntry, EngineSessionLike } from '../engine/types';
 
-export type FsListener = (entries: FsEntry[], currentDir: string) => void;
+type FsListener = (entries: FsEntry[], currentDir: string) => void;
 
 export class FilesystemStore {
   private _session: EngineSessionLike | null = null;

@@ -23,7 +23,7 @@ import { BrowserFetchAdapter, computeSha256 } from './FetchPort';
 import type { ForgeCatalog, ForgePackageItem, PackageVersionCandidate } from '../plugins/package/types';
 import { EngineAssetResolver } from '../engine/EngineAssetResolver';
 
-export interface DownloadStoreOptions {
+interface DownloadStoreOptions {
   storage?: Store;
   fetchPort?: FetchPort;
   catalogProvider?: () => Promise<ForgeCatalog> | ForgeCatalog;
@@ -33,7 +33,7 @@ export interface DownloadStoreOptions {
   maxQuotaBytes?: number;
 }
 
-export const KNOWN_RUNTIME_METADATA: Record<string, { bytes: number; sha256: string }> = {
+const KNOWN_RUNTIME_METADATA: Record<string, { bytes: number; sha256: string }> = {
   'llvm-wasm@6.0.12': {
     bytes: 34693729,
     sha256: 'cd6450fe7944875cb39f8e4a0790d5a08e032044f1db89054dadcabb749b20ce',

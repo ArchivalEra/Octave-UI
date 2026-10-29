@@ -1,7 +1,7 @@
 // src/modules/theme/ThemeManager.ts
 // 白根（Shirone）设计规范主题管理器与防闪烁内联脚本生成器
 
-export type Theme = 'dark' | 'light' | 'auto';
+type Theme = 'dark' | 'light' | 'auto';
 
 export class ThemeManager {
   public static readonly STORAGE_KEY = 'octave_ui_theme';

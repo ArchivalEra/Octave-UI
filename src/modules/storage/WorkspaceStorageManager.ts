@@ -15,7 +15,7 @@ import { pickFolder, fromDroppedEntries, fromZip } from './ImportSources';
 import { createZip, downloadFile } from './ExportService';
 import type { EngineSupervisor } from '../engine/EngineSupervisor';
 
-export interface StorageStats {
+interface StorageStats {
   filesCount: number;
   totalBytes: number;
   usedBytes: number;

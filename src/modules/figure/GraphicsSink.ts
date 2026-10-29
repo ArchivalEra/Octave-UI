@@ -6,26 +6,26 @@
 // 任何一侧改名都不会让另一侧静默失聪。
 export const FIGURE_BUS_EVENT = 'octave:figure-rendered';
 
-export interface DeviceLostInfo {
+interface DeviceLostInfo {
   reason?: string;
   message: string;
 }
 
-export type DeviceLostCallback = (info: DeviceLostInfo) => void;
-export type SinkErrorCallback = (error: Error) => void;
+type DeviceLostCallback = (info: DeviceLostInfo) => void;
+type SinkErrorCallback = (error: Error) => void;
 
 // 图表事件载荷：imageDataUrl 为渲染就绪的图片地址（当前为 Blob URL），
 // bytes/count 为可选的体积与序号透传字段
-export interface FigureEvent {
+interface FigureEvent {
   imageDataUrl: string;
   bytes?: number;
   count?: number;
 }
 
-export type FigureEventCallback = (fig: FigureEvent) => void;
+type FigureEventCallback = (fig: FigureEvent) => void;
 
 // 转发源的最小接口：只依赖 subscribe，不绑死具体插件类型
-export interface FigureSource {
+interface FigureSource {
   subscribe(listener: (event: { url: string; bytes?: number; count?: number }) => void): () => void;
 }
 

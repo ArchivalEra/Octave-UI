@@ -12,19 +12,19 @@
 
 import type { WebMcpToolProperty } from './types';
 
-export type WebMcpArgType = 'string' | 'number' | 'boolean';
+type WebMcpArgType = 'string' | 'number' | 'boolean';
 
 /** TS 类型派生（唯一的类型层逻辑，刻意保持最小） */
 type TsTypeOf<T extends WebMcpArgType> = T extends 'string' ? string : T extends 'number' ? number : boolean;
 
-export interface BuiltArgsSchema<TArgs extends Record<string, unknown>> {
+interface BuiltArgsSchema<TArgs extends Record<string, unknown>> {
   /** JSON Schema 面：键序 = 声明序（见文件头键序契约） */
   readonly schema: { type: 'object'; properties: Record<string, WebMcpToolProperty>; required?: string[] };
   /** TS 类型面：运行期恒为 undefined，仅供编译期 `typeof schema.phantom` 提取 */
   readonly phantom: TArgs;
 }
 
-export class ArgsBuilder<TArgs extends Record<string, unknown> = {}> {
+class ArgsBuilder<TArgs extends Record<string, unknown> = {}> {
   private readonly props: Record<string, WebMcpToolProperty> = {};
   private readonly requiredNames: string[] = [];
 

@@ -1,7 +1,7 @@
 // src/modules/storage/types.ts
 // 存储端口抽象、POSIX 路径安全校验工具与工作区元数据定义
 
-export type EntryKind = 'file' | 'dir';
+type EntryKind = 'file' | 'dir';
 
 export interface EntryMeta {
   path: string;

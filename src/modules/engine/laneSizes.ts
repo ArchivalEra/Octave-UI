@@ -20,7 +20,7 @@
 
 import type { TranslateFn } from '../i18n/types';
 
-export type LaneSizeBytes = number | null;
+type LaneSizeBytes = number | null;
 
 // 构建期注入（astro.config.mjs vite.define）。测试/裸构建下未注入 ⇒ 空表（全 null）。
 declare const __LANE_SIZES__: Record<string, LaneSizeBytes> | undefined;

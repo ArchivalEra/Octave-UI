@@ -11,7 +11,7 @@ export type SupervisorState =
   | 'recovering'
   | 'failed';
 
-export type EngineState = SupervisorState;
+type EngineState = SupervisorState;
 
 export type CrashCause = 'trap' | 'oom' | 'hang' | 'user-kill' | 'boot-failed';
 

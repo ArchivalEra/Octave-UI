@@ -1,7 +1,7 @@
 // src/modules/storage/downloadTypes.ts
 // 纯下载模块 (DownloadStore) 核心类型代数与 7 错误码封闭集（落实 mail/009, mail/010, host-007, host-008）
 
-export type DownloadKind = 'src' | 'pre' | 'engine';
+type DownloadKind = 'src' | 'pre' | 'engine';
 
 /**
  * 资产唯一身份引用代数（用户裁决②：包与引擎共用统一代数）
@@ -97,7 +97,7 @@ export interface DownloadSnapshot {
   count: number;
 }
 
-export interface DownloadProgress {
+interface DownloadProgress {
   receivedBytes: number;
   totalBytes: number | null;
   phase?: string;
@@ -109,7 +109,7 @@ export type DownloadProgressCallback = (progress: DownloadProgress) => void;
  * 7 错误码封闭集（host-007 §④ & mail/012 A5）
  * state in ('not-found', 'failed', 'cannot-know')
  */
-export type DownloadErrorCode =
+type DownloadErrorCode =
   | 'NOT_DOWNLOADED'
   | 'VERSION_WITHHELD'
   | 'FLAVOR_UNAVAILABLE'
@@ -118,7 +118,7 @@ export type DownloadErrorCode =
   | 'INDEX_UNREADABLE'
   | 'STORAGE_QUOTA_EXHAUSTED';
 
-export type ErrorState = 'not-found' | 'failed' | 'cannot-know';
+type ErrorState = 'not-found' | 'failed' | 'cannot-know';
 
 export const DOWNLOAD_ERROR_SPECS: Record<DownloadErrorCode, { state: ErrorState; cause: string }> = {
   NOT_DOWNLOADED: { state: 'not-found', cause: 'not-downloaded' },

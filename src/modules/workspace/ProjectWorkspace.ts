@@ -27,7 +27,7 @@ export interface ProjectCell {
   durationMs?: number;
 }
 
-export interface WorkspaceSnapshot {
+interface WorkspaceSnapshot {
   id: string;
   name: string;
   timestamp: number;
@@ -35,9 +35,9 @@ export interface WorkspaceSnapshot {
   description?: string;
 }
 
-export type ProjectWorkspaceListener = () => void;
+type ProjectWorkspaceListener = () => void;
 
-export function getDefaultScript(locale?: string): string {
+function getDefaultScript(locale?: string): string {
   const norm = (locale || '').toLowerCase();
   if (norm.startsWith('en')) {
     return `%% Welcome to Octave Web

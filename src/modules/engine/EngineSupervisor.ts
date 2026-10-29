@@ -19,7 +19,7 @@ import { EngineCrashedError } from './types';
 import { WasmEmbedAdapter } from './WasmEmbedAdapter';
 
 
-export interface PendingTask {
+interface PendingTask {
   id: string;
   epoch: number;
   started: boolean;
@@ -29,7 +29,7 @@ export interface PendingTask {
   task: () => Promise<any>;
 }
 
-export interface SupervisorOptions {
+interface SupervisorOptions {
   adapter?: OctaveEmbedPort;
   adapterFactory?: () => Promise<OctaveEmbedPort> | OctaveEmbedPort;
   skipPreflight?: boolean;

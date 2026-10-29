@@ -16,7 +16,7 @@ export interface AnsiSpan {
   underline?: boolean;
 }
 
-export type TerminalOutputListener = (lines: AnsiSpan[][]) => void;
+type TerminalOutputListener = (lines: AnsiSpan[][]) => void;
 
 export class TerminalController {
   private _history: HistoryStore;

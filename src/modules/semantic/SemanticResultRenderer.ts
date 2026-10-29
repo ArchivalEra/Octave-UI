@@ -37,7 +37,7 @@ export interface ErrorSemanticResult {
   error: SanitizedError;
 }
 
-export interface StreamSemanticResult {
+interface StreamSemanticResult {
   kind: 'stream';
   text: string;
 }
