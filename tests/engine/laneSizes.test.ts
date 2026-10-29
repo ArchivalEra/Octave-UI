@@ -1,17 +1,19 @@
-// tests/engine/laneSizes.test.ts — 车道体量真源缝（fix/lane-sizes）
+// tests/engine/laneSizes.test.ts — 车道体量真源缝（fix/lane-sizes；fix/omc-display 扩 OMC）
 //
 // 真源裁定：构建期注入 __LANE_SIZES__（astro.config.mjs → scripts/lane-sizes.mjs
-// 读 public/lanes/*/octave.build.json 的 measured.files 求和）。本文件钉三件事：
+// 读 public/lanes/*/octave.build.json 的 measured.files 求和；omc 键 = public/omc/
+// 下载闭包 wasm+js 两件真实字节和）。本文件钉四件事：
 //   1. 求和纯函数的形状契约（读不出真值 ⇒ null，不猜）；
 //   2. 注入缝的行为契约：真源变 ⇒ 取值变；真源缺失 ⇒ null；
-//   3. 静态反向断言：组件里编造的体量字面量不得复活（对修复前代码红——
-//      旧组件写死 ~39.3/~40.7 MB，见 git 16d5bf2 的 BootModal/HeaderBar）。
+//   3. OMC 闭包读取器契约（两件齐 ⇒ 和；缺一件 / 目录缺 ⇒ null，不许部分和冒充）；
+//   4. 静态反向断言：组件里编造的体量字面量不得复活（对修复前代码红——
+//      旧组件写死 ~39.3/~40.7/~74.6 MB，见 git 16d5bf2 的 BootModal/HeaderBar）。
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { sumMeasuredFiles, readLaneSizes } from '../../scripts/lane-sizes.mjs';
+import { sumMeasuredFiles, readLaneSizes, readOmcSize, OMC_CLOSURE_FILES } from '../../scripts/lane-sizes.mjs';
 import {
   formatAssetSize,
   getLaneSizeBytes,
@@ -84,6 +86,66 @@ describe('readLaneSizes（发现式扫描 public/lanes/ 下各车道）', () => 
   });
 });
 
+describe('readOmcSize（public/omc/ 下载闭包两件真实字节和，fix/omc-display）', () => {
+  // 结案真值形状：闭包 = OMC_CLOSURE_FILES 两件（与 DownloadStore.resolveEngineTarget
+  // 同名单）。复跑（wasm 在场的检出）：
+  //   python3 -c "import os;print(sum(os.stat('public/omc/'+n).st_size for n in ['OpenModelicaCompiler_bg.wasm','OpenModelicaCompiler.js']))"
+  //   ⇒ 74635990（commit bf0c9e4 结案；= KNOWN_ENGINE_METADATA['omc'].files 求和）
+  function makeOmcRoot(sizes: Record<string, number | null>): string {
+    const root = mkdtempSync(path.join(tmpdir(), 'omc-size-'));
+    const omcDir = path.join(root, 'public', 'omc');
+    mkdirSync(omcDir, { recursive: true });
+    for (const [name, size] of Object.entries(sizes)) {
+      if (size === null) continue; // null = 该件缺（不写文件）
+      writeFileSync(path.join(omcDir, name), Buffer.alloc(size, 0));
+    }
+    return root;
+  }
+
+  it('两件齐 ⇒ 真实字节求和；真源值变（wasm 字节变）⇒ 求和跟着变', () => {
+    let root = makeOmcRoot({ 'OpenModelicaCompiler_bg.wasm': 100, 'OpenModelicaCompiler.js': 23 });
+    try {
+      expect(readOmcSize(root)).toBe(123);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+    // 真源变 ⇒ 显示源跟着变（反断言：注入值是测出来的，不是常数）
+    root = makeOmcRoot({ 'OpenModelicaCompiler_bg.wasm': 200, 'OpenModelicaCompiler.js': 23 });
+    try {
+      expect(readOmcSize(root)).toBe(223);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('缺任一件（wasm 缺 / js 缺）⇒ null（缺一件 = 没有完整闭包真值，不许部分和冒充）', () => {
+    for (const partial of [
+      { 'OpenModelicaCompiler_bg.wasm': 100 },
+      { 'OpenModelicaCompiler.js': 23 },
+    ] as const) {
+      const root = makeOmcRoot(partial);
+      try {
+        expect(readOmcSize(root)).toBeNull();
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('omc 目录不存在（裸仓）⇒ null；非常规文件（目录占位）⇒ null', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'omc-empty-'));
+    try {
+      expect(readOmcSize(root)).toBeNull();
+      // 目录像（非常规文件）：stat.isFile() 为假 ⇒ null
+      mkdirSync(path.join(root, 'public', 'omc', OMC_CLOSURE_FILES[0]), { recursive: true });
+      writeFileSync(path.join(root, 'public', 'omc', OMC_CLOSURE_FILES[1]), Buffer.alloc(23, 0));
+      expect(readOmcSize(root)).toBeNull();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('注入缝与格式化（显示 = 真源的函数）', () => {
   beforeEach(() => {
     i18n.setLocale('en');
@@ -142,10 +204,11 @@ describe('静态反向断言：编造的体量字面量不得复活', () => {
   const headerSrc = stripComments(readFileSync(path.resolve(process.cwd(), 'src/components/HeaderBar.svelte'), 'utf8'));
   const MB_LITERAL = /~\d+(?:\.\d+)?\s*MB/g;
 
-  it('退役的编造值 ~39.3 / ~40.7 在两个组件里出现 0 次（对修复前代码必红）', () => {
+  it('退役的编造值 ~39.3 / ~40.7 / ~74.6 在两个组件里出现 0 次（对修复前代码必红）', () => {
     for (const [name, src] of [['BootModal', bootSrc], ['HeaderBar', headerSrc]] as const) {
       expect(src, name).not.toContain('~39.3');
       expect(src, name).not.toContain('~40.7');
+      expect(src, name).not.toContain('~74.6');
     }
   });
 
@@ -154,9 +217,12 @@ describe('静态反向断言：编造的体量字面量不得复活', () => {
     expect(headerSrc).toContain('getLaneSizeBytes');
   });
 
-  it('BootModal 体量字面量 = 0；HeaderBar 仅剩 OMC 一处（已登记遗留，见该行注释）', () => {
+  it('OMC 档必须走同一缝（getLaneSizeBytes(\'omc\') 在 HeaderBar 源里）', () => {
+    expect(headerSrc).toContain("getLaneSizeBytes('omc')");
+  });
+
+  it('两个组件的体量字面量 = 0（~74.6MB 遗留已退役，fix/omc-display）', () => {
     expect(bootSrc.match(MB_LITERAL)).toBeNull();
-    const remaining = headerSrc.match(MB_LITERAL) || [];
-    expect(remaining).toEqual(['~74.6MB']);
+    expect(headerSrc.match(MB_LITERAL)).toBeNull();
   });
 });
