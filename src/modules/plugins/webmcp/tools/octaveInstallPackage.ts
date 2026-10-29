@@ -20,6 +20,12 @@ export const octaveInstallPackageTool = defineTool({
   description: 'Pre-plan or execute installation of an Octave Forge package or runtime extension layer.',
   parameters: installPackageArgs.schema,
   deps: ['packageManager'],
+  // effects = sandbox-escape（按调用面**最大档**标注，不按 planOnly 分支）：
+  // 非 planOnly 分支走 pm.installPackage → 资产 port.install → 宿主 OctaveAssets.install
+  // —— 真下载、写盘、把包装进运行时（沙箱外的持久效应）。planOnly 分支虽然只推演预算
+  // （planInstall 的 port 调用带 planOnly:true），但同一工具的**其他参数**能触发完整安装，
+  // 权限机制按工具收窄 —— 若这里标 read，一次带 planOnly:false 的调用就会被当只读放行。
+  effects: 'sandbox-escape',
   run: async (args, ctx) => {
     const pm = ctx.packageManager;
     if (!pm) {

@@ -32,6 +32,11 @@ export const omcLoadMslTool = defineTool<'packageManager'>({
   // 能力门（spec 步骤 3 第 3 项）：provision 在册但运行期不可得 ⇒ CAPABILITY_UNAVAILABLE。
   // MSL 服务 omc 车道——packageManager 缺席即不可给。
   capability: (ctx) => (ctx.packageManager ? null : 'the package manager service (needed to resolve the MSL catalog asset)'),
+  // effects = sandbox-escape：真 fetch MSL zip（出网 + 字节进内存）、omc_vfs_load_zip
+  // 把库写进运行时 VFS 的 `/.openmodelica/libraries`（沙箱外的持久加载态），再加三条
+  // 自检 eval。这是「装载运行库」——与装包同族的下载/写面，且它改的是 omc 引擎自己的
+  // 库目录，不是工作区变量。保守记逃逸档。
+  effects: 'sandbox-escape',
   run: async (_args, ctx) => {
     const pm = ctx.packageManager!;
     // 1) 从供给面按**全称名**取条目（consumer:"omc" 的包含语义由 filterPackages 保证）

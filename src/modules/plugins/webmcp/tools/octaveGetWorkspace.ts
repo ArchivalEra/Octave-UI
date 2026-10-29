@@ -11,6 +11,11 @@ export const octaveGetWorkspaceTool = defineTool({
   description: 'Retrieve all current variables in the GNU Octave workspace (names, types, dimensions, bytes).',
   parameters: args().build().schema,
   deps: ['workspace', 'supervisor'],
+  // effects = read：只读引擎工作区再投影成 JSON。`ws.syncVariables()` 确实会刷新
+  // ProjectWorkspace 的本地变量镜像并 `_notify()` 订阅者，但那是**读透缓存**：
+  // 引擎侧工作区一字未改（sup.getWorkspace 是只读取数），不写盘、不出网、不装包。
+  // 若把它记成 mutates-workspace，将来权限机制会为一次查询索要写权限 —— 名不副实。
+  effects: 'read',
   run: async (_args, ctx) => {
     const ws = ctx.workspace;
     const sup = ctx.supervisor;

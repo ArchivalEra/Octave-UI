@@ -27,6 +27,11 @@ export const octaveListPackagesTool = defineTool({
   description: 'Query available, compatible, and installed Octave Forge packages and runtime layers in the catalog.',
   parameters: listPackagesArgs.schema,
   deps: ['packageManager'],
+  // effects = read：只查目录（catalog），不做装包/下载/写盘。`loadCatalog()`
+  // 会发一次 catalog JSON 的 GET 并在插件内缓存（之后 getCatalog 直接命中），
+  // 但那是对静态目录的**读取**，不触发 OctaveAssets.install（那才是下载/写盘面，
+  // 归 octave_install_package）。filterPackages/getStatus 都是纯查询。
+  effects: 'read',
   run: async (args, ctx) => {
     const pm = ctx.packageManager;
     if (!pm) {
