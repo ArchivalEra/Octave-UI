@@ -1,5 +1,11 @@
 // src/modules/figure/GraphicsSink.ts
 // 输出侧渲染接收模块：挂载宿主 Canvas，隔离 GPU 异常生命周期，局部降级不反噬计算引擎
+
+// 页面级图表事件总线的**唯一产地**（spec #19 决策 1）。发射方
+// （P5FigureOverlayPlugin）与订阅方（下文的总线接线函数）都引用它——
+// 任何一侧改名都不会让另一侧静默失聪。
+export const FIGURE_BUS_EVENT = 'octave:figure-rendered';
+
 export interface DeviceLostInfo {
   reason?: string;
   message: string;
@@ -49,8 +55,8 @@ export function wireFigureBusToSink(sink: GraphicsSink): () => void {
     if (!detail) return;
     sink.emitFigure({ imageDataUrl: detail.url || '', bytes: detail.bytes, count: detail.count });
   };
-  window.addEventListener('octave:figure-rendered', handler);
-  return () => window.removeEventListener('octave:figure-rendered', handler);
+  window.addEventListener(FIGURE_BUS_EVENT, handler);
+  return () => window.removeEventListener(FIGURE_BUS_EVENT, handler);
 }
 
 export class GraphicsSink {

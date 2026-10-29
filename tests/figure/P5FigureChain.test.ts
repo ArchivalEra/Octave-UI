@@ -11,7 +11,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   P5FigureOverlayPlugin,
   emitFigureOnBus,
-  onFigureBus,
 } from '../../src/modules/plugins/figure/P5FigureOverlayPlugin';
 import { GraphicsSink, wireFigureSource, wireFigureBusToSink } from '../../src/modules/figure/GraphicsSink';
 
@@ -155,8 +154,12 @@ describe('spec #19 红线 1：图表事件链', () => {
     });
 
     it('★ 模块实例身份不再决定失聪：另一个实例的钩子发的事件，总线订阅者也能收到', () => {
+      // 用产品订阅口（总线接线函数）核实：审计 A#7 已删掉平行订阅口，
+      // 断言面不变——总线上的事件必须到达 sink 的 onFigure 消费者。
+      const sink = new GraphicsSink();
       const got: string[] = [];
-      const unsub = onFigureBus((e) => got.push(e.url));
+      sink.onFigure((f) => got.push(f.imageDataUrl));
+      const unwire = wireFigureBusToSink(sink);
       // 模拟「另一个实例」直接往总线发（等价于它的钩子捕获到图）
       emitFigureOnBus({
         path: '/tmp/x.png',
@@ -167,7 +170,7 @@ describe('spec #19 红线 1：图表事件链', () => {
         timestamp: Date.now(),
       });
       expect(got).toEqual(['blob:from-other-instance']);
-      unsub();
+      unwire();
       emitFigureOnBus({
         path: '/tmp/y.png',
         bytes: 1,

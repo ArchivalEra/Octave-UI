@@ -6,6 +6,7 @@
 // 3. 挂载点拦截与自动 flush：防止 #p5figure 掉落到 document.body 底端，自动为 plot 补全 drawnow
 
 import type { OctavePlugin, PluginContext } from '../types';
+import { FIGURE_BUS_EVENT } from '../../figure/GraphicsSink';
 
 export interface P5FigureRenderEvent {
   path: string;
@@ -23,7 +24,7 @@ export type FigureRenderListener = (event: P5FigureRenderEvent) => void;
 // （Vite dev 的模块图重复实例），第二个实例会静默跳过安装 ⇒ 它自己的 _listeners
 // 永远收不到事件，而 sink 订阅的恰好可能是那个没装钩的实例（056 复钓的红线 1）。
 // ⇒ 事件发到页面级总线上，任何实例的钩子捕获到图都往这里发，订阅方不再依赖实例身份。
-const FIGURE_BUS_EVENT = 'octave:figure-rendered';
+// 事件名产地只有一个：GraphicsSink.FIGURE_BUS_EVENT（订阅方 wireFigureBusToSink 同源）。
 
 export function emitFigureOnBus(evt: P5FigureRenderEvent): void {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
@@ -32,18 +33,6 @@ export function emitFigureOnBus(evt: P5FigureRenderEvent): void {
   } catch {
     // 非浏览器环境（或 CustomEvent 缺席）静默跳过：总线是补充通道，不阻断实例内分发
   }
-}
-
-export function onFigureBus(listener: FigureRenderListener): () => void {
-  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
-    return () => {};
-  }
-  const handler = (e: Event) => {
-    const detail = (e as CustomEvent).detail;
-    if (detail) listener(detail as P5FigureRenderEvent);
-  };
-  window.addEventListener(FIGURE_BUS_EVENT, handler);
-  return () => window.removeEventListener(FIGURE_BUS_EVENT, handler);
 }
 
 // 从 __p5_last 与 DOM 两侧取图源 URL（spec #19 决策 3）。

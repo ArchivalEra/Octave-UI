@@ -5,8 +5,6 @@ import type { PlotData } from './SafePlotSinkPolyfill';
 import type { SanitizedError } from './ErrorSanitizer';
 import { ErrorSanitizer } from './ErrorSanitizer';
 
-export type SemanticResultKind = 'figure_image' | 'plot' | 'matrix' | 'scalar' | 'sanitized_error' | 'stream';
-
 export interface FigureImageSemanticResult {
   kind: 'figure_image';
   url: string;

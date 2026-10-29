@@ -67,34 +67,6 @@ export function distributeCards(input: any[], colCount: number): any[][] {
 }
 
 /**
- * 纯函数：桌面/移动宽度下的列数（同 S26-1 pretext-feed.mjs 规范）。
- */
-export function columnCount(containerWidth: number, minCol = 240, maxCol = 380): number {
-  if (containerWidth < minCol) return 1;
-  return Math.max(1, Math.floor(containerWidth / minCol));
-}
-
-/**
- * 纯函数：pretext 路线的卡片高度预测规范（同 S26-1 pretext-feed.mjs 规范）。
- */
-export function predictedHeight(
-  { title, snippet, meta }: { title: string; snippet: string; meta: string },
-  { padY, titleLineHeight, lineHeight, metaLineHeight, gap }: {
-    padY: number;
-    titleLineHeight: number;
-    lineHeight: number;
-    metaLineHeight: number;
-    gap: number;
-  },
-  measureLines: (text: string, lh: number) => number
-): number {
-  const titleLines = measureLines(title, titleLineHeight);
-  const snippetLines = measureLines(snippet, lineHeight);
-  const metaLines = measureLines(meta, metaLineHeight);
-  return padY * 2 + titleLines * titleLineHeight + gap + snippetLines * lineHeight + gap + metaLines * metaLineHeight;
-}
-
-/**
  * 纯函数：代码文本自动排版，按行清洗，标记注释（支持 Octave / MATLAB 的 % 与 #）与行号。
  */
 export function formatCodeLines(code: string): TypesetCodeLine[] {

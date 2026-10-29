@@ -18,5 +18,3 @@ export interface VariableDetail {
   previewGrid?: (number | string)[][];
   isTruncated?: boolean;
 }
-
-export type InspectorActionType = 'plot' | 'copy' | 'transpose' | 'insert';

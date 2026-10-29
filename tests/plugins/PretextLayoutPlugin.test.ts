@@ -54,7 +54,7 @@ describe('PretextLayoutPlugin', () => {
     });
   });
 
-  describe('computeColumnCount & S26-1 columnCount', () => {
+  describe('computeColumnCount', () => {
     it('returns 1 column for mobile widths', () => {
       expect(plugin.computeColumnCount(320)).toBe(1);
       expect(plugin.computeColumnCount(480)).toBe(1);
@@ -116,7 +116,7 @@ x = rand(N, 1);`;
     });
   });
 
-  describe('predictCardHeight & S26-1 predictedHeight', () => {
+  describe('predictCardHeight', () => {
     it('calculates deterministic card metrics', () => {
       const recipe1 = {
         title: 'Short',
@@ -143,27 +143,6 @@ r = norm(A*V - V*D);`,
       expect(m2.totalHeight).toBeGreaterThan(m1.totalHeight);
       expect(m2.codeLineCount).toBe(6);
       expect(m1.codeLineCount).toBe(2);
-    });
-  });
-
-  describe('S26-1 Standalone Pure Functions Compatibility', () => {
-    it('columnCount matches S26-1 spec', async () => {
-      const { columnCount: colCount } = await import('../../src/modules/plugins/pretext/PretextLayoutPlugin');
-      expect(colCount(100, 240, 380)).toBe(1);
-      expect(colCount(760, 240, 380)).toBe(3);
-      expect(colCount(240, 240, 380)).toBe(1);
-    });
-
-    it('predictedHeight matches S26-1 spec formula', async () => {
-      const { predictedHeight: predH } = await import('../../src/modules/plugins/pretext/PretextLayoutPlugin');
-      const spec = { padY: 14, titleLineHeight: 24, lineHeight: 22, metaLineHeight: 20, gap: 8 };
-      const h = predH(
-        { title: 'T', snippet: 'S', meta: 'M' },
-        spec,
-        (t) => (t === 'T' ? 1 : t === 'S' ? 3 : 1)
-      );
-      // 内边距×2 + 标题行×行高 + 间隙 + 摘要行×行高 + 间隙 + meta 行×行高
-      expect(h).toBe(28 + 24 + 8 + 66 + 8 + 20);
     });
   });
 });

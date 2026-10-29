@@ -14,8 +14,6 @@ export { PluginRegistry } from './PluginRegistry';
 export {
   PretextLayoutPlugin,
   distributeCards,
-  columnCount,
-  predictedHeight,
   formatCodeLines,
   type TypesetCodeLine,
   type CardLayoutMetrics,
