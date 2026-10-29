@@ -36,6 +36,9 @@ function notifyFlavorError(err: OmcFlavorError): void {
  * - lane === 'omc'（主 flavor）：失败原样上抛——主 flavor 失败即 boot 失败；
  * - 其他 lane（双引擎模式，OMC 为附加 flavor）：失败上抛带 code=FLAVOR_UNAVAILABLE 的
  *   Error（不许吞——吞了就是静默降级冒充成功），并经 onOmcFlavorError 通道送 UI 层呈现。
+ *
+ * 前置条件：embed（或 window 上的宿主）必须暴露 MEMFS 入口 FS。三源全缺同样按上面的
+ * 分叉失败（带 code=FLAVOR_UNAVAILABLE）——**不许静默早退**，见函数内注释。
  */
 export async function setupOmcBridge(embed: any, lane?: EngineLane): Promise<void> {
   try {
@@ -44,7 +47,25 @@ export async function setupOmcBridge(embed: any, lane?: EngineLane): Promise<voi
       (typeof window !== 'undefined'
         ? (window as any).__octaveHosts?.[0]?.mod?.FS || (window as any).Module?.FS
         : null);
-    if (!FS) return;
+    // 装配前置契约：MEMFS 入口三源全缺 = embed lane 模块形状不是本桥认得的形状。
+    // 历史实现此处 `return`（静默早退）——用户勾了 omc 却「什么也没发生」，
+    // __omc 永不赋值、不报错、也不走 flavor 失败通道。那是产品形状缺陷：
+    // 未来换 embed 实现或某 lane 模块形状变化时，会静默失效且无人知晓。
+    // 现在按本文件统一的失败语义响亮失败：lane='omc' 原样上抛（boot 失败），
+    // 双引擎模式带 code 上抛 + 经 onOmcFlavorError 通知（调用方降级 Octave-only）。
+    // 为何不「缺 FS 也降级继续」：mkdir('/tmp')/addpath 虽各自 best-effort，但二者正是
+    // Octave↔OMC 的共享路径接线；FS 三源全缺意味着这条缝本身不存在，继续装配只会留下
+    // 「__omc 有值但路径未接」的半成品，把契约缺陷推迟成后续 omc_eval 的费解报错。
+    // 早早响亮失败比半装配后随机失败可查。
+    if (!FS) {
+      const err = new Error(
+        'OMC 装配前置失败：embed 未暴露 mod.FS（OMC 的 MEMFS 入口不可得）——' +
+          '已检查 embed.mod.FS / window.__octaveHosts[0].mod.FS / window.Module.FS 三源，均缺失。' +
+          '这通常意味着 embed lane 模块形状与桥接契约不符。'
+      ) as OmcFlavorError;
+      err.code = 'FLAVOR_UNAVAILABLE';
+      throw err;
+    }
     try { FS.mkdir('/tmp'); } catch {}
     if (embed?.eval) {
       try { await embed.eval("addpath('/tmp');"); } catch {}
