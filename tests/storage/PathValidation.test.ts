@@ -2,7 +2,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   validatePath,
-  joinPath,
   splitPath,
 } from '../../src/modules/storage/types';
 
@@ -41,12 +40,6 @@ describe('POSIX Path Validation & Security Utilities', () => {
   it('strictly rejects Windows drive colon tokens', () => {
     expect(() => validatePath('C:/Windows/system32')).toThrowError(/illegal colon/);
     expect(() => validatePath('D:script.m')).toThrowError(/illegal colon/);
-  });
-
-  it('correctly joins path segments', () => {
-    expect(joinPath('src', 'modules', 'test.m')).toBe('src/modules/test.m');
-    expect(joinPath('/root/', '/child/', 'file.m')).toBe('root/child/file.m');
-    expect(joinPath('folder', '')).toBe('folder');
   });
 
   it('correctly splits directory and basename', () => {

@@ -201,10 +201,6 @@ export class ProjectWorkspace {
     return [...this._snapshots];
   }
 
-  get supervisor(): EngineSupervisor {
-    return this._supervisor;
-  }
-
   // --- 模式与后端 Lane 切换 ---
 
   setMode(mode: WorkbenchMode): void {
@@ -212,15 +208,6 @@ export class ProjectWorkspace {
       this._mode = mode;
       this._notify();
     }
-  }
-
-  async switchLane(lane: EngineLane): Promise<void> {
-    if (this._supervisor.state !== 'unloaded') {
-      console.warn(`[ProjectWorkspace] 计算已启动 (状态: ${this._supervisor.state})，禁止切换引擎车道`);
-      return;
-    }
-    this._supervisor.setLane(lane);
-    this._notify();
   }
 
   selectLane(lane: EngineLane): void {

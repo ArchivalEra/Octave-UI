@@ -97,18 +97,6 @@ export function validatePath(rawPath: string): string {
 }
 
 /**
- * 路径组合助手
- */
-export function joinPath(...segments: string[]): string {
-  const cleanSegments = segments
-    .map((s) => s.replace(/\\/g, '/').replace(/^\/+|\/+$/g, ''))
-    .filter(Boolean);
-
-  if (cleanSegments.length === 0) return '';
-  return validatePath(cleanSegments.join('/'));
-}
-
-/**
  * 路径拆分助手（目录路径与基名）
  */
 export function splitPath(path: string): { dir: string; name: string } {

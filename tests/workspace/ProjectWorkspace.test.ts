@@ -62,11 +62,11 @@ describe('ProjectWorkspace Deep Module', () => {
     expect(bareSupervisor.state).toBe('unloaded');
 
     // 切换引擎仅为选档，不触发启动，状态保持 unloaded
-    await ws.switchLane('master');
+    ws.selectLane('master');
     expect(ws.activeLane).toBe('master');
     expect(bareSupervisor.state).toBe('unloaded');
 
-    await ws.switchLane('IllegalPerformance');
+    ws.selectLane('IllegalPerformance');
     expect(ws.activeLane).toBe('IllegalPerformance');
     expect(bareSupervisor.state).toBe('unloaded');
 
@@ -75,7 +75,7 @@ describe('ProjectWorkspace Deep Module', () => {
     expect(bareSupervisor.state).toBe('idle');
 
     // 计算开始后再切换应被拦截拒绝
-    await ws.switchLane('wasm32-final');
+    ws.selectLane('wasm32-final');
     expect(ws.activeLane).toBe('IllegalPerformance');
   });
 
@@ -229,7 +229,7 @@ describe('ProjectWorkspace Deep Module', () => {
     expect(ws.activeLane).toBe('wasm32-final');
 
     // 切换 Octave 档位不影响 OMC 状态
-    await ws.switchLane('master');
+    ws.selectLane('master');
     expect(ws.activeLane).toBe('master');
     expect(ws.isOmcEnabled).toBe(true);
 
@@ -245,7 +245,7 @@ describe('ProjectWorkspace Deep Module', () => {
     const ws = new ProjectWorkspace(bareSupervisor, new VirtualMemoryDirectoryAdapter('TestWorkspace'));
     const bootSpy = vi.spyOn(bareSupervisor, 'boot');
     ws.setOmcEnabled(true);
-    await ws.switchLane('IllegalPerformance');
+    ws.selectLane('IllegalPerformance');
 
     // 执行单元格自动按当前勾选的 Octave 档位与 OMC 状态启动
     await ws.executeCell(ws.cells[0].id);
