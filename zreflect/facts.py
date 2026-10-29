@@ -71,11 +71,24 @@ def measure_example():
     facts["test_files"] = fact(n_test, test_cmd, "repo", "Vitest 单元测试套件数")
 
     # 2. 闸门与文档统计
-    py_files_cmd = "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l"
+    # 复跑面 = 仓库面（与 md_files/md_lines 同款修正，先例 5d0f9da）：git 工作树里
+    # cmd 只数**已跟踪**的 py（git ls-files）——旧 `find` 把未跟踪的 py（草稿 /
+    # 探针脚本）也数进去，台账值在含未跟踪 .py 的 checkout 上复跑永不收敛（复跑
+    # 判据必须只依赖已入库的面）。非 git 处境（跨仓夹具自证）没有「已跟踪面」
+    # 这个概念，退回 find 数全量 —— 仪器随处境选，**选了什么就写在 cmd 字段里**
+    # （判据强度随环境变化不许静默 —— runner.py 的 bash→/bin/sh 同款先例）。
+    # 反向验证：git 仓里造未跟踪 py 后这两条 cmd 输出不变。
+    if _probe("git rev-parse --is-inside-work-tree") is not None:
+      py_files_cmd = "git ls-files -- '*.py' | wc -l"
+      py_lines_cmd = "git ls-files -z -- '*.py' | xargs -0 -r cat | wc -l"
+    else:
+      print("⚠ GATE_REPO 不是 git 工作树 ⇒ py 计数退回 find（数全量，无「已跟踪面」"
+            "可依）—— 仪器选择已写进 cmd 字段", file=sys.stderr)
+      py_files_cmd = "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' | wc -l"
+      py_lines_cmd = "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l"
     n_py = int(subprocess.run(py_files_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
     facts["py_files"] = fact(n_py, py_files_cmd, "repo")
 
-    py_lines_cmd = "find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -exec cat {} + | wc -l"
     lines_py = int(subprocess.run(py_lines_cmd, shell=True, capture_output=True, text=True, check=True, cwd=GATE_REPO).stdout.strip())
     facts["py_lines"] = fact(lines_py, py_lines_cmd, "repo", "刻意 ≥100，用来示范裸数字判据")
 
