@@ -26,11 +26,6 @@ export interface IAssetsPort {
   install(name: string, options?: InstallOptions): Promise<InstallResult>;
 
   /**
-   * 宿主引擎是否已就绪
-   */
-  isReady(): boolean;
-
-  /**
    * 委托宿主编译扩展包 (host-008 OctaveAssets.compileExtension)
    */
   compileExtension?(name: string, options?: CompileOptions): Promise<CompileResult>;
