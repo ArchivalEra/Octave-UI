@@ -29,13 +29,10 @@ export interface ReleaseChunk {
 export interface ReleaseVariant {
   readonly codec: ReleaseCodec;
   /**
-   * 契约 v3 的 `chunked` 字段：true 时 chunks 非空；false 时有 `file` 无 chunks。
-   * 实测线上 schema 3 的 manifest **不写该字段**（chunks 存在即分片），
-   * 所以这里可选，判据以 `chunks.length` 为准。
+   * 分片列表（契约 v3 起所有编码都用 chunks）。
+   * 实测三仓 schema 3 manifest：`chunked` 字段不写、`file` 从不出现 ⇒
+   * 不声明这两个死字段（声明了却从不填充，是形状自述与实现不符）。
    */
-  readonly chunked?: boolean;
-  /** identity/gzip/zstd 都有 chunks；单件形态（老 schema 2）可能有 `file` */
-  readonly file?: string;
   readonly chunks: readonly ReleaseChunk[];
 }
 
@@ -47,9 +44,11 @@ export interface ReleaseEntry {
   readonly bytes: number;
   readonly sha256: string;
   readonly variants: readonly ReleaseVariant[];
+  /** v1.1 V11：条目级许可覆盖（缺席 = 继承 manifest.license） */
+  readonly license?: ReleaseLicense;
 }
 
-/** v1.1 许可字段：`entry.license ?? manifest.license.expr` 是唯一规则 */
+/** v1.1 许可字段：`resolveLicense(entry, manifest)` 是唯一规则（见文件尾） */
 export interface ReleaseLicense {
   readonly id: string;
   readonly url?: string;
@@ -69,7 +68,6 @@ export interface ReleaseManifest {
 /** 解析失败的原因分类（消费端要能分辨「manifest 坏」与「网络坏」） */
 export type ManifestRejection =
   | { kind: 'network'; httpStatus: number; url: string }
-  | { kind: 'not-json'; url: string }
   | { kind: 'schema-rejected'; schema: number; url: string }
   | { kind: 'shape-invalid'; reason: string; url: string };
 
@@ -147,6 +145,9 @@ export function parseManifest(raw: unknown, url: string): ManifestLoadResult {
 
     const variants: ReleaseVariant[] = [];
     for (const rawVariant of e.variants as unknown[]) {
+      // null / 非对象变体：跳过（不是整体拒——别的变体可能可用），
+      // 但**不能因此崩**：`(null).codec` 会抛 TypeError，把结构化 rejection 变成崩溃。
+      if (!rawVariant || typeof rawVariant !== 'object') continue;
       const v = rawVariant as Record<string, unknown>;
       const codec = CODEC_ALIASES[String(v.codec)];
       if (!codec) {
@@ -157,7 +158,13 @@ export function parseManifest(raw: unknown, url: string): ManifestLoadResult {
       if (rawChunks.length === 0) continue;
 
       const chunks: ReleaseChunk[] = [];
+      // 块数组里出现 null / 非对象 ⇒ 这是坏形状（不是「跳过」）：
+      // 少一块就等于拼接不完整，静默跳过会拼出 size 对内容错的字节流。
+      // 但同样不能崩——返结构化 rejection。
       for (const rawChunk of rawChunks) {
+        if (!rawChunk || typeof rawChunk !== 'object') {
+          return { ok: false, rejection: { kind: 'shape-invalid', reason: `entry "${e.name}" has a non-object chunk`, url } };
+        }
         const c = rawChunk as Record<string, unknown>;
         if (typeof c.file !== 'string' || !c.file) {
           return { ok: false, rejection: { kind: 'shape-invalid', reason: `entry "${e.name}" chunk.file missing`, url } };
@@ -185,7 +192,7 @@ export function parseManifest(raw: unknown, url: string): ManifestLoadResult {
           };
         }
       }
-      variants.push({ codec, chunks: sorted, chunked: true });
+      variants.push({ codec, chunks: sorted });
     }
 
     if (variants.length === 0) {
@@ -197,6 +204,7 @@ export function parseManifest(raw: unknown, url: string): ManifestLoadResult {
       bytes: e.bytes as number,
       sha256: e.sha256 as string,
       variants,
+      license: parseLicense(e.license),
     });
   }
 
@@ -246,4 +254,21 @@ export function selectVariant(
     return entry.variants.find((v) => v.codec === 'identity') ?? null;
   }
   return null;
+}
+
+/**
+ * v1.1 V11 的**唯一一条许可规则**：`entry.license ?? manifest.license`。
+ *
+ * 契约定死「客户端只认一条规则——没有 glob、没有优先级表、没有命名空间歧义」。
+ * 所以这里就是一个 ?? 。把它做成具名函数而不是让调用方各写一遍 `a ?? b`，
+ * 是为了让「覆盖语义」只有一个产地（三处各写一次就会有一处写成 `b ?? a`）。
+ *
+ * 返回 undefined 表示**两个层级都没声明** —— v1.1 说「不知道」是合法终态
+ * （进不进 catalogue 是派生件的判断，不是客户端的）。
+ */
+export function resolveLicense(
+  entry: Pick<ReleaseEntry, 'license'>,
+  manifest: Pick<ReleaseManifest, 'license'>,
+): ReleaseLicense | undefined {
+  return entry.license ?? manifest.license;
 }

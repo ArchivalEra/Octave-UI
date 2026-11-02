@@ -314,3 +314,200 @@ describe('能力探测', () => {
     expect(detectCodecCapabilities(true).has('zstd')).toBe(true);
   });
 });
+describe('重试与退避（真实网络抖动，2026-11-02 实测教训）', () => {
+  it('★ 首次网络异常、重试成功 ⇒ 整体成功（分片下载的意义就是单块失败可重取）', async () => {
+    const parts = [new Uint8Array([1, 2])];
+    const { entry, variant } = await makeEntry(parts);
+    let calls = 0;
+    const port: FetchPort = {
+      async fetchBytes() {
+        calls++;
+        if (calls === 1) throw new TypeError('other side closed');
+        const data = new Uint8Array([1, 2]);
+        return { ok: true, status: 200, data, sha256: await computeSha256(data), totalBytes: 2 };
+      },
+      async fetchJSON() {
+        throw new Error('no');
+      },
+    };
+    const r = await assembleEntry(port, 'https://release.test/r1/', entry, variant, idDecoders, {
+      maxRetriesPerChunk: 2,
+    });
+    expect(r.ok).toBe(true);
+    expect(calls).toBe(2);
+  });
+
+  it('★ 5xx 可重试；重试耗尽才失败（报告最后一次 status）', async () => {
+    const parts = [new Uint8Array([1])];
+    const { entry, variant } = await makeEntry(parts);
+    let calls = 0;
+    const port: FetchPort = {
+      async fetchBytes() {
+        calls++;
+        return { ok: false, status: 503, data: new Uint8Array(0), sha256: '', totalBytes: null };
+      },
+      async fetchJSON() {
+        throw new Error('no');
+      },
+    };
+    const r = await assembleEntry(port, 'https://release.test/r1/', entry, variant, idDecoders, {
+      maxRetriesPerChunk: 2,
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(calls).toBe(3); // 首次 + 2 次重试
+    expect(r.failure.kind).toBe('http');
+    if (r.failure.kind !== 'http') return;
+    expect(r.failure.status).toBe(503);
+  });
+
+  it('★ 4xx（如 404/403）是确定性失败 ⇒ 不重试，立即报（重试是白工）', async () => {
+    const parts = [new Uint8Array([1])];
+    const { entry, variant } = await makeEntry(parts);
+    let calls = 0;
+    const port: FetchPort = {
+      async fetchBytes() {
+        calls++;
+        return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
+      },
+      async fetchJSON() {
+        throw new Error('no');
+      },
+    };
+    const r = await assembleEntry(port, 'https://release.test/r1/', entry, variant, idDecoders, {
+      maxRetriesPerChunk: 5,
+    });
+    expect(r.ok).toBe(false);
+    expect(calls).toBe(1); // 只试一次
+  });
+
+  it('★ 408/429 属于可重试的 4xx（超时/限流是瞬时的）', async () => {
+    const parts = [new Uint8Array([1])];
+    const { entry, variant } = await makeEntry(parts);
+    let calls = 0;
+    const port: FetchPort = {
+      async fetchBytes() {
+        calls++;
+        return { ok: false, status: 429, data: new Uint8Array(0), sha256: '', totalBytes: null };
+      },
+      async fetchJSON() {
+        throw new Error('no');
+      },
+    };
+    await assembleEntry(port, 'https://release.test/r1/', entry, variant, idDecoders, { maxRetriesPerChunk: 1 });
+    expect(calls).toBe(2);
+  });
+
+  it('退避可被 abort 打断（不许让用户等满退避窗）', async () => {
+    const parts = [new Uint8Array([1])];
+    const { entry, variant } = await makeEntry(parts);
+    const controller = new AbortController();
+    let calls = 0;
+    const port: FetchPort = {
+      async fetchBytes() {
+        calls++;
+        setTimeout(() => controller.abort(), 10);
+        return { ok: false, status: 503, data: new Uint8Array(0), sha256: '', totalBytes: null };
+      },
+      async fetchJSON() {
+        throw new Error('no');
+      },
+    };
+    const t0 = Date.now();
+    const r = await assembleEntry(port, 'https://release.test/r1/', entry, variant, idDecoders, {
+      maxRetriesPerChunk: 5,
+      signal: controller.signal,
+    });
+    const elapsed = Date.now() - t0;
+    expect(r.ok).toBe(false);
+    // 若退避不可打断，5 次退避要 0.3+0.6+1.2+2.4+4.8 ≈ 9.3s
+    expect(elapsed).toBeLessThan(1500);
+    expect(calls).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('编码回落链（Spec 审查第 4 条：契约 codecs 是有序回退链）', () => {
+  it('★ 主变体 zstd 解码失败 ⇒ 自动改用 gzip 并成功', async () => {
+    // 同一个 entry 的两种编码表示（明文相同，压缩不同）
+    const plain = new Uint8Array([1, 2, 3, 4]);
+    const entry = {
+      product: 'p',
+      name: 'x',
+      bytes: plain.length,
+      sha256: await computeSha256(plain),
+      variants: [],
+    };
+    const base = 'https://rel.test/r/';
+    const zstdVariant = {
+      codec: 'zstd' as const,
+      chunks: [{ part: 0, file: 'x.zstd.000', bytes: 2, sha256: await computeSha256(new Uint8Array([9, 9])) }],
+    };
+    const gzipVariant = {
+      codec: 'gzip' as const,
+      chunks: [{ part: 0, file: 'x.gzip.000', bytes: 2, sha256: await computeSha256(new Uint8Array([8, 8])) }],
+    };
+    const files: Record<string, Uint8Array> = {
+      [chunkUrl(base, 'x.zstd.000')]: new Uint8Array([9, 9]),
+      [chunkUrl(base, 'x.gzip.000')]: new Uint8Array([8, 8]),
+    };
+    const decoders: CodecDecoders = {
+      identity: (d) => d,
+      zstd: () => {
+        throw new Error('fzstd cannot decode this frame');
+      },
+      gzip: async () => plain, // gzip 分支"解"出明文
+    };
+    const r = await assembleEntry(makePort(files), base, entry, zstdVariant, decoders, {
+      fallbackVariants: [gzipVariant],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.codec).toBe('gzip');
+    expect(Array.from(r.data)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('★ 主变体取块 404 ⇒ 也回落（HTTP 是可回落的失败类）', async () => {
+    const plain = new Uint8Array([7]);
+    const entry = { product: 'p', name: 'x', bytes: 1, sha256: await computeSha256(plain), variants: [] };
+    const base = 'https://rel.test/r/';
+    const zstdV = { codec: 'zstd' as const, chunks: [{ part: 0, file: 'missing.000', bytes: 1, sha256: 'a'.repeat(64) }] };
+    const idV = { codec: 'identity' as const, chunks: [{ part: 0, file: 'ok.000', bytes: 1, sha256: await computeSha256(plain) }] };
+    const files = { [chunkUrl(base, 'ok.000')]: plain };
+    const r = await assembleEntry(makePort(files), base, entry, zstdV, idDecoders, { fallbackVariants: [idV] });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.codec).toBe('identity');
+  });
+
+  it('★ entry-sha 不符 ⇒ **不**回落（manifest 自相矛盾，换编码也一样）', async () => {
+    const plain = new Uint8Array([1]);
+    // entry 声明的 sha 与任何编码解出的都不同 ⇒ 这是 manifest 的错，不是编码的错
+    const entry = { product: 'p', name: 'x', bytes: 1, sha256: 'b'.repeat(64), variants: [] };
+    const base = 'https://rel.test/r/';
+    const v1 = { codec: 'zstd' as const, chunks: [{ part: 0, file: 'a.000', bytes: 1, sha256: await computeSha256(plain) }] };
+    const v2 = { codec: 'identity' as const, chunks: [{ part: 0, file: 'b.000', bytes: 1, sha256: await computeSha256(plain) }] };
+    const files = {
+      [chunkUrl(base, 'a.000')]: plain,
+      [chunkUrl(base, 'b.000')]: plain,
+    };
+    const calls: string[] = [];
+    const port: FetchPort = {
+      async fetchBytes(url: string) {
+        calls.push(url);
+        const data = files[url];
+        return { ok: true, status: 200, data, sha256: await computeSha256(data), totalBytes: data.length };
+      },
+      async fetchJSON() {
+        throw new Error('no');
+      },
+    };
+    // 两个编码都能"解"出同一份明文（identity 直通；zstd 这里也直通，模拟"解码没毛病"）
+    const workingDecoders: CodecDecoders = { identity: (d) => d, zstd: (d) => d, gzip: async (d) => d };
+    const r = await assembleEntry(port, base, entry, v1, workingDecoders, { fallbackVariants: [v2] });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.failure.kind).toBe('entry-sha');
+    // 关键：只取了主变体的块，没有因为 entry-sha 失败去取 gzip 版
+    expect(calls).toHaveLength(1);
+  });
+});

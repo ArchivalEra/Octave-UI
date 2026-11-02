@@ -226,9 +226,13 @@ def _selftest():
         bad += 0 if ok else 1
     HERE, MAIL, READ = saved
     shutil.rmtree(t, True)
-    # 只打一行汇总（原本这里打了**两行**完全同义的汇总，是冗余输出）。
-    # 保留的这一行与 `--selftest` 的调用方约定一致（下游脚本按这一行判成败）。
+    # 两行汇总，**不是冗余**（2026-11-02 栽过一次）：
+    #   · 第一行是人读的（带模块名，说明这是谁的自证）；
+    #   · 第二行是**机器行** `=== N PASS / M FAIL ===` —— `gates-selftest.sh` 与
+    #     runner/CI 都按这个固定格式 grep，缺行即红（AGENTS「硬坑」明写）。
+    # 我曾把机器行当「与第一行同义的冗余」删掉，结果闸门直接红。
     print("=== mail-read 自证：%d PASS / %d fail ===" % (len(cases) - bad, bad))
+    print("=== %d PASS / %d FAIL ===" % (len(cases) - bad, bad))
     return 1 if bad else 0
 
 

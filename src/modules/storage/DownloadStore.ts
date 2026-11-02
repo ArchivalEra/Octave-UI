@@ -45,6 +45,12 @@ function describeAssemblyFailure(f: AssembleFailure): string {
       return `assembled size ${f.actual} != manifest entry.bytes ${f.expected}`;
     case 'entry-sha':
       return `assembled sha ${f.actual.slice(0, 16)}… != manifest entry.sha256 ${f.expected.slice(0, 16)}… (${f.bytes} bytes)`;
+    default: {
+      // 穷尽守卫：union 将来加成员时，这里让编译期红（而不是运行时静默返回 undefined，
+      // 那会变成一句 "Release assembly failed: undefined" —— 查无可查）。
+      const never: never = f;
+      return `unknown assembly failure: ${JSON.stringify(never)}`;
+    }
   }
 }
 
@@ -63,15 +69,21 @@ interface DownloadItem {
   destPath: string;
   sha256?: string;
   /** 发布契约条目（在场 ⇒ 走分片装配；缺席 ⇒ 整包直取） */
-  release?: { entry: ReleaseEntry; variant: ReleaseVariant; base: string };
+  release?: ResolvedReleaseTarget;
+}
+
+/** 发布契约条目的解析结果：主变体 + 本端能解的其余变体（运行时回退链） */
+export interface ResolvedReleaseTarget {
+  entry: ReleaseEntry;
+  variant: ReleaseVariant;
+  base: string;
+  /** 主变体失败时依次尝试的其它编码（契约 codecs 有序链里本端能解的那些） */
+  fallbacks?: readonly ReleaseVariant[];
 }
 
 /** 发布契约源注入面：缺省不注入 ⇒ 完全走老整包路径（零行为变化） */
 export interface ReleaseSource {
-  resolve(
-    pkg: ForgePackageItem,
-    ref: DownloadRef
-  ): Promise<{ entry: ReleaseEntry; variant: ReleaseVariant; base: string } | null>;
+  resolve(pkg: ForgePackageItem, ref: DownloadRef): Promise<ResolvedReleaseTarget | null>;
 }
 
 interface DownloadStoreOptions {
@@ -482,6 +494,7 @@ export class DownloadStore {
           this.codecDecoders,
           {
             signal: options?.signal,
+            fallbackVariants: item.release.fallbacks,
             onProgress: (p) => {
               // 装配内部进度折算进总进度（分片取块阶段按已收字节报）
               options?.onProgress?.({
@@ -805,10 +818,18 @@ export class DownloadStore {
     // 解析不出（上游没发 schema 3 / catalogue dead / 该包不在 catalogue）⇒ 回落到
     // 老的整包路径——**降级不是失败**，是派生窗口期的正常形态（099 §6.5）。
     if (this.releaseSource) {
-      let released: { entry: ReleaseEntry; variant: ReleaseVariant; base: string } | null = null;
+      let released: ResolvedReleaseTarget | null = null;
       try {
         released = await this.releaseSource.resolve(pkg, ref);
-      } catch {
+      } catch (err: any) {
+        // 回落整包是合法路径（派生窗口 / 该包未发 schema 3），但**不许静默吞**：
+        // resolve 自己去处理「解析不出」的常态，这里能抓到的只有**意外的编程缺陷**
+        // （空指针、类型错、注入面坏）。静默吞掉它 = 把 bug 伪装成正常降级，
+        // 与 D11「装配缺陷伪装成能力降级」是同一个反噬形态。所以响亮打日志。
+        console.error(
+          `[DownloadStore] releaseSource.resolve threw for "${pkg.name}" — this is a code defect, not a normal fallback:`,
+          err
+        );
         released = null;
       }
       if (released) {

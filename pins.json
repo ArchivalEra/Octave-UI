@@ -4,8 +4,8 @@
       "name": "octave-wasm32-final",
       "kind": "version",
       "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
-      "_comment": "2026-11-02：上游重构成「单 master 线 + release/products/<三产品>/」布局，删掉了 wasm32-final / IllegalPerformance 两个分支（归档为 tag archive/wasm32-final-168ef49 与 archive/master-a1e2409）。原 pin 用 rev-parse --short <分支名> ⇒ 分支没了之后命令直接报错，闸门只能 SKIP，等于这条 pin 静默失效。改成按 SHA 直读：commit 仍在（cat-file 可查），且归档 tag 指向的树与旧 commit 在产物面零差异（实测 diff 名集合为空）。 注：archive/wasm32-final-168ef49 是 tag 对象（rev-parse 得 56835f2），^{commit} 解出的是真实 commit 168ef49 —— pin 记 commit，不记 tag 对象。",
-      "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short 168ef49",
+      "_comment": "2026-11-02：上游重构成「单 master 线 + release/products/<三产品>/」，删掉 wasm32-final / IllegalPerformance 两个分支（归档为 tag）。原 pin 用 rev-parse --short <分支名> ⇒ 分支没了之后命令报错，闸门只 SKIP，等于这条 pin 静默失效。改为按**归档 tag**解析（不是直接写 SHA —— 直接写 SHA 加同值 expect 是恒真断言，commit 消失只会 SKIP 而不会红，正是本仓批评的「静默失效」）。tag 名里嵌的 168ef49 是 commit；tag 对象本身 rev-parse 得 56835f2，所以读的是 ^{commit}。",
+      "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short 'archive/wasm32-final-168ef49^{commit}'",
       "expect_version": "168ef49"
     },
     {
@@ -20,8 +20,8 @@
       "name": "octave-illegalperformance",
       "kind": "version",
       "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
-      "_comment": "同 wasm32-final：分支已删、commit 仍在，provenance 改为归档 tag 指向的 commit。 注：archive/wasm32-final-168ef49 是 tag 对象（rev-parse 得 56835f2），^{commit} 解出的是真实 commit 168ef49 —— pin 记 commit，不记 tag 对象。",
-      "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short a1e2409",
+      "_comment": "同 wasm32-final：分支已删、commit 仍在，provenance 改为归档 tag。按 tag 解析而非写死 SHA，避免恒真断言。",
+      "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short 'archive/master-a1e2409^{commit}'",
       "expect_version": "a1e2409"
     }
   ]

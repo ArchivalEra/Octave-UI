@@ -102,9 +102,11 @@ export async function loadCatalogue(fetchPort: FetchPort, url: string, signal?: 
 /**
  * 取一个 release 的 manifest，失败返回结构化原因（不 throw——死链是常态，不是异常）。
  *
- * ⚠️ manifest 自身的 sha256（catalogue 的 `manifest_sha256`）**校验但不阻断**：
+ * ⚠️ catalogue 的 `manifest_sha256` **本层不做校验**（如实说明，不假装做了）：
  * 它证明「我拿到的是派生件记的那份 manifest」，但派生滞后期间新 tag 的 manifest
- * 还不该被旧 sha 判死。所以只作为**诊断信号**记录，不作为失败依据。
+ * 还不该被旧 sha 判死——所以它只作为**诊断信号**被 `CatalogueRelease` 带出来，
+ * 供上层决定是否使用。这里只解析、不比对；要校验是调用方的事，
+ * 写「校验但不阻断」而实际没有比对代码，就是声称与实存不符。
  */
 export async function fetchReleaseManifest(
   fetchPort: FetchPort,
@@ -131,7 +133,17 @@ export async function fetchReleaseManifest(
 export async function resolveFirstLiveRelease(
   fetchPort: FetchPort,
   catalogue: Catalogue,
-  options: { preferredIds?: readonly string[]; signal?: AbortSignal; maxAttempts?: number } = {},
+  options: {
+    preferredIds?: readonly string[];
+    signal?: AbortSignal;
+    maxAttempts?: number;
+    /**
+     * 死条目观察口（Standards 审查第 3 条）：全死时返回 null，此时 `deadEntries`
+     * 没有任何返回路径能带出去 ⇒ 调用方无法知道「N 个条目暂不可用」。
+     * 这个回调让失败原因可观察；不传也能用（但那时你放弃了这份诊断）。
+     */
+    onDead?: (dead: readonly DeadReleaseEntry[]) => void;
+  } = {},
 ): Promise<ResolvedRelease | null> {
   const ordered: CatalogueRelease[] = [];
   const seen = new Set<string>();
@@ -160,5 +172,7 @@ export async function resolveFirstLiveRelease(
     }
     deadEntries.push({ id: release.id, rejection: result.rejection });
   }
+  // 全死：把诊断带出去，而不是让这份收集结果随 null 一起消失
+  options.onDead?.(deadEntries);
   return null;
 }

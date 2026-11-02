@@ -40,6 +40,11 @@ export interface CodecDecoders {
 export interface AssembleOptions {
   /** 并发上限（契约方言实测拐点 8）。默认 8。 */
   concurrency?: number;
+  /**
+   * 每块的重试次数（不含首次）。默认 3：实测 GitHub 直连偶发 socket 关闭，
+   * 3 次退避（~0.3s/0.6s/1.2s）足以扛过瞬时抖动；再多就是在放大对小故障的敏感。
+   */
+  maxRetriesPerChunk?: number;
   /** 进度回调：`phase` 区分取块与解码，便于 UI 显示真实阶段 */
   onProgress?: (p: {
     phase: 'fetching' | 'decoding';
@@ -49,6 +54,18 @@ export interface AssembleOptions {
     chunkCount: number;
   }) => void;
   signal?: AbortSignal;
+  /**
+   * 候选变体链（按优先级）。主 `variant` 的**取块/解码**失败时依次尝试。
+   *
+   * 为什么需要（Spec 审查第 4 条）：契约把 `codecs` 定义为**有序回退链**，
+   * 但静态选型只能保证「本端声明能解」，保证不了「这次真的解得出」——
+   * 例如 fzstd 版本与生成器不兼容、某块 zstd 帧损坏而 gzip 版完好。
+   * 只有运行时失败才知道，所以回落必须在装配层做。
+   *
+   * ⚠️ 只对 `http` / `decode` / `chunk-sha` 回落；`entry-sha` / `entry-bytes` 不回落
+   * （那是 manifest 自相矛盾，换哪个编码都一样）。
+   */
+  fallbackVariants?: readonly ReleaseVariant[];
 }
 
 export type AssembleFailure =
@@ -64,6 +81,23 @@ export type AssembleResult =
   | { ok: false; failure: AssembleFailure };
 
 const DEFAULT_CONCURRENCY = 8;
+const DEFAULT_MAX_RETRIES = 3;
+
+/** 指数退避：0.3s / 0.6s / 1.2s …（可被 abort 打断） */
+async function backoff(attempt: number, signal?: AbortSignal): Promise<void> {
+  const ms = 300 * Math.pow(2, attempt);
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true }
+    );
+  });
+}
 
 /** 契约铁律 ③：base 末尾要有 `/`，file 是裸名，直接拼 */
 export function chunkUrl(base: string, file: string): string {
@@ -99,12 +133,36 @@ export async function assembleEntry(
   decoders: CodecDecoders,
   options: AssembleOptions = {},
 ): Promise<AssembleResult> {
+  const chain: ReleaseVariant[] = [variant, ...(options.fallbackVariants ?? []).filter((v) => v !== variant)];
+  const retryable = (f: AssembleFailure) => f.kind === 'http' || f.kind === 'decode' || f.kind === 'chunk-sha';
+
+  let last: AssembleResult | null = null;
+  for (const candidate of chain) {
+    const result = await assembleOne(fetchPort, base, entry, candidate, decoders, options);
+    if (result.ok) return result;
+    last = result;
+    if (!retryable(result.failure)) return result;
+    if (options.signal?.aborted) return result;
+  }
+  return last!;
+}
+
+/** 单变体装配（assembleEntry 的内部实现；回落链在外层循环）。 */
+async function assembleOne(
+  fetchPort: FetchPort,
+  base: string,
+  entry: ReleaseEntry,
+  variant: ReleaseVariant,
+  decoders: CodecDecoders,
+  options: AssembleOptions = {},
+): Promise<AssembleResult> {
   const chunks = variant.chunks;
   if (chunks.length === 0) {
     return { ok: false, failure: { kind: 'decode', chunk: { part: 0, file: '', bytes: 0, sha256: '' }, reason: 'variant has no chunks' } };
   }
 
   const concurrency = Math.max(1, Math.min(options.concurrency ?? DEFAULT_CONCURRENCY, chunks.length));
+  const maxRetriesPerChunk = Math.max(0, options.maxRetriesPerChunk ?? DEFAULT_MAX_RETRIES);
   const chunkTotalBytes = chunks.reduce((s, c) => s + c.bytes, 0);
 
   // 逐块结果按 **part 下标**落位（不是按完成顺序）
@@ -124,15 +182,42 @@ export async function assembleEntry(
 
       const chunk = chunks[index];
       const url = chunkUrl(base, chunk.file);
-      let res;
-      try {
-        res = await fetchPort.fetchBytes(url, { signal: options.signal });
-      } catch (err: any) {
-        if (err?.name === 'AbortError') return { kind: 'aborted' };
-        // 网络层异常：归类为 http（调用方按传输失败处理）
-        return { kind: 'http', chunk, status: 0 };
+      // 取块 + 退避重试。
+      //
+      // 为什么必须重试（实测教训，2026-11-02）：用真 release 跑 8 并发取
+      // `octave.wasm` 的 6 个 zstd 分片，GitHub 直连偶发 `UND_ERR_SOCKET` /
+      // 半截传输。**逐块校验能抓到它**（这正是块级校验的价值），但「抓到就整个
+      // 下载失败」对用户是不可接受的——分片下载的整个意义就是单块失败可重取。
+      //
+      // 判据边界（不能重试的）：
+      //   · 4xx（除 408/429）= 该块真不存在/无权限 ⇒ 重试是白工，立即失败；
+      //   · abort ⇒ 用户取消，不是故障；
+      //   · chunk-sha 不符 ⇒ **重试一次是有意义的**（可能是传输损坏），
+      //     但重试完仍不符就说明源坏了，必须报（不能无限刷）。
+      let res: Awaited<ReturnType<FetchPort['fetchBytes']>> | null = null;
+      let lastStatus = 0;
+      for (let attempt = 0; attempt <= maxRetriesPerChunk; attempt++) {
+        if (options.signal?.aborted) return { kind: 'aborted' };
+        try {
+          res = await fetchPort.fetchBytes(url, { signal: options.signal });
+        } catch (err: any) {
+          if (err?.name === 'AbortError') return { kind: 'aborted' };
+          // 网络层异常（socket 关闭 / DNS / TLS）：可重试
+          res = null;
+          lastStatus = 0;
+          if (attempt < maxRetriesPerChunk) await backoff(attempt, options.signal);
+          continue;
+        }
+        if (res.ok) break;
+        lastStatus = res.status;
+        // 4xx（除 408 请求超时 / 429 限流）是确定性失败，重试无益
+        const retryableStatus = res.status === 0 || res.status === 408 || res.status === 429 || res.status >= 500;
+        if (!retryableStatus) return { kind: 'http', chunk, status: res.status };
+        if (attempt < maxRetriesPerChunk) await backoff(attempt, options.signal);
       }
-      if (!res.ok) return { kind: 'http', chunk, status: res.status };
+      if (!res || !res.ok) {
+        return { kind: 'http', chunk, status: res ? res.status : lastStatus };
+      }
 
       // ② 逐块校验：当场定位坏块，不等全局
       const actual = await computeSha256(res.data);

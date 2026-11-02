@@ -284,3 +284,86 @@ describe('selectVariant：codecs 是有序回退链', () => {
     expect(selectVariant(partial, all, caps)?.codec).toBe('identity');
   });
 });
+describe('坏形状必须返回结构化 rejection，不许崩（Standards 审查第 6 条）', () => {
+  it('★ variants 里含 null ⇒ 不崩（跳过该变体，若有别的可用则仍成功）', () => {
+    const r = parseManifest(
+      baseManifest({
+        entries: [
+          entryOf({
+            variants: [
+              null,
+              { codec: 'identity', chunks: [{ part: 0, file: 'a.000', bytes: 1024, sha256: 'a'.repeat(64) }] },
+            ],
+          }),
+        ],
+      }),
+      'b/',
+    );
+    // 关键：不抛 TypeError
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.entries[0].variants).toHaveLength(1);
+  });
+
+  it('★ variants 全是 null ⇒ 结构化拒绝（no usable variant），不是崩溃', () => {
+    const r = parseManifest(baseManifest({ entries: [entryOf({ variants: [null, undefined] })] }), 'b/');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.rejection.kind).toBe('shape-invalid');
+    expect((r.rejection as { reason: string }).reason).toContain('no usable variant');
+  });
+
+  it('★ chunks 里含 null ⇒ 结构化拒绝（少一块会拼出 size 对内容错的流）', () => {
+    const r = parseManifest(
+      baseManifest({
+        entries: [
+          entryOf({
+            variants: [{ codec: 'identity', chunks: [null] }],
+          }),
+        ],
+      }),
+      'b/',
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.rejection.kind).toBe('shape-invalid');
+  });
+
+  it('★ 顶层是数组 / 数字 ⇒ 结构化拒绝，不崩', () => {
+    for (const bad of [[], 0, 'x', true]) {
+      const r = parseManifest(bad as unknown, 'b/');
+      expect(r.ok).toBe(false);
+    }
+  });
+});
+
+describe('V11 许可规则：entry.license ?? manifest.license（唯一一条）', () => {
+  it('★ entry 有 license ⇒ 用 entry 的（覆盖 manifest）', async () => {
+    const { resolveLicense } = await import('../../src/modules/storage/releaseContract');
+    const got = resolveLicense({ license: { id: 'MIT' } }, { license: { id: 'GPL-3.0' } });
+    expect(got?.id).toBe('MIT');
+  });
+
+  it('★ entry 无 license ⇒ 继承 manifest 的', async () => {
+    const { resolveLicense } = await import('../../src/modules/storage/releaseContract');
+    expect(resolveLicense({}, { license: { id: 'GPL-3.0' } })?.id).toBe('GPL-3.0');
+  });
+
+  it('★ 两层都没有 ⇒ undefined（v1.1：「不知道」是合法终态）', async () => {
+    const { resolveLicense } = await import('../../src/modules/storage/releaseContract');
+    expect(resolveLicense({}, {})).toBeUndefined();
+  });
+
+  it('★ entry.license 在 parseManifest 里被保留（不许在组装时丢弃）', () => {
+    const r = parseManifest(
+      baseManifest({
+        entries: [entryOf({ license: { id: 'Apache-2.0', url: 'https://a/L' } })],
+      }),
+      'b/',
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.entries[0].license?.id).toBe('Apache-2.0');
+    expect(r.manifest.entries[0].license?.url).toBe('https://a/L');
+  });
+});

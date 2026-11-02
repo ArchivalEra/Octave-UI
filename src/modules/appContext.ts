@@ -15,6 +15,8 @@ import { SafePlotSinkPolyfill } from './semantic/SafePlotSinkPolyfill';
 
 import { WorkspaceStorageManager } from './storage/WorkspaceStorageManager';
 import { DownloadStore } from './storage/DownloadStore';
+import { createCatalogueReleaseSource } from './storage/catalogueReleaseSource';
+import { BrowserFetchAdapter } from './storage/FetchPort';
 import { EngineAssetResolver } from './engine/EngineAssetResolver';
 import { DockLayoutStore } from './dock/DockLayoutStore';
 import { PanelRegistry, panelRegistryInstance } from './dock/PanelRegistry';
@@ -52,6 +54,22 @@ export const downloadStore = new DownloadStore({
     }
     return packageManagerPlugin.getAssetsPort().fetchCatalog();
   },
+  // 发布契约源（内容仓 099 / Static-Contract schema 3）：市场重写的生产接线。
+  // 有这一行，`resolveSrcTarget` 才真的会走「manifest + 分片 + 逐块解压 + 两道校验」；
+  // 没有它，分片分支在产物里永远走不到（只声明注入面而不接线 = 能编过不能用）。
+  //
+  // 解析不出（catalogue 死链窗口 / 该包未发 schema 3 / 本端解不了任何编码）
+  // ⇒ resolve 返回 null ⇒ 回落整包路径。回落不是错误，是派生窗口的常态；
+  // 但原因走 onFallback 出去，不静默吞。
+  releaseSource: createCatalogueReleaseSource({
+    catalogueUrl: `${getSiteBase().replace(/\/+$/, '')}/static/catalogue.json`,
+    fetchPort: new BrowserFetchAdapter(),
+    onFallback: ({ packageName, reason }) => {
+      console.warn(
+        `[downloads] release contract unavailable for "${packageName}": ${reason} — falling back to whole-file path`
+      );
+    },
+  }),
 });
 export const projectWorkspace = new ProjectWorkspace(supervisor, undefined, workspaceStorage, downloadStore);
 
