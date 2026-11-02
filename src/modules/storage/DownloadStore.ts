@@ -22,6 +22,57 @@ import type { FetchPort } from './FetchPort';
 import { BrowserFetchAdapter, computeSha256 } from './FetchPort';
 import type { ForgeCatalog, ForgePackageItem, PackageVersionCandidate } from '../plugins/package/types';
 import { EngineAssetResolver } from '../engine/EngineAssetResolver';
+import type { ReleaseEntry, ReleaseVariant } from './releaseContract';
+import {
+  assembleEntry,
+  createBrowserDecoders,
+  type AssembleFailure,
+  type CodecDecoders,
+} from './chunkAssembler';
+
+/** 把装配失败翻成一句能进 UI 的话（不吞类型信息：哪一块、期望/实际都带上） */
+function describeAssemblyFailure(f: AssembleFailure): string {
+  switch (f.kind) {
+    case 'aborted':
+      return 'aborted by caller';
+    case 'http':
+      return `HTTP ${f.status} for chunk ${f.chunk.file} (part ${f.chunk.part})`;
+    case 'chunk-sha':
+      return `chunk sha mismatch at ${f.chunk.file} (part ${f.chunk.part}): expected ${f.expected.slice(0, 16)}…, got ${f.actual.slice(0, 16)}…`;
+    case 'decode':
+      return `decode failed for chunk ${f.chunk.file} (part ${f.chunk.part}): ${f.reason}`;
+    case 'entry-bytes':
+      return `assembled size ${f.actual} != manifest entry.bytes ${f.expected}`;
+    case 'entry-sha':
+      return `assembled sha ${f.actual.slice(0, 16)}… != manifest entry.sha256 ${f.expected.slice(0, 16)}… (${f.bytes} bytes)`;
+  }
+}
+
+/**
+ * 一个下载目标。两种形态：
+ *   · **整包**（老路径）：`url` 指向可直接 fetch 的文件，`release` 缺席；
+ *   · **分片**（发布契约 schema 3）：`release` 在场，`url` 只用于 provenance 展示，
+ *     真实字节要经 chunkAssembler 装配（manifest + N 个分片 + 逐块解压 + 两道校验）。
+ *
+ * 收在同一类型里而不是两条独立管道：**下游的记账 / 幂等三元组 / 配额 / 对账全部同形**，
+ * 差异只在「字节怎么拿到」，不在「拿到之后怎么存」。
+ */
+interface DownloadItem {
+  filename: string;
+  url: string;
+  destPath: string;
+  sha256?: string;
+  /** 发布契约条目（在场 ⇒ 走分片装配；缺席 ⇒ 整包直取） */
+  release?: { entry: ReleaseEntry; variant: ReleaseVariant; base: string };
+}
+
+/** 发布契约源注入面：缺省不注入 ⇒ 完全走老整包路径（零行为变化） */
+export interface ReleaseSource {
+  resolve(
+    pkg: ForgePackageItem,
+    ref: DownloadRef
+  ): Promise<{ entry: ReleaseEntry; variant: ReleaseVariant; base: string } | null>;
+}
 
 interface DownloadStoreOptions {
   storage?: Store;
@@ -31,6 +82,8 @@ interface DownloadStoreOptions {
   laneProvider?: () => string;
   baseUrl?: string;
   maxQuotaBytes?: number;
+  /** 发布契约源（可选）：不注入 ⇒ 整包路径，完全向后兼容 */
+  releaseSource?: ReleaseSource;
 }
 
 const KNOWN_RUNTIME_METADATA: Record<string, { bytes: number; sha256: string }> = {
@@ -74,6 +127,12 @@ export class DownloadStore {
   private laneProvider?: () => string;
   private baseUrl: string;
   private maxQuotaBytes?: number;
+  private releaseSource?: ReleaseSource;
+  /**
+   * 解码器（可注入）：默认浏览器版（zstd 按需 import fzstd / gzip 原生流）。
+   * 测试注入纯 JS 版，避免在 Node 里模拟 DecompressionStream。
+   */
+  private codecDecoders: CodecDecoders = createBrowserDecoders();
 
   private manifest: DownloadManifest = { schema: 1, items: {} };
   private initialized = false;
@@ -91,6 +150,7 @@ export class DownloadStore {
     this.catalogProvider = options?.catalogProvider;
     this.engineBuildProvider = options?.engineBuildProvider;
     this.laneProvider = options?.laneProvider;
+    this.releaseSource = options?.releaseSource;
 
     if (options?.baseUrl !== undefined && options.baseUrl !== '') {
       this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -408,42 +468,81 @@ export class DownloadStore {
         phase: `Fetching ${item.filename}`,
       });
 
-      const res = await this.fetchPort.fetchBytes(item.url, {
-        signal: options?.signal,
-        onProgress: (p) => {
-          options?.onProgress?.({
-            receivedBytes: accumulatedBytes + p.receivedBytes,
-            totalBytes: resolved.bytes,
-            phase: `Downloading ${item.filename}`,
-          });
-        },
-      });
-
-      if (!res.ok) {
-        throw new DownloadError(
-          'STORAGE_WRITE_FAILED',
-          `HTTP ${res.status} fetching ${item.filename} from ${item.url}`
+      // 取字节：分片条目走契约装配，整包条目照老路 fetchBytes。
+      // 装配内部已做**两道校验**（逐块 sha + 拼接后 entry.sha），所以它的 data/sha
+      // 直接可信；这里不重复校验（重复算一次 40MB 哈希没有收益）。
+      let data: Uint8Array;
+      let sha256: string;
+      if (item.release) {
+        const assembled = await assembleEntry(
+          this.fetchPort,
+          item.release.base,
+          item.release.entry,
+          item.release.variant,
+          this.codecDecoders,
+          {
+            signal: options?.signal,
+            onProgress: (p) => {
+              // 装配内部进度折算进总进度（分片取块阶段按已收字节报）
+              options?.onProgress?.({
+                receivedBytes: accumulatedBytes + p.receivedBytes,
+                totalBytes: resolved.bytes,
+                phase:
+                  p.phase === 'fetching'
+                    ? `Downloading ${item.filename} (chunk ${p.chunkIndex + 1}/${p.chunkCount})`
+                    : `Decoding ${item.filename}`,
+              });
+            },
+          }
         );
-      }
+        if (!assembled.ok) {
+          throw new DownloadError(
+            assembled.failure.kind === 'aborted' ? 'DOWNLOAD_ABORTED' : 'STORAGE_WRITE_FAILED',
+            `Release assembly failed for ${item.filename}: ${describeAssemblyFailure(assembled.failure)}`
+          );
+        }
+        data = assembled.data;
+        sha256 = item.release.entry.sha256;
+      } else {
+        const res = await this.fetchPort.fetchBytes(item.url, {
+          signal: options?.signal,
+          onProgress: (p) => {
+            options?.onProgress?.({
+              receivedBytes: accumulatedBytes + p.receivedBytes,
+              totalBytes: resolved.bytes,
+              phase: `Downloading ${item.filename}`,
+            });
+          },
+        });
 
-      // 验证单个文件 SHA256 (I2)
-      if (item.sha256 && res.sha256 !== item.sha256) {
-        throw new DownloadError(
-          'STORAGE_WRITE_FAILED',
-          `SHA256 mismatch for ${item.filename}: expected ${item.sha256}, got ${res.sha256}`
-        );
+        if (!res.ok) {
+          throw new DownloadError(
+            'STORAGE_WRITE_FAILED',
+            `HTTP ${res.status} fetching ${item.filename} from ${item.url}`
+          );
+        }
+
+        // 验证单个文件 SHA256 (I2)
+        if (item.sha256 && res.sha256 !== item.sha256) {
+          throw new DownloadError(
+            'STORAGE_WRITE_FAILED',
+            `SHA256 mismatch for ${item.filename}: expected ${item.sha256}, got ${res.sha256}`
+          );
+        }
+        data = res.data;
+        sha256 = res.sha256;
       }
 
       // 写入 OPFS downloads 目标路径
-      await this.storage.write(item.destPath, res.data);
+      await this.storage.write(item.destPath, data);
 
       downloadedFiles.push({
         path: item.destPath,
-        sha256: res.sha256,
-        bytes: res.data.length,
+        sha256,
+        bytes: data.length,
       });
 
-      accumulatedBytes += res.data.length;
+      accumulatedBytes += data.length;
     }
 
     // 5. 核验即发布 (I2)：全部成功后才登记至 manifest.json
@@ -536,13 +635,13 @@ export class DownloadStore {
     sha256: string | undefined;
     bytes: number;
     provenanceUrl: string;
-    items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+    items: DownloadItem[];
   }> {
     let resolved: {
       sha256: string | undefined;
       bytes: number;
       provenanceUrl: string;
-      items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+      items: DownloadItem[];
     };
     if (ref.kind === 'src') {
       resolved = await this.resolveSrcTarget(ref);
@@ -600,7 +699,7 @@ export class DownloadStore {
     sha256: string | undefined;
     bytes: number;
     provenanceUrl: string;
-    items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+    items: DownloadItem[];
   }> {
     let filename = `${ref.name}-${ref.version}.tar.gz`;
     const known = KNOWN_RUNTIME_METADATA[`${ref.name}@${ref.version}`];
@@ -664,7 +763,7 @@ export class DownloadStore {
     sha256: string | undefined;
     bytes: number;
     provenanceUrl: string;
-    items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+    items: DownloadItem[];
   }> {
     if (!this.catalogProvider) {
       throw new DownloadError('INDEX_UNREADABLE', 'Catalog provider not configured');
@@ -702,6 +801,27 @@ export class DownloadStore {
     const url = this.resolveUrl(`/assets/packages/${filename}`);
     const destPath = `downloads/src/${ref.name}/${ref.version}/${filename}`;
 
+    // 发布契约优先（内容仓 099）：注入 releaseSource 且该包在 release 里 ⇒ 走分片装配。
+    // 解析不出（上游没发 schema 3 / catalogue dead / 该包不在 catalogue）⇒ 回落到
+    // 老的整包路径——**降级不是失败**，是派生窗口期的正常形态（099 §6.5）。
+    if (this.releaseSource) {
+      let released: { entry: ReleaseEntry; variant: ReleaseVariant; base: string } | null = null;
+      try {
+        released = await this.releaseSource.resolve(pkg, ref);
+      } catch {
+        released = null;
+      }
+      if (released) {
+        return {
+          // 顶层 sha 用 entry 的（分片装配后它就是真指纹 —— 与单文件同语义）
+          sha256: released.entry.sha256,
+          bytes: released.entry.bytes,
+          provenanceUrl: released.base,
+          items: [{ filename, url: released.base, destPath, sha256: released.entry.sha256, release: released }],
+        };
+      }
+    }
+
     return {
       sha256,
       bytes,
@@ -714,7 +834,7 @@ export class DownloadStore {
     sha256: string | undefined;
     bytes: number;
     provenanceUrl: string;
-    items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+    items: DownloadItem[];
   }> {
     if (!this.catalogProvider) {
       throw new DownloadError('INDEX_UNREADABLE', 'Catalog provider not configured');
@@ -766,7 +886,7 @@ export class DownloadStore {
       );
     }
 
-    const items: Array<{ filename: string; url: string; destPath: string; sha256?: string }> = [];
+    const items: DownloadItem[] = [];
     let totalBytes = 0;
 
     const files = matched.files || [{ name: `${ref.name}.oct`, size: matched.size, sha256: matched.sha256 }];
@@ -792,7 +912,7 @@ export class DownloadStore {
     sha256: string | undefined;
     bytes: number;
     provenanceUrl: string;
-    items: Array<{ filename: string; url: string; destPath: string; sha256?: string }>;
+    items: DownloadItem[];
   }> {
     const rawArch = ref.arch || this.laneProvider?.() || 'master';
     let lane = rawArch;
@@ -915,7 +1035,7 @@ export class DownloadStore {
     }
 
     const files = buildManifest.measured.files as Record<string, { sha256: string; bytes: number }>;
-    const items: Array<{ filename: string; url: string; destPath: string; sha256?: string }> = [];
+    const items: DownloadItem[] = [];
     let totalBytes = 0;
 
     for (const [filename, meta] of Object.entries(files)) {

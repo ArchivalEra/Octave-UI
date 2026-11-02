@@ -26,6 +26,7 @@
     "vitest": "^3.0.7"
   },
   "dependencies": {
-    "fflate": "^0.8.3"
+    "fflate": "^0.8.3",
+    "fzstd": "0.1.1"
   }
 }

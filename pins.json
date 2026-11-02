@@ -4,22 +4,25 @@
       "name": "octave-wasm32-final",
       "kind": "version",
       "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
-      "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short wasm32-final",
-      "expect_version": "38dabd6"
+      "_comment": "2026-11-02：上游重构成「单 master 线 + release/products/<三产品>/」布局，删掉了 wasm32-final / IllegalPerformance 两个分支（归档为 tag archive/wasm32-final-168ef49 与 archive/master-a1e2409）。原 pin 用 rev-parse --short <分支名> ⇒ 分支没了之后命令直接报错，闸门只能 SKIP，等于这条 pin 静默失效。改成按 SHA 直读：commit 仍在（cat-file 可查），且归档 tag 指向的树与旧 commit 在产物面零差异（实测 diff 名集合为空）。 注：archive/wasm32-final-168ef49 是 tag 对象（rev-parse 得 56835f2），^{commit} 解出的是真实 commit 168ef49 —— pin 记 commit，不记 tag 对象。",
+      "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short 168ef49",
+      "expect_version": "168ef49"
     },
     {
       "name": "octave-master",
       "kind": "version",
       "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
+      "_comment": "master 仍是活分支（上游唯一的产物线），按分支读；pin 跟进到 0d79117（HISTORY 编号修正，产物面零变更已核）。",
       "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short master",
-      "expect_version": "4ae5e17"
+      "expect_version": "0d79117"
     },
     {
       "name": "octave-illegalperformance",
       "kind": "version",
       "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
-      "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short IllegalPerformance",
-      "expect_version": "1bf5031"
+      "_comment": "同 wasm32-final：分支已删、commit 仍在，provenance 改为归档 tag 指向的 commit。 注：archive/wasm32-final-168ef49 是 tag 对象（rev-parse 得 56835f2），^{commit} 解出的是真实 commit 168ef49 —— pin 记 commit，不记 tag 对象。",
+      "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short a1e2409",
+      "expect_version": "a1e2409"
     }
   ]
 }
