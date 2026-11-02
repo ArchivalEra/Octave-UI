@@ -147,6 +147,67 @@ export async function assembleEntry(
   return last!;
 }
 
+/**
+ * 取一个块，带退避重试与逐块 sha 校验（内部 seam，不对外暴露）。
+ *
+ * 为什么抽成具名函数（deepening 2026-11-03）：原本这三件事（重试循环 / HTTP 分类 /
+ * sha 校验）挤在 `assembleOne` 的 worker 闭包里，让那个函数有 26 个分支、5 层深嵌套。
+ * 抽出来后：worker 只管「排队取号 + 落位」，重试策略独立可读可测。
+ *
+ * 判据边界（哪类失败值得重试）：
+ *   · 4xx（除 408/429）= 该块真不存在/无权限 ⇒ 重试白工，立即失败；
+ *   · abort ⇒ 用户取消，不是故障；
+ *   · 网络层异常 / 0 / 408 / 429 / 5xx ⇒ 可重试；
+ *   · chunk-sha 不符 ⇒ **也可重试**（传输损坏可重取），耗尽后报 chunk-sha 而非 http。
+ */
+async function fetchChunkWithRetry(
+  fetchPort: FetchPort,
+  url: string,
+  chunk: ReleaseChunk,
+  maxRetries: number,
+  signal?: AbortSignal,
+): Promise<{ ok: true; data: Uint8Array } | { ok: false; failure: AssembleFailure }> {
+  let lastStatus = 0;
+  let lastSha: { expected: string; actual: string } | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (signal?.aborted) return { ok: false, failure: { kind: 'aborted' } };
+
+    let res: Awaited<ReturnType<FetchPort['fetchBytes']>> | null = null;
+    try {
+      res = await fetchPort.fetchBytes(url, { signal });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return { ok: false, failure: { kind: 'aborted' } };
+      lastStatus = 0; // 网络层异常（socket / DNS / TLS）：可重试
+      if (attempt < maxRetries) await backoff(attempt, signal);
+      continue;
+    }
+
+    if (!res.ok) {
+      lastStatus = res.status;
+      const retryable = res.status === 0 || res.status === 408 || res.status === 429 || res.status >= 500;
+      if (!retryable) return { ok: false, failure: { kind: 'http', chunk, status: res.status } };
+      if (attempt < maxRetries) await backoff(attempt, signal);
+      continue;
+    }
+
+    // 逐块校验放在重试循环内：传输损坏可重取，耗尽后仍不符才是源坏了
+    const actual = await computeSha256(res.data);
+    if (actual !== chunk.sha256) {
+      lastSha = { expected: chunk.sha256, actual };
+      if (attempt < maxRetries) await backoff(attempt, signal);
+      continue;
+    }
+
+    return { ok: true, data: res.data };
+  }
+
+  if (lastSha) {
+    return { ok: false, failure: { kind: 'chunk-sha', chunk, expected: lastSha.expected, actual: lastSha.actual } };
+  }
+  return { ok: false, failure: { kind: 'http', chunk, status: lastStatus } };
+}
+
 /** 单变体装配（assembleEntry 的内部实现；回落链在外层循环）。 */
 async function assembleOne(
   fetchPort: FetchPort,
@@ -181,67 +242,20 @@ async function assembleOne(
       if (abortFailure) return abortFailure;
 
       const chunk = chunks[index];
-      const url = chunkUrl(base, chunk.file);
-      // 取块 + 退避重试。
-      //
-      // 为什么必须重试（实测教训，2026-11-02）：用真 release 跑 8 并发取
-      // `octave.wasm` 的 6 个 zstd 分片，GitHub 直连偶发 `UND_ERR_SOCKET` /
-      // 半截传输。**逐块校验能抓到它**（这正是块级校验的价值），但「抓到就整个
-      // 下载失败」对用户是不可接受的——分片下载的整个意义就是单块失败可重取。
-      //
-      // 判据边界（不能重试的）：
-      //   · 4xx（除 408/429）= 该块真不存在/无权限 ⇒ 重试是白工，立即失败；
-      //   · abort ⇒ 用户取消，不是故障；
-      //   · chunk-sha 不符 ⇒ **重试一次是有意义的**（可能是传输损坏），
-      //     但重试完仍不符就说明源坏了，必须报（不能无限刷）。
-      let res: Awaited<ReturnType<FetchPort['fetchBytes']>> | null = null;
-      let lastStatus = 0;
-      let lastSha: { expected: string; actual: string } | null = null;
-      for (let attempt = 0; attempt <= maxRetriesPerChunk; attempt++) {
-        if (options.signal?.aborted) return { kind: 'aborted' };
-        try {
-          res = await fetchPort.fetchBytes(url, { signal: options.signal });
-        } catch (err: any) {
-          if (err?.name === 'AbortError') return { kind: 'aborted' };
-          // 网络层异常（socket 关闭 / DNS / TLS）：可重试
-          res = null;
-          lastStatus = 0;
-          if (attempt < maxRetriesPerChunk) await backoff(attempt, options.signal);
-          continue;
-        }
-        if (!res.ok) {
-          lastStatus = res.status;
-          // 4xx（除 408 请求超时 / 429 限流）是确定性失败，重试无益
-          const retryableStatus = res.status === 0 || res.status === 408 || res.status === 429 || res.status >= 500;
-          if (!retryableStatus) return { kind: 'http', chunk, status: res.status };
-          if (attempt < maxRetriesPerChunk) await backoff(attempt, options.signal);
-          continue;
-        }
+      // 取块 + 重试 + 逐块校验：全部收在 fetchChunkWithRetry（内部 seam）。
+      // worker 这里只负责「排队取号 → 落位 → 报进度」，不掺重试策略。
+      const fetched = await fetchChunkWithRetry(
+        fetchPort,
+        chunkUrl(base, chunk.file),
+        chunk,
+        maxRetriesPerChunk,
+        options.signal,
+      );
+      if (!fetched.ok) return fetched.failure;
 
-        // ② 逐块校验（放在重试循环**内**）：传输损坏（socket 半截 / CDN 坏副本）
-        // 重取一次是有意义的，所以 sha 不符也重试；重试完仍不符才报（源真的坏了）。
-        // ——这条注释原来说「重试一次是有意义的」但校验在循环外、从没重试过
-        //   （第二轮复查 NEW-2：声称 ≠ 实存）。现在校验移进来了。
-        const actual = await computeSha256(res.data);
-        if (actual !== chunk.sha256) {
-          lastSha = { expected: chunk.sha256, actual };
-          if (attempt < maxRetriesPerChunk) await backoff(attempt, options.signal);
-          continue;
-        }
-
-        lastSha = null;
-        break; // 成功
-      }
-      if (!res || !res.ok) {
-        return { kind: 'http', chunk, status: res ? res.status : lastStatus };
-      }
-      // 重试耗尽后仍是 sha 不符 ⇒ 报 chunk-sha（不是 http）
-      if (lastSha) {
-        return { kind: 'chunk-sha', chunk, expected: lastSha.expected, actual: lastSha.actual };
-      }
-
-      rawParts[index] = res.data;
-      receivedBytes += res.data.length;
+      const data = fetched.data;
+      rawParts[index] = data;
+      receivedBytes += data.length;
       options.onProgress?.({
         phase: 'fetching',
         receivedBytes,

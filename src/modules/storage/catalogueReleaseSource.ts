@@ -92,6 +92,65 @@ function pickBestVersion(hits: ReleaseEntry[], version: string): ReleaseEntry {
   return scored[0].e;
 }
 
+/**
+ * 在一批候选 release 里找第一个「manifest 活着且真有这个包 entry」的。
+ *
+ * 抽成具名函数（deepening 2026-11-03）：原本这段嵌在 `resolve` 里，与
+ * 「筛候选 / 选变体 / 组回落链」挤在一起，让 resolve 有 5 层深嵌套。
+ * 现在它自己是一个可读的循环：死链跳过、无 entry 跳过、命中即返回。
+ *
+ * 返回 `dead` 是为了让调用方能如实说出「N 条候选里这些是死的」——
+ * 诊断信息不许随 null 消失。
+ */
+async function firstLiveCandidateWithEntry(
+  fetchPort: FetchPort,
+  candidates: readonly CatalogueRelease[],
+  pkg: ForgePackageItem,
+  version: string,
+): Promise<{
+  hit: { entry: ReleaseEntry; base: string; codecs: readonly ReleaseCodec[] } | null;
+  dead: DeadReleaseEntry[];
+}> {
+  const dead: DeadReleaseEntry[] = [];
+  for (const release of candidates) {
+    const loaded = await fetchReleaseManifest(fetchPort, release.base);
+    if (!loaded.ok) {
+      dead.push({ id: release.id, rejection: loaded.rejection });
+      continue;
+    }
+    const entries = loaded.manifest.entries.filter((e) => matchesPackage(e, pkg));
+    if (entries.length === 0) continue;
+    return {
+      hit: { entry: pickBestVersion(entries, version), base: release.base, codecs: loaded.manifest.codecs },
+      dead,
+    };
+  }
+  return { hit: null, dead };
+}
+
+/**
+ * 按契约 codecs 链给出「主变体 + 本端能解的其余变体」。
+ *
+ * 回落链的意义在 chunkAssembler 里兑现（运行时失败才换下一个）；
+ * 这里只负责按契约顺序**列出**候选，不预判哪个会失败。
+ */
+function pickVariantChain(
+  entry: ReleaseEntry,
+  codecs: readonly ReleaseCodec[],
+  capabilities: ReadonlySet<ReleaseCodec>,
+): { variant: ReleaseVariant; fallbacks: ReleaseVariant[] } | null {
+  const variant = selectVariant(entry, codecs, capabilities);
+  if (!variant) return null;
+  const fallbacks: ReleaseVariant[] = [];
+  for (const codec of codecs) {
+    if (codec === variant.codec) continue;
+    if (!capabilities.has(codec)) continue;
+    const v = entry.variants.find((x) => x.codec === codec);
+    if (v) fallbacks.push(v);
+  }
+  return { variant, fallbacks };
+}
+
 export function createCatalogueReleaseSource(options: CatalogueReleaseSourceOptions): ReleaseSource {
   const successTtl = options.catalogueTtlMs ?? 30 * 60 * 1000;
   const failureTtl = options.failureTtlMs ?? 0;
@@ -112,70 +171,37 @@ export function createCatalogueReleaseSource(options: CatalogueReleaseSourceOpti
 
   return {
     async resolve(pkg: ForgePackageItem, ref: DownloadRef): Promise<ResolvedReleaseTarget | null> {
-      const catalogue = await getCatalogue();
-      if (!catalogue) {
-        options.onFallback?.({ packageName: pkg.name, reason: 'catalogue unavailable or empty' });
+      const fail = (reason: string): null => {
+        options.onFallback?.({ packageName: pkg.name, reason });
         return null;
-      }
+      };
 
-      // ③ 先按包名把候选 release 缩下来（每个包有自己的 release）
+      const catalogue = await getCatalogue();
+      if (!catalogue) return fail('catalogue unavailable or empty');
+
+      // ③ 每个包有自己的 release ⇒ 先按包名筛候选
       const candidates = catalogue.releases.filter((r) => releaseIdMatchesPackage(r.id, pkg));
       if (candidates.length === 0) {
-        options.onFallback?.({
-          packageName: pkg.name,
-          reason: `no catalogue release looks like it carries "${pkg.name}" (${catalogue.releases.length} entries scanned)`,
-        });
-        return null;
+        return fail(`no catalogue release looks like it carries "${pkg.name}" (${catalogue.releases.length} entries scanned)`);
       }
 
-      // ② 在候选里做死链容忍：逐个取 manifest，取到且真有这个 entry 就用
-      const dead: DeadReleaseEntry[] = [];
+      // ② 候选里做死链容忍（内部 seam：firstLiveCandidateWithEntry）
       const version = ref.version || pkg.version || '';
-      let hit: { entry: ReleaseEntry; base: string; codecs: readonly ReleaseCodec[] } | null = null;
-
-      for (const release of candidates as CatalogueRelease[]) {
-        const loaded = await fetchReleaseManifest(options.fetchPort, release.base);
-        if (!loaded.ok) {
-          dead.push({ id: release.id, rejection: loaded.rejection });
-          continue;
-        }
-        const entries = loaded.manifest.entries.filter((e) => matchesPackage(e, pkg));
-        if (entries.length === 0) continue;
-        hit = { entry: pickBestVersion(entries, version), base: release.base, codecs: loaded.manifest.codecs };
-        break;
-      }
-
+      const { hit, dead } = await firstLiveCandidateWithEntry(options.fetchPort, candidates, pkg, version);
       if (!hit) {
         const kinds = dead.map((d) => `${d.id}:${d.rejection.kind}`).join(', ');
-        options.onFallback?.({
-          packageName: pkg.name,
-          reason: dead.length
+        return fail(
+          dead.length
             ? `every candidate release for "${pkg.name}" is dead (${kinds})`
-            : `no candidate release had an entry for "${pkg.name}"`,
-        });
-        return null;
+            : `no candidate release had an entry for "${pkg.name}"`
+        );
       }
 
-      // 按契约 codecs 有序回退链选本端能解的第一个变体
-      const variant = selectVariant(hit.entry, hit.codecs, capabilities);
-      if (!variant) {
-        options.onFallback?.({
-          packageName: pkg.name,
-          reason: `no decodable variant (capabilities: ${[...capabilities].join(',')})`,
-        });
-        return null;
-      }
+      // 按契约 codecs 链给出主变体 + 回落链（内部 seam：pickVariantChain）
+      const chain = pickVariantChain(hit.entry, hit.codecs, capabilities);
+      if (!chain) return fail(`no decodable variant (capabilities: ${[...capabilities].join(',')})`);
 
-      // 把本端能解的**其余**变体按契约链顺序带出去，供运行时回落
-      const fallbacks: ReleaseVariant[] = [];
-      for (const codec of hit.codecs) {
-        if (codec === variant.codec) continue;
-        if (!capabilities.has(codec)) continue;
-        const v = hit.entry.variants.find((x) => x.codec === codec);
-        if (v) fallbacks.push(v);
-      }
-
-      return { entry: hit.entry, variant, base: hit.base, fallbacks };
+      return { entry: hit.entry, variant: chain.variant, base: hit.base, fallbacks: chain.fallbacks };
     },
   };
 }
