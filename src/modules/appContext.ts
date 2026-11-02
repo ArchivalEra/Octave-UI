@@ -43,6 +43,25 @@ function getSiteBase(): string {
   return '';
 }
 
+/**
+ * 派生 catalogue 的绝对地址。
+ *
+ * ⚠️ 它**不在**站点 base 下（实测 2026-11-02）：
+ *    `https://isui.ren/repo/Octave/static/catalogue.json` ⇒ **404**
+ *    `https://isui.ren/static/catalogue.json`             ⇒ **200**
+ * 它是全站共享的派生件（一份 catalogue 服务所有 repo），挂在**域名根**。
+ * 所以要从 siteBase 里剥出 origin 再拼 `/static/catalogue.json`，
+ * 不能直接 `${siteBase}/static/catalogue.json`。
+ */
+export function deriveCatalogueUrl(siteBase: string): string {
+  const origin =
+    typeof location !== 'undefined' && location.origin
+      ? location.origin
+      : // 非浏览器环境（测试 / SSR）：没有 origin 时退回相对根
+        '';
+  return `${origin}/static/catalogue.json`;
+}
+
 export const workspaceStorage = new WorkspaceStorageManager();
 export const downloadStore = new DownloadStore({
   storage: workspaceStorage.store,
@@ -62,7 +81,8 @@ export const downloadStore = new DownloadStore({
   // ⇒ resolve 返回 null ⇒ 回落整包路径。回落不是错误，是派生窗口的常态；
   // 但原因走 onFallback 出去，不静默吞。
   releaseSource: createCatalogueReleaseSource({
-    catalogueUrl: `${getSiteBase().replace(/\/+$/, '')}/static/catalogue.json`,
+    // 注意：catalogue 在**域名根**，不在 siteBase 下（见 deriveCatalogueUrl 的实测注释）
+    catalogueUrl: deriveCatalogueUrl(getSiteBase()),
     fetchPort: new BrowserFetchAdapter(),
     onFallback: ({ packageName, reason }) => {
       console.warn(

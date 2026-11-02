@@ -1269,3 +1269,147 @@ describe('catalog 优先于 KNOWN_ENGINE_METADATA 兜底（内容仓 096 §4.1 �
     ]);
   });
 });
+
+// ══ 发布契约集成（内容仓 099 / Standards 审查第 1 条）══════════════════════════════
+// 这组用例证明：**注入 releaseSource 后 DownloadStore 真的走分片装配**；
+// **不注入则完全走老整包路径**（零行为变化）。
+// 上一轮的缺口正是「只在注入假件的 unit 层验过，DownloadStore 里 0 个用例」。
+describe('发布契约集成：注入 releaseSource ⇒ 分片装配；不注入 ⇒ 整包', () => {
+  const PAYLOAD = new TextEncoder().encode('hello!');
+
+  function makeEntry() {
+    const sha = sha256OfNode(PAYLOAD);
+    return {
+      sha,
+      entry: {
+        product: 'forge',
+        name: 'statistics-1.7.7.tar.gz',
+        bytes: PAYLOAD.length,
+        sha256: sha,
+        variants: [
+          {
+            codec: 'identity' as const,
+            chunks: [{ part: 0, file: 'demo.identity.000', bytes: PAYLOAD.length, sha256: sha }],
+          },
+        ],
+      },
+    };
+  }
+
+  const catalog = () => ({
+    schema: 2,
+    packs: [{ name: 'statistics', version: '1.7.7', form: 'pkg' as const, content: ['m' as const] }],
+  });
+
+  it('★ 注入 releaseSource ⇒ 走分片装配：落盘字节 = 装配结果，来源是 release 的 chunk', async () => {
+    const memory = new MemoryStore();
+    await memory.init();
+    const { entry, sha } = makeEntry();
+    const chunkFetch = new MockFetchAdapter();
+    chunkFetch.setFile('https://rel.test/r1/demo.identity.000', PAYLOAD);
+
+    const store = new DownloadStore({
+      storage: memory,
+      fetchPort: chunkFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: catalog,
+      releaseSource: {
+        async resolve() {
+          return { entry, variant: entry.variants[0], base: 'https://rel.test/r1/' };
+        },
+      },
+    });
+    await store.init();
+    const record = await store.download({ kind: 'src', name: 'statistics', version: '1.7.7' } as any);
+
+    expect(record.files).toHaveLength(1);
+    expect(record.files[0].sha256).toBe(sha);
+    expect(record.files[0].bytes).toBe(PAYLOAD.length);
+    // 落盘内容 == 装配出来的解压后字节（不是 chunk 的压缩字节）
+    const onDisk = await memory.read(record.files[0].path);
+    expect(Array.from(onDisk)).toEqual(Array.from(PAYLOAD));
+  });
+
+  it('★ 不注入 releaseSource ⇒ 老整包路径（请求 assets/packages/...，不经装配）', async () => {
+    const memory = new MemoryStore();
+    await memory.init();
+    const tar = new TextEncoder().encode('tarball-bytes');
+    const sha = sha256OfNode(tar);
+    const wholeFetch = new MockFetchAdapter();
+    wholeFetch.setFile('https://octave.test/assets/packages/statistics-1.7.7.tar.gz', tar, sha);
+
+    const store = new DownloadStore({
+      storage: memory,
+      fetchPort: wholeFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: () => ({
+        schema: 2,
+        packs: [
+          { name: 'statistics', version: '1.7.7', form: 'pkg' as const, content: ['m' as const], size: tar.length, sha256: sha },
+        ],
+      }),
+    });
+    await store.init();
+    const record = await store.download({ kind: 'src', name: 'statistics', version: '1.7.7' } as any);
+
+    expect(record.files).toHaveLength(1);
+    expect(record.files[0].sha256).toBe(sha);
+    expect(record.files[0].bytes).toBe(tar.length);
+  });
+
+  it('★ releaseSource 抛异常 ⇒ 响亮报错（不静默吞编程缺陷）+ 回落整包', async () => {
+    const memory = new MemoryStore();
+    await memory.init();
+    const tar = new TextEncoder().encode('tb');
+    const sha = sha256OfNode(tar);
+    const wholeFetch = new MockFetchAdapter();
+    wholeFetch.setFile('https://octave.test/assets/packages/statistics-1.7.7.tar.gz', tar, sha);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const store = new DownloadStore({
+      storage: memory,
+      fetchPort: wholeFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: () => ({
+        schema: 2,
+        packs: [{ name: 'statistics', version: '1.7.7', form: 'pkg' as const, content: ['m' as const], size: 2, sha256: sha }],
+      }),
+      releaseSource: {
+        async resolve(): Promise<never> {
+          throw new TypeError('boom: programming defect');
+        },
+      },
+    });
+    await store.init();
+    const record = await store.download({ kind: 'src', name: 'statistics', version: '1.7.7' } as any);
+
+    expect(record.files).toHaveLength(1);
+    const msgs = errSpy.mock.calls.map((c) => String(c[0])).join(' ');
+    expect(msgs).toContain('code defect');
+    errSpy.mockRestore();
+  });
+
+  it('★ 装配失败（块 sha 不符）⇒ DownloadStore 报错，不落半成品', async () => {
+    const memory = new MemoryStore();
+    await memory.init();
+    const { entry } = makeEntry();
+    const badFetch = new MockFetchAdapter();
+    badFetch.setFile('https://rel.test/r1/demo.identity.000', new TextEncoder().encode('XXXXXX')); // 同长度、不同字节
+
+    const store = new DownloadStore({
+      storage: memory,
+      fetchPort: badFetch,
+      baseUrl: 'https://octave.test',
+      catalogProvider: catalog,
+      releaseSource: {
+        async resolve() {
+          return { entry, variant: entry.variants[0], base: 'https://rel.test/r1/' };
+        },
+      },
+    });
+    await store.init();
+    await expect(store.download({ kind: 'src', name: 'statistics', version: '1.7.7' } as any)).rejects.toMatchObject({
+      code: 'STORAGE_WRITE_FAILED',
+    });
+  });
+});
