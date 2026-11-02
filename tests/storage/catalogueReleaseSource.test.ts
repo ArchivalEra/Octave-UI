@@ -68,7 +68,7 @@ const ref: DownloadRef = { kind: 'src', name: 'statistics', version: '1.7.7' } a
 describe('createCatalogueReleaseSource：从 catalogue 现读到变体选型', () => {
   it('★ 正常路径：catalogue 有活 release + 该包有 entry ⇒ 返回 entry/variant/base', async () => {
     const p = port({
-      catalogue: { schema: 1, releases: [{ id: 'X/r1', base: 'https://rel.test/r1/' }] },
+      catalogue: { schema: 1, releases: [{ id: 'X/statistics-1.7.7', base: 'https://rel.test/r1/' }] },
       releases: { 'https://rel.test/r1': manifest([entry('statistics-1.7.7.tar.gz')]) },
     });
     const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p });
@@ -85,7 +85,7 @@ describe('createCatalogueReleaseSource：从 catalogue 现读到变体选型', (
       { codec: 'identity', chunks: [{ part: 0, file: 'z.identity.000', bytes: 8, sha256: 'a'.repeat(64) }] },
     ]);
     const p = port({
-      catalogue: { schema: 1, releases: [{ id: 'X/r1', base: 'https://rel.test/r1/' }] },
+      catalogue: { schema: 1, releases: [{ id: 'X/statistics-1.7.7', base: 'https://rel.test/r1/' }] },
       releases: { 'https://rel.test/r1': manifest([withZstd]) },
     });
     const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p, hasZstd: true });
@@ -98,7 +98,7 @@ describe('createCatalogueReleaseSource：从 catalogue 现读到变体选型', (
       { codec: 'identity', chunks: [{ part: 0, file: 'z.identity.000', bytes: 8, sha256: 'a'.repeat(64) }] },
     ]);
     const p = port({
-      catalogue: { schema: 1, releases: [{ id: 'X/r1', base: 'https://rel.test/r1/' }] },
+      catalogue: { schema: 1, releases: [{ id: 'X/statistics-1.7.7', base: 'https://rel.test/r1/' }] },
       releases: { 'https://rel.test/r1': manifest([withZstd]) },
     });
     const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p, hasZstd: false });
@@ -110,8 +110,8 @@ describe('createCatalogueReleaseSource：从 catalogue 现读到变体选型', (
       catalogue: {
         schema: 1,
         releases: [
-          { id: 'X/dead', base: 'https://dead.test/x/' },
-          { id: 'X/live', base: 'https://rel.test/r1/' },
+          { id: 'X/statistics-1.7.6', base: 'https://dead.test/x/' },
+          { id: 'X/statistics-1.7.7', base: 'https://rel.test/r1/' },
         ],
       },
       releases: { 'https://dead.test/x': 'dead', 'https://rel.test/r1': manifest([entry('statistics-1.7.7.tar.gz')]) },
@@ -125,7 +125,7 @@ describe('createCatalogueReleaseSource：从 catalogue 现读到变体选型', (
   it('★ base 每次从 catalogue 现读（不硬编码 tag）：换 catalogue 后 base 跟着变', async () => {
     // 第一次
     const p1 = port({
-      catalogue: { schema: 1, releases: [{ id: 'X/old', base: 'https://rel.test/old/' }] },
+      catalogue: { schema: 1, releases: [{ id: 'X/statistics-1.7.7', base: 'https://rel.test/old/' }] },
       releases: { 'https://rel.test/old': manifest([entry('statistics-1.7.7.tar.gz')]) },
     });
     const s1 = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p1, catalogueTtlMs: 0 });
@@ -133,7 +133,7 @@ describe('createCatalogueReleaseSource：从 catalogue 现读到变体选型', (
 
     // 上游换 tag 后（新 instance，模拟新会话）
     const p2 = port({
-      catalogue: { schema: 1, releases: [{ id: 'X/new', base: 'https://rel.test/new/' }] },
+      catalogue: { schema: 1, releases: [{ id: 'X/statistics-1.7.8', base: 'https://rel.test/new/' }] },
       releases: { 'https://rel.test/new': manifest([entry('statistics-1.7.7.tar.gz')]) },
     });
     const s2 = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p2, catalogueTtlMs: 0 });
@@ -158,8 +158,8 @@ describe('解析不出时必须**如实上报原因**（不静默吞）', () => 
       catalogue: {
         schema: 1,
         releases: [
-          { id: 'X/a', base: 'https://dead.test/a/' },
-          { id: 'X/b', base: 'https://dead.test/b/' },
+          { id: 'X/statistics-a', base: 'https://dead.test/a/' },
+          { id: 'X/statistics-b', base: 'https://dead.test/b/' },
         ],
       },
       releases: {},
@@ -168,21 +168,21 @@ describe('解析不出时必须**如实上报原因**（不静默吞）', () => 
     expect(await src.resolve(pkg, ref)).toBeNull();
     // onDead 给出的诊断比笼统的「no live release」更具体：逐条目 id + 拒绝类别
     const reason = onFallback.mock.calls[0][0].reason;
-    expect(reason).toContain('every catalogue entry is dead');
-    expect(reason).toContain('X/a');
-    expect(reason).toContain('X/b');
+    expect(reason).toContain('every candidate release');
+    expect(reason).toContain('X/statistics-a');
+    expect(reason).toContain('X/statistics-b');
   });
 
   it('★ 活着但该包不在 release 里 ⇒ null + 原因点名 release id', async () => {
     const onFallback = vi.fn();
     const p = port({
-      catalogue: { schema: 1, releases: [{ id: 'X/r1', base: 'https://rel.test/r1/' }] },
+      catalogue: { schema: 1, releases: [{ id: 'X/statistics-1.7.7', base: 'https://rel.test/r1/' }] },
       releases: { 'https://rel.test/r1': manifest([entry('other-pkg-1.0.0.tar.gz')]) },
     });
     const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p, onFallback });
     expect(await src.resolve(pkg, ref)).toBeNull();
-    expect(onFallback.mock.calls[0][0].reason).toContain('entry not found');
-    expect(onFallback.mock.calls[0][0].reason).toContain('X/r1');
+    expect(onFallback.mock.calls[0][0].reason).toContain('no candidate release had an entry');
+    expect(onFallback.mock.calls[0][0].reason).toContain('statistics');
   });
 
   it('★ 本端解不了任何编码 ⇒ null + 原因列出能力集', async () => {
@@ -191,7 +191,7 @@ describe('解析不出时必须**如实上报原因**（不静默吞）', () => 
       { codec: 'zstd', chunks: [{ part: 0, file: 'z.zstd.000', bytes: 4, sha256: 'a'.repeat(64) }] },
     ]);
     const p = port({
-      catalogue: { schema: 1, releases: [{ id: 'X/r1', base: 'https://rel.test/r1/' }] },
+      catalogue: { schema: 1, releases: [{ id: 'X/statistics-1.7.7', base: 'https://rel.test/r1/' }] },
       releases: { 'https://rel.test/r1': manifest([onlyZstd], ['zstd']) },
     });
     // hasZstd=false ⇒ 能力集只有 identity，而这个 entry 没有 identity
@@ -205,7 +205,7 @@ describe('catalogue 缓存', () => {
   it('TTL 内复用（不重复拉 catalogue）', async () => {
     const catalogueFetch = vi.fn();
     const base = port({
-      catalogue: { schema: 1, releases: [{ id: 'X/r1', base: 'https://rel.test/r1/' }] },
+      catalogue: { schema: 1, releases: [{ id: 'X/statistics-1.7.7', base: 'https://rel.test/r1/' }] },
       releases: { 'https://rel.test/r1': manifest([entry('statistics-1.7.7.tar.gz')]) },
     });
     const p: FetchPort = {
@@ -224,7 +224,7 @@ describe('catalogue 缓存', () => {
   it('TTL=0 ⇒ 每次都重读（保证跟上派生态）', async () => {
     const catalogueFetch = vi.fn();
     const base = port({
-      catalogue: { schema: 1, releases: [{ id: 'X/r1', base: 'https://rel.test/r1/' }] },
+      catalogue: { schema: 1, releases: [{ id: 'X/statistics-1.7.7', base: 'https://rel.test/r1/' }] },
       releases: { 'https://rel.test/r1': manifest([entry('statistics-1.7.7.tar.gz')]) },
     });
     const p: FetchPort = {
@@ -238,5 +238,85 @@ describe('catalogue 缓存', () => {
     await src.resolve(pkg, ref);
     await src.resolve(pkg, ref);
     expect(catalogueFetch).toHaveBeenCalledTimes(2);
+  });
+});
+describe('★ NEW-1 反向断言：每个包有自己的 release（真实 catalogue 形状）', () => {
+  // 实测线上 catalogue 18 条，每个包一条 release，第一条活的是 LLVM
+  const REAL_LIKE = {
+    schema: 1,
+    releases: [
+      { id: 'LLVM-wasm/v0.1.6', base: 'https://rel.test/llvm/' },
+      { id: 'Octave-Extra-Content/forge-cgi-0.1.2', base: 'https://rel.test/cgi/' },
+      { id: 'Octave-Extra-Content/forge-statistics-1.7.7', base: 'https://rel.test/stat/' },
+    ],
+  };
+
+  it('★★ statistics 包必须找到 forge-statistics release，不许被第一个 LLVM release 挡住', async () => {
+    const p = port({
+      catalogue: REAL_LIKE,
+      releases: {
+        'https://rel.test/llvm': manifest([entry('clang.wasm')]),
+        'https://rel.test/cgi': manifest([entry('cgi-0.1.2.tar.gz')]),
+        'https://rel.test/stat': manifest([entry('statistics-1.7.7.tar.gz')]),
+      },
+    });
+    const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p });
+    const r = await src.resolve(pkg, ref);
+    expect(r).not.toBeNull();
+    expect(r!.entry.name).toBe('statistics-1.7.7.tar.gz');
+    expect(r!.base).toBe('https://rel.test/stat/');
+  });
+
+  it('★ 候选 release 的 manifest 死 ⇒ 不因为别的 release 活着就假装成功', async () => {
+    const p = port({
+      catalogue: REAL_LIKE,
+      releases: {
+        'https://rel.test/llvm': manifest([entry('clang.wasm')]), // 活，但不是这个包
+        'https://rel.test/cgi': manifest([entry('cgi-0.1.2.tar.gz')]), // 活，不是这个包
+        'https://rel.test/stat': 'dead', // 这个包的 release 死了
+      },
+    });
+    const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p });
+    const r = await src.resolve(pkg, ref);
+    expect(r).toBeNull(); // 必须回落，不许拿 LLVM 的 release 凑数
+  });
+
+  it('releaseIdMatchesPackage：按真实 id 形状判定（导出函数单测）', async () => {
+    const { releaseIdMatchesPackage } = await import('../../src/modules/storage/catalogueReleaseSource');
+    // 正例
+    expect(releaseIdMatchesPackage('Octave-Extra-Content/forge-statistics-1.7.7', pkg)).toBe(true);
+    expect(releaseIdMatchesPackage('Octave-Extra-Content/statistics-1.7.7', pkg)).toBe(true);
+    expect(releaseIdMatchesPackage('statistics', pkg)).toBe(true);
+    // 负例：别的包
+    expect(releaseIdMatchesPackage('LLVM-wasm/v0.1.6', pkg)).toBe(false);
+    expect(releaseIdMatchesPackage('Octave-Extra-Content/forge-cgi-0.1.2', pkg)).toBe(false);
+    expect(releaseIdMatchesPackage('Octave-Extra-Content/forge-tsa-4.6.3', pkg)).toBe(false);
+    // 前缀陷阱：`statisticsX` 不该匹配 `statistics`
+    expect(releaseIdMatchesPackage('X/statisticsX-1.0.0', pkg)).toBe(false);
+  });
+
+  it('★ 失败不缓存（NEW-3）：一次抖动不许封死半小时', async () => {
+    let calls = 0;
+    let fail = true;
+    const base = port({
+      catalogue: REAL_LIKE,
+      releases: { 'https://rel.test/stat': manifest([entry('statistics-1.7.7.tar.gz')]) },
+    });
+    const p: FetchPort = {
+      fetchBytes: base.fetchBytes.bind(base),
+      async fetchJSON<T>(url: string): Promise<T> {
+        if (url === CATALOGUE_URL) {
+          calls++;
+          if (fail) throw Object.assign(new Error('transient'), { status: 503 });
+        }
+        return base.fetchJSON<T>(url);
+      },
+    };
+    const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p, catalogueTtlMs: 60_000 });
+    expect(await src.resolve(pkg, ref)).toBeNull();
+    fail = false; // 网络恢复
+    // 失败没被缓存 ⇒ 立刻能成功（若缓存了 30 分钟这里会拿到 null）
+    expect(await src.resolve(pkg, ref)).not.toBeNull();
+    expect(calls).toBe(2);
   });
 });

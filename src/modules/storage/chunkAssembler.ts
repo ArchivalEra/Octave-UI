@@ -196,6 +196,7 @@ async function assembleOne(
       //     但重试完仍不符就说明源坏了，必须报（不能无限刷）。
       let res: Awaited<ReturnType<FetchPort['fetchBytes']>> | null = null;
       let lastStatus = 0;
+      let lastSha: { expected: string; actual: string } | null = null;
       for (let attempt = 0; attempt <= maxRetriesPerChunk; attempt++) {
         if (options.signal?.aborted) return { kind: 'aborted' };
         try {
@@ -208,21 +209,35 @@ async function assembleOne(
           if (attempt < maxRetriesPerChunk) await backoff(attempt, options.signal);
           continue;
         }
-        if (res.ok) break;
-        lastStatus = res.status;
-        // 4xx（除 408 请求超时 / 429 限流）是确定性失败，重试无益
-        const retryableStatus = res.status === 0 || res.status === 408 || res.status === 429 || res.status >= 500;
-        if (!retryableStatus) return { kind: 'http', chunk, status: res.status };
-        if (attempt < maxRetriesPerChunk) await backoff(attempt, options.signal);
+        if (!res.ok) {
+          lastStatus = res.status;
+          // 4xx（除 408 请求超时 / 429 限流）是确定性失败，重试无益
+          const retryableStatus = res.status === 0 || res.status === 408 || res.status === 429 || res.status >= 500;
+          if (!retryableStatus) return { kind: 'http', chunk, status: res.status };
+          if (attempt < maxRetriesPerChunk) await backoff(attempt, options.signal);
+          continue;
+        }
+
+        // ② 逐块校验（放在重试循环**内**）：传输损坏（socket 半截 / CDN 坏副本）
+        // 重取一次是有意义的，所以 sha 不符也重试；重试完仍不符才报（源真的坏了）。
+        // ——这条注释原来说「重试一次是有意义的」但校验在循环外、从没重试过
+        //   （第二轮复查 NEW-2：声称 ≠ 实存）。现在校验移进来了。
+        const actual = await computeSha256(res.data);
+        if (actual !== chunk.sha256) {
+          lastSha = { expected: chunk.sha256, actual };
+          if (attempt < maxRetriesPerChunk) await backoff(attempt, options.signal);
+          continue;
+        }
+
+        lastSha = null;
+        break; // 成功
       }
       if (!res || !res.ok) {
         return { kind: 'http', chunk, status: res ? res.status : lastStatus };
       }
-
-      // ② 逐块校验：当场定位坏块，不等全局
-      const actual = await computeSha256(res.data);
-      if (actual !== chunk.sha256) {
-        return { kind: 'chunk-sha', chunk, expected: chunk.sha256, actual };
+      // 重试耗尽后仍是 sha 不符 ⇒ 报 chunk-sha（不是 http）
+      if (lastSha) {
+        return { kind: 'chunk-sha', chunk, expected: lastSha.expected, actual: lastSha.actual };
       }
 
       rawParts[index] = res.data;

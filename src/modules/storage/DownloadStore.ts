@@ -473,6 +473,8 @@ export class DownloadStore {
       if (options?.signal?.aborted) {
         throw new DownloadError('DOWNLOAD_ABORTED', 'Download operation was cancelled');
       }
+      // 本 item 内的单调进度水位（回落换编码时不倒退，见 NEW-6 注释）
+      let lastReportedItemBytes = 0;
 
       options?.onProgress?.({
         receivedBytes: accumulatedBytes,
@@ -496,9 +498,18 @@ export class DownloadStore {
             signal: options?.signal,
             fallbackVariants: item.release.fallbacks,
             onProgress: (p) => {
-              // 装配内部进度折算进总进度（分片取块阶段按已收字节报）
+              // 装配内部进度折算进总进度（分片取块阶段按已收字节报）。
+              //
+              // ⚠️ 单调守卫（第二轮复查 NEW-6）：装配做了**编码回落**时，第二个变体会
+              // 从 receivedBytes=0 重新计数 ⇒ 直接累加会让 UI 进度**倒退**。进度是
+              // 给用户看的，倒退比不动更糟（看着像出错）。所以取 max 保单调。
+              const reportAt = Math.max(
+                lastReportedItemBytes,
+                accumulatedBytes + p.receivedBytes
+              );
+              lastReportedItemBytes = reportAt;
               options?.onProgress?.({
-                receivedBytes: accumulatedBytes + p.receivedBytes,
+                receivedBytes: reportAt,
                 totalBytes: resolved.bytes,
                 phase:
                   p.phase === 'fetching'

@@ -511,3 +511,51 @@ describe('编码回落链（Spec 审查第 4 条：契约 codecs 是有序回退
     expect(calls).toHaveLength(1);
   });
 });
+
+describe('NEW-2 反向：chunk-sha 不符会重试（注释声称必须与实存一致）', () => {
+  it('★ 首次取回的字节 sha 不符、第二次取回正确 ⇒ 成功（传输损坏可重取）', async () => {
+    const good = new Uint8Array([1, 2, 3]);
+    const entry = { product: 'p', name: 'x', bytes: 3, sha256: await computeSha256(good), variants: [] };
+    const variant = {
+      codec: 'identity' as const,
+      chunks: [{ part: 0, file: 'c.000', bytes: 3, sha256: await computeSha256(good) }],
+    };
+    let calls = 0;
+    const port: FetchPort = {
+      async fetchBytes() {
+        calls++;
+        // 第一次给同长度的坏字节，第二次给正确的
+        const data = calls === 1 ? new Uint8Array([9, 9, 9]) : good;
+        return { ok: true, status: 200, data, sha256: await computeSha256(data), totalBytes: 3 };
+      },
+      async fetchJSON() {
+        throw new Error('no');
+      },
+    };
+    const r = await assembleEntry(port, 'https://r/', entry, variant, idDecoders, { maxRetriesPerChunk: 2 });
+    expect(r.ok).toBe(true);
+    expect(calls).toBe(2); // 证明真的重试了
+  });
+
+  it('★ 重试耗尽仍 sha 不符 ⇒ 报 chunk-sha（不是 http），且重试次数正确', async () => {
+    const good = new Uint8Array([1]);
+    const entry = { product: 'p', name: 'x', bytes: 1, sha256: await computeSha256(good), variants: [] };
+    const variant = { codec: 'identity' as const, chunks: [{ part: 0, file: 'c.000', bytes: 1, sha256: await computeSha256(good) }] };
+    let calls = 0;
+    const port: FetchPort = {
+      async fetchBytes() {
+        calls++;
+        const data = new Uint8Array([7]);
+        return { ok: true, status: 200, data, sha256: await computeSha256(data), totalBytes: 1 };
+      },
+      async fetchJSON() {
+        throw new Error('no');
+      },
+    };
+    const r = await assembleEntry(port, 'https://r/', entry, variant, idDecoders, { maxRetriesPerChunk: 2 });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.failure.kind).toBe('chunk-sha');
+    expect(calls).toBe(3); // 首次 + 2 次重试
+  });
+});

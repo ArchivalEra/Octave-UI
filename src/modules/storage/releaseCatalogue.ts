@@ -113,7 +113,8 @@ export async function fetchReleaseManifest(
   base: string,
   signal?: AbortSignal,
 ): Promise<ManifestLoadResult> {
-  const url = base.endsWith('/') ? `${base}manifest.json` : `${base}/manifest.json`;
+  // base 拼接的唯一产地：与 chunkAssembler.chunkUrl 同形（base 末尾补 / 再拼裸名）
+  const url = `${base.endsWith('/') ? base : `${base}/`}manifest.json`;
   let raw: unknown;
   try {
     raw = await fetchPort.fetchJSON<unknown>(url, { signal });

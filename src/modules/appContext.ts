@@ -53,12 +53,11 @@ function getSiteBase(): string {
  * 所以要从 siteBase 里剥出 origin 再拼 `/static/catalogue.json`，
  * 不能直接 `${siteBase}/static/catalogue.json`。
  */
-export function deriveCatalogueUrl(siteBase: string): string {
-  const origin =
-    typeof location !== 'undefined' && location.origin
-      ? location.origin
-      : // 非浏览器环境（测试 / SSR）：没有 origin 时退回相对根
-        '';
+export function deriveCatalogueUrl(_siteBase?: string): string {
+  // 参数**故意不参与计算**（保留是为了让调用点自说明「我传了 siteBase 但没用它」）。
+  // 原因：catalogue 在域名根，与 siteBase 无关；从 siteBase 里剥 origin 在
+  // 非浏览器环境（测试/SSR，没有 location）会得到空串，反而更脆。直接用 location.origin。
+  const origin = typeof location !== 'undefined' && location.origin ? location.origin : '';
   return `${origin}/static/catalogue.json`;
 }
 
@@ -82,7 +81,7 @@ export const downloadStore = new DownloadStore({
   // 但原因走 onFallback 出去，不静默吞。
   releaseSource: createCatalogueReleaseSource({
     // 注意：catalogue 在**域名根**，不在 siteBase 下（见 deriveCatalogueUrl 的实测注释）
-    catalogueUrl: deriveCatalogueUrl(getSiteBase()),
+    catalogueUrl: deriveCatalogueUrl(),
     fetchPort: new BrowserFetchAdapter(),
     onFallback: ({ packageName, reason }) => {
       console.warn(
