@@ -97,6 +97,20 @@ export interface WantedArtifact {
  * 它的 url 指向包内文件 `pyodide.asm.wasm`，而 release 发的是 `pyodide-core-*.tar.bz2`
  * ——两者不是同一身份）。此时调用方应回落原路径，**不许猜**。
  */
+/**
+ * 是否 `form:"tree"`（目录树形态）。
+ *
+ * 判据取**版本候选里的 form 优先**，回落到包级 form：一个包可能某些版本是 tree、
+ * 某些是 pkg（目前没有，但形状上允许）。
+ */
+export function isTreeForm(pkg: ForgePackageItem, version?: string): boolean {
+  type Cand = { version?: string; form?: string };
+  const cands = Array.isArray(pkg.versions) ? (pkg.versions as Cand[]) : [];
+  const v = version ? cands.find((c) => c.version === version) : undefined;
+  const form = v?.form ?? (pkg as { form?: string }).form;
+  return form === 'tree';
+}
+
 export function wantedArtifactOf(pkg: ForgePackageItem, version?: string): WantedArtifact | null {
   type Cand = { version?: string; url?: string; sha256?: string; size?: number; stage?: string };
   const candidates: Cand[] = (Array.isArray(pkg.versions) && pkg.versions.length > 0
@@ -145,6 +159,30 @@ export function entryMatchesWanted(entry: ReleaseEntry, wanted: WantedArtifact):
  *
  * `dead` 如实收集：让「这个产物到底哪里去了」可回答，不随 null 消失。
  */
+/**
+ * 按「权威产地优先」排序 release。
+ *
+ * 为什么需要（内容仓 151 §2）：`msl-4.1.0-maint.om.zip` 曾在两条 release 里同名同 sha
+ * 发布（Extra-Content 的供给层 + OM 自己的）。同名同 sha ⇒ 取任一都正确，
+ * 但「谁是真产地」不是消费端该猜的——这里只按一条**可解释的**偏序排：
+ * 上游产物仓（OpenModelica / LLVM / Octave-Full-Wasm）优先于内容仓的供给副本。
+ *
+ * ⚠️ 这只是**排序偏好**，不是正确性依赖：两条 sha 相同，取谁都对。
+ * 内容仓 151 说会撤掉自己的重复件；撤了之后这条排序自然退化为无操作。
+ */
+function orderByAuthority(releases: readonly CatalogueRelease[]): CatalogueRelease[] {
+  // ⚠️ id 形状是 `<repo>/<asset>`，**不含 GitHub org 前缀**（实测：
+  // `Octave-Extra-Content/supply-msl-4.1.0`、`OpenModelica-Full-Wasm/msl-4.1.0-maint.om`）。
+  // 我第一版正则写了 `^ArchivalEra\/…`，生产上永远匹配不到 ⇒ 排序静默退化为无操作
+  // （测试抓到的）。这里改成匹配 repo 段本身。
+  const upstreamRepo = /^(OpenModelica-Full-Wasm|Octave-Full-Wasm|LLVM-wasm)\//;
+  return [...releases].sort((a, b) => {
+    const au = upstreamRepo.test(a.id) ? 0 : 1;
+    const bu = upstreamRepo.test(b.id) ? 0 : 1;
+    return au - bu; // 稳定排序：同档保持原序
+  });
+}
+
 async function firstLiveEntryAcrossCatalogue(
   fetchPort: FetchPort,
   catalogue: Catalogue,
@@ -154,7 +192,12 @@ async function firstLiveEntryAcrossCatalogue(
   dead: DeadReleaseEntry[];
 }> {
   const dead: DeadReleaseEntry[] = [];
-  for (const release of catalogue.releases) {
+  // 同名同 sha 的冗余发布：优先权威产地（内容仓 151 §2 裁定）。
+  // 实例：`msl-4.1.0-maint.om.zip` 同时由 `Octave-Extra-Content/supply-msl-4.1.0`
+  // 与 `OpenModelica-Full-Wasm/msl-4.1.0-maint.om` 发布，实测 sha 逐字相同；
+  // MSL 的产地是 OM，所以取 OM 那条。内容仓会撤掉自己的重复件。
+  const ordered = orderByAuthority(catalogue.releases);
+  for (const release of ordered) {
     const loaded = await fetchReleaseManifest(fetchPort, release.base);
     if (!loaded.ok) {
       dead.push({ id: release.id, rejection: loaded.rejection });
@@ -221,6 +264,27 @@ export function createCatalogueReleaseSource(options: CatalogueReleaseSourceOpti
         return null;
       };
 
+      // ⓪ `form:"tree"` 的语义（内容仓 151 裁定 C + 我仓实测补充）
+      //
+      //    内容契约的三键对 tree 是这样指向的：
+      //      url    = 入口件（如 `omc/OpenModelicaCompiler_bg.wasm`）
+      //      sha256 = **入口件**的指纹
+      //      size   = 整目录字节
+      //
+      //    ⇒ 「按产物名 + sha 命中 release」对 tree **是否成立，取决于入口件是不是
+      //      在 release 里作为独立 entry 发布**：
+      //        · OMC   ：入口件 `OpenModelicaCompiler_bg.wasm` **是** release 的独立 entry
+      //                  ⇒ 能命中，走 catalogue（这也正是用户「两个引擎都上 catalogue」的要求）
+      //        · pyodide：入口件 `pyodide.asm.wasm` 在 `pyodide-core-*.tar.bz2` **内部**
+      //                  ⇒ 命不中，回落站点（内容仓 151 §1 实测：22,013,349 vs 6,757,104
+      //                     是两个不同字节集合）
+      //
+      //    所以这里**不按 form 一刀切**，而是：tree 也去试一次产物名 + sha 命中；
+      //    命不中就如实回落（下面 fail 分支会说清是 tree 且没命中）。
+      //    —— 一刀切会让 OMC 引擎被迫走站点，直接违背用户目标；而「先试再回落」
+      //      既不猜也不丢能力：命中说明发布方确实把入口件当独立产物发了，那就用它。
+      const treeForm = isTreeForm(pkg);
+
       // ① 先从**市场契约**推出「我要哪个产物」（产物名 + 期望 sha）。
       //    这不是猜：市场契约的 url basename 与分发契约的 entry.name 是同一个身份。
       const wanted = wantedArtifactOf(pkg, ref.version || pkg.version);
@@ -242,11 +306,14 @@ export function createCatalogueReleaseSource(options: CatalogueReleaseSourceOpti
       if (!hit) {
         const kinds = dead.map((d) => `${d.id}:${d.rejection.kind}`).join(', ');
         return fail(
-          dead.length
-            ? `no live release carried artifact "${wanted.name}" (dead: ${kinds})`
-            : `no release carried artifact "${wanted.name}"` +
-              ` (${catalogue.releases.length} releases scanned)` +
-              (wanted.sha256 ? ' with expected sha' : '')
+          (treeForm
+            ? `form:"tree" entry "${wanted.name}" is not published as a standalone release entry` +
+              ` (its bytes live inside an archive — different byte sets); falling back to site path`
+            : '') +
+            (dead.length
+              ? ` | no live release carried artifact "${wanted.name}" (dead: ${kinds})`
+              : ` | no release carried artifact "${wanted.name}" (${catalogue.releases.length} releases scanned)` +
+                (wanted.sha256 ? ' with expected sha' : ''))
         );
       }
 

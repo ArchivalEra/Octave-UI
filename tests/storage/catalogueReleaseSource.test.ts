@@ -363,3 +363,95 @@ describe('★ NEW-1 反向断言：每个包有自己的 release（真实 catalo
     expect(calls).toBe(2);
   });
 });
+
+describe('内容仓 151 裁定落地：form 分流 + 权威产地优先', () => {
+  it('★ 裁定 C：form:"tree" 的包不走 catalogue（url 指向包内文件，release 发的是压缩包）', async () => {
+    const p = port({
+      catalogue: { schema: 1, releases: [{ id: 'X/supply-pyodide-314.0.7', base: 'https://rel.test/py/' }] },
+      releases: { 'https://rel.test/py': manifest([entry('pyodide-core-314.0.7.tar.bz2')]) },
+    });
+    const onFallback = vi.fn();
+    const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p, onFallback });
+    const treePkg = {
+      name: 'pyodide',
+      version: '314.0.7',
+      form: 'tree' as const,
+      content: [],
+      url: 'assets/pyodide/pyodide/pyodide.asm.wasm',
+      size: 22013349,
+    };
+    expect(await src.resolve(treePkg as any, ref)).toBeNull();
+    // pyodide 的入口件在压缩包内 ⇒ 命不中，必须明说「tree 且没作为独立 entry 发布」
+    expect(onFallback.mock.calls[0][0].reason).toContain('form:"tree"');
+    expect(onFallback.mock.calls[0][0].reason).toContain('not published as a standalone release entry');
+    expect(onFallback.mock.calls[0][0].reason).toContain('falling back to site path');
+  });
+
+  it('isTreeForm：版本候选 form 优先于包级 form', async () => {
+    const { isTreeForm } = await import('../../src/modules/storage/catalogueReleaseSource');
+    expect(isTreeForm({ name: 'x', form: 'tree' } as any)).toBe(true);
+    expect(isTreeForm({ name: 'x', form: 'pkg' } as any)).toBe(false);
+    // 包级 pkg，但某版本是 tree ⇒ 按版本走
+    const mixed = {
+      name: 'x',
+      form: 'pkg' as const,
+      versions: [{ version: '1', form: 'tree' }, { version: '2', form: 'pkg' }],
+    };
+    expect(isTreeForm(mixed as any, '1')).toBe(true);
+    expect(isTreeForm(mixed as any, '2')).toBe(false);
+  });
+
+  it('★ 裁定 2：同名同 sha 的两条 release ⇒ 优先上游产物仓（OM 优先于 Extra-Content 供给副本）', async () => {
+    // 内容仓 151 §2 的实例形状：MSL 被两条 release 同时发布
+    const p = port({
+      catalogue: {
+        schema: 1,
+        releases: [
+          { id: 'Octave-Extra-Content/supply-msl-4.1.0', base: 'https://rel.test/ec/' },
+          { id: 'OpenModelica-Full-Wasm/msl-4.1.0-maint.om', base: 'https://rel.test/om/' },
+        ],
+      },
+      releases: {
+        'https://rel.test/ec': manifest([entry('msl-4.1.0-maint.om.zip')]),
+        'https://rel.test/om': manifest([entry('msl-4.1.0-maint.om.zip')]),
+      },
+    });
+    const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p });
+    const mslPkg = {
+      name: 'modelica-standard-library',
+      version: '4.1.0',
+      form: 'file' as const,
+      content: [],
+      url: 'assets/msl/msl-4.1.0-maint.om.zip',
+    };
+    const r = await src.resolve(mslPkg as any, ref);
+    expect(r).not.toBeNull();
+    // 必须选 OM 那条（上游产地），不是 Extra-Content 的供给副本
+    expect(r!.base).toBe('https://rel.test/om/');
+  });
+});
+
+  it('★ tree 但入口件是独立 release entry（OMC 形态）⇒ 必须命中（用户要求两个引擎都上 catalogue）', async () => {
+    const p = port({
+      catalogue: { schema: 1, releases: [{ id: 'OpenModelica-Full-Wasm/v0.2.0-wasm32', base: 'https://rel.test/omc/' }] },
+      releases: {
+        'https://rel.test/omc': manifest([
+          entry('OpenModelicaCompiler_bg.wasm'),
+          entry('OpenModelicaCompiler.js'),
+          entry('OpenModelicaCompiler.d.ts'),
+        ]),
+      },
+    });
+    const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p });
+    const omcPkg = {
+      name: 'omc',
+      version: '1.25.0',
+      form: 'tree' as const,
+      content: [],
+      url: 'omc/OpenModelicaCompiler_bg.wasm',
+    };
+    const r = await src.resolve(omcPkg as any, ref);
+    expect(r).not.toBeNull();
+    expect(r!.entry.name).toBe('OpenModelicaCompiler_bg.wasm');
+    expect(r!.base).toBe('https://rel.test/omc/');
+  });
