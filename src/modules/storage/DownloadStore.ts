@@ -23,6 +23,9 @@ import { BrowserFetchAdapter, computeSha256 } from './FetchPort';
 import type { ForgeCatalog, ForgePackageItem, PackageVersionCandidate } from '../plugins/package/types';
 import { EngineAssetResolver } from '../engine/EngineAssetResolver';
 import type { ReleaseEntry, ReleaseVariant } from './releaseContract';
+import type { EngineReleaseSource, ResolvedEngineArtifact } from '../engine/engineReleaseSource';
+import type { EngineLane } from '../engine/EngineAssetResolver';
+import { LANE_PRODUCT, artifactsOfLane } from '../engine/laneProducts';
 import {
   assembleEntry,
   createBrowserDecoders,
@@ -96,6 +99,12 @@ interface DownloadStoreOptions {
   maxQuotaBytes?: number;
   /** 发布契约源（可选）：不注入 ⇒ 整包路径，完全向后兼容 */
   releaseSource?: ReleaseSource;
+  /**
+   * 引擎发布源（可选，**另一条缝**）：不注入 ⇒ 引擎走站点 lanes（零行为变化）。
+   * 与 `releaseSource` 分开是因为语义不同：包是「一个 entry」，
+   * 引擎是「一个 product → N 件，一起成功或失败」。
+   */
+  engineReleaseSource?: EngineReleaseSource;
 }
 
 const KNOWN_RUNTIME_METADATA: Record<string, { bytes: number; sha256: string }> = {
@@ -140,6 +149,7 @@ export class DownloadStore {
   private baseUrl: string;
   private maxQuotaBytes?: number;
   private releaseSource?: ReleaseSource;
+  private engineReleaseSource?: EngineReleaseSource;
   /**
    * 解码器（可注入）：默认浏览器版（zstd 按需 import fzstd / gzip 原生流）。
    * 测试注入纯 JS 版，避免在 Node 里模拟 DecompressionStream。
@@ -163,6 +173,7 @@ export class DownloadStore {
     this.engineBuildProvider = options?.engineBuildProvider;
     this.laneProvider = options?.laneProvider;
     this.releaseSource = options?.releaseSource;
+    this.engineReleaseSource = options?.engineReleaseSource;
 
     if (options?.baseUrl !== undefined && options.baseUrl !== '') {
       this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -1070,12 +1081,81 @@ export class DownloadStore {
     const items: DownloadItem[] = [];
     let totalBytes = 0;
 
-    for (const [filename, meta] of Object.entries(files)) {
-      const fileSubPath = chosenFolder ? `${chosenFolder}/${filename}` : filename;
-      const url = this.resolveUrl(fileSubPath);
-      const destPath = `downloads/engine/${lane}/${variant}/${filename}`;
-      items.push({ filename, url, destPath, sha256: meta.sha256 });
-      totalBytes += meta.bytes;
+    // ── 引擎发布契约优先（用户 2026-11-03：全家上 catalogue）────────────────────
+    //
+    // 三件（Octave: wasm/data/js；OMC: wasm/js）优先从 release 的**分片**取；
+    // 两件清单（octave.build.json / assets/manifest.json）**仍从站点取**——
+    // 它们不在 release 里（实测 release 只发产物），且它们是元数据不是字节。
+    //
+    // 为什么清单必须留站点而不是「也没有就算了」：boot 侧 `octave-core.js loadManifest()`
+    // 读它拿能力元数据（simd/threads/verdict），缺了 boot 退化。所以是**混合来源**。
+    //
+    // ⚠️ 双真源处理（内容仓 151 §5.1 确认「release 与站点是两次不同构建」）：
+    // release 的 entry.sha256/bytes 是**该批字节**的真值；build.json 的 `measured.files`
+    // 描述的是站点那次构建。所以走 release 时：
+    //   · 件级 sha/bytes 用 **release entry** 的（`downloads/manifest.json` 记账据此、
+    //     对账也据此 ⇒ 一致）；
+    //   · build.json 只当**能力元数据**，不参与字节核对（否则每条 release 车道
+    //     下完立刻判 corrupted）。
+    // 两条都记录在案，不静默二选一。
+    let releasePlan: ResolvedEngineArtifact[] | null = null;
+    let releaseBase = '';
+    let releaseId = '';
+    if (this.engineReleaseSource) {
+      try {
+        const resolved = await this.engineReleaseSource.resolveEngine(lane as EngineLane, variant);
+        if (resolved) {
+          releasePlan = [...resolved.artifacts];
+          releaseBase = resolved.base;
+          releaseId = resolved.releaseId;
+        }
+      } catch (err: any) {
+        // 回落站点是合法路径；但**编程缺陷**必须响亮（不许伪装成降级）
+        console.error(
+          `[DownloadStore] engineReleaseSource.resolveEngine threw for lane "${lane}" — code defect, not a normal fallback:`,
+          err
+        );
+        releasePlan = null;
+      }
+    }
+
+    if (releasePlan) {
+      const byName = new Map(releasePlan.map((a) => [a.filename, a]));
+      void releaseId;
+      for (const [filename, meta] of Object.entries(files)) {
+        const fileSubPath = chosenFolder ? `${chosenFolder}/${filename}` : filename;
+        const url = this.resolveUrl(fileSubPath);
+        const destPath = `downloads/engine/${lane}/${variant}/${filename}`;
+        const art = byName.get(filename);
+        if (art) {
+          // 字节从 release 取（分片 + 逐块解 + 双校验），sha/bytes 用 release 的
+          items.push({
+            filename,
+            url: art.entry.name,
+            destPath,
+            sha256: art.entry.sha256,
+            release: {
+              entry: art.entry,
+              variant: art.variant,
+              base: releaseBase,
+              fallbacks: art.fallbacks,
+            },
+          });
+          totalBytes += art.entry.bytes;
+        } else {
+          // build.json 里有、release 里没有的件（清单类）：仍走站点
+          items.push({ filename, url, destPath, sha256: meta.sha256 });
+          totalBytes += meta.bytes;
+        }
+      }
+    } else {
+      for (const [filename, meta] of Object.entries(files)) {
+        const fileSubPath = chosenFolder ? `${chosenFolder}/${filename}` : filename;
+        const url = this.resolveUrl(fileSubPath);
+        const destPath = `downloads/engine/${lane}/${variant}/${filename}`;
+        items.push({ filename, url, destPath, sha256: meta.sha256 });
+        totalBytes += meta.bytes;
+      }
     }
 
     // 离线五件套 +2（#6 Q6.1）：octave.build.json 与 assets/manifest.json 也随引擎下载，
