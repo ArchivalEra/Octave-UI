@@ -117,6 +117,12 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # fzstd 字节拷成站点静态资产（**不进 vite 打包图** —— 用户 2026-11-03：
+      # 「fzstd 绝对不能持久存储，但没退出网站前只能拉一次」）。
+      # 必须在 build 之前跑：它写 public/lib/，vite 会把 public/ 原样拷进 dist。
+      - name: Sync fzstd static asset
+        run: node scripts/sync-fzstd.mjs
+
       - name: Build static site
         run: pnpm build
 

@@ -38,8 +38,15 @@ export interface CatalogueReleaseSourceOptions {
   catalogueUrl: string;
   /** 取字节/JSON 的端口（与 DownloadStore 共用同一个 ⇒ 测试可注入 Mock） */
   fetchPort: FetchPort;
-  /** 是否可解 zstd（默认假定可以；测试可覆盖） */
-  hasZstd?: boolean;
+  /**
+   * 是否可解 zstd。传**函数**则是「每次选变体时现问」（活查询，正确做法）；
+   * 传布尔是构造时快照（仅测试/无 loader 场景）。
+   *
+   * ⚠️ 曾经的 bug（design-it-twice 方案 B 指出）：默认值 `hasZstd ?? true` 是**谎言**——
+   * fzstd 是懒加载的，加载失败后能力集仍声称有 zstd ⇒ 每次都先白下 zstd 分片再回落 gzip。
+   * 现在默认改为「问 loader 的当次状态」，见 resolve 里 capabilitiesOf()。
+   */
+  hasZstd?: boolean | (() => boolean);
   /** **成功**结果的缓存毫秒数（派生件 6 小时一更） */
   catalogueTtlMs?: number;
   /**
@@ -156,7 +163,15 @@ export function createCatalogueReleaseSource(options: CatalogueReleaseSourceOpti
   const failureTtl = options.failureTtlMs ?? 0;
   let cached: { at: number; catalogue: Catalogue | null } | null = null;
 
-  const capabilities = detectCodecCapabilities(options.hasZstd ?? true);
+  /**
+   * 能力集**每次现算**（不缓存）：fzstd 的可用性会在运行期变化
+   * （idle → loading → ready | unavailable），快照会让「已失败」的会话继续选 zstd。
+   */
+  const capabilitiesOf = (): Set<ReleaseCodec> => {
+    const hz = options.hasZstd;
+    const available = typeof hz === 'function' ? hz() : hz ?? true;
+    return detectCodecCapabilities(available);
+  };
 
   async function getCatalogue(): Promise<Catalogue | null> {
     const now = Date.now();
@@ -198,6 +213,7 @@ export function createCatalogueReleaseSource(options: CatalogueReleaseSourceOpti
       }
 
       // 按契约 codecs 链给出主变体 + 回落链（内部 seam：pickVariantChain）
+      const capabilities = capabilitiesOf();
       const chain = pickVariantChain(hit.entry, hit.codecs, capabilities);
       if (!chain) return fail(`no decodable variant (capabilities: ${[...capabilities].join(',')})`);
 

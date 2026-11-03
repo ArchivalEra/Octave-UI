@@ -17,6 +17,7 @@
  * 环境：ENGINE_SHAS / GITHUB_SHA 可选，写进 dist/deploy-stamp.json 供线上对账。
  */
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 const BASE = "/repo/Octave/";
@@ -264,6 +265,41 @@ function cmdVerify() {
       process.exit(1);
     }
   }
+  // ── fzstd 不持久存储（用户 2026-11-03 硬要求）──
+  // 两条断言，各自咬住一个失效模式：
+  //  ① 字节必须在 dist/lib/ 且 sha 相符 —— 缺失/被替换则 blob-import 会执行错代码；
+  //  ② 任一 _astro chunk 里不许再出现 fzstd 解压算法 —— 那是「被人改回 import('fzstd')」
+  //     的回潮信号（vite 会把它拆成 immutable 长缓存资源，违反「不能持久存储」）。
+  {
+    const fzPath = path.join(DIST, "lib", "fzstd-0.1.1.mjs");
+    if (!fs.existsSync(fzPath)) {
+      console.error("[contract:verify] 缺 dist/lib/fzstd-0.1.1.mjs（scripts/sync-fzstd.mjs 未跑？）");
+      process.exit(1);
+    }
+    const fzSha = createHash("sha256").update(fs.readFileSync(fzPath)).digest("hex");
+    const EXPECTED_FZSTD_SHA = "1a901fc5a58c349bbdb4f2aa1e688637ef56891ec58243a9f0cd863166b0d2a4";
+    if (fzSha !== EXPECTED_FZSTD_SHA) {
+      console.error(
+        `[contract:verify] fzstd 字节指纹不符：${fzSha.slice(0, 16)}… ≠ ${EXPECTED_FZSTD_SHA.slice(0, 16)}…`
+      );
+      process.exit(1);
+    }
+    // 反向断言：fzstd 不许回到打包图（它进去就会被长缓存，违反「不持久存储」）
+    for (const file of walk(DIST, ".js")) {
+      if (!file.includes(`${path.sep}_astro${path.sep}`)) continue;
+      const c = fs.readFileSync(file, "utf8");
+      // fzstd 的特征：ZstdErrorCode 枚举名 + 魔数常数
+      if (c.includes("ZstdErrorCode") || c.includes("4247762216")) {
+        console.error(
+          `[contract:verify] _astro/${path.basename(file)} 里出现 fzstd 解压算法 —— ` +
+            `它是 immutable 长缓存资源，会把 fzstd 持久化到用户磁盘（违反不持久存储）。` +
+            ` 改回 public/lib + fzstdLoader 的 no-store 路径。`
+        );
+        process.exit(1);
+      }
+    }
+  }
+
   const missing = must.filter((rel) => !fs.existsSync(path.join(DIST, rel)));
   // 大件 .gz 对（gzip_static 直供前提）：wasm/data 必压缩——文本小件由边缘/源站兜底亦可
   const gzMust = [

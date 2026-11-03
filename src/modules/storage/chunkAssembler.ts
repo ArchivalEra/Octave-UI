@@ -324,15 +324,22 @@ async function assembleOne(
  * 为什么 zstd 要动态：只有真的要走 zstd 分支时才付这 6.8KB；契约允许客户端
  * 从 gzip 那项开始（代价是多下约 24.5% 字节），所以「不用 zstd 的人不该付它的体积」。
  */
-export function createBrowserDecoders(): CodecDecoders {
-  let fzstdPromise: Promise<typeof import('fzstd')> | null = null;
-  const loadFzstd = () => {
-    if (!fzstdPromise) fzstdPromise = import('fzstd');
-    return fzstdPromise;
-  };
-
+export function createBrowserDecoders(loadFzstd?: () => Promise<{ decompress(d: Uint8Array): Uint8Array }>): CodecDecoders {
   return {
     zstd: async (data) => {
+      // fzstd **不进打包图**（用户 2026-11-03 硬要求：绝不持久存储，但本次访问只拉一次）。
+      // 由 fzstdLoader 用 `cache:'no-store'` + 会话 nonce 取字节、验指纹、blob-import。
+      // 没注入 loader 时懒建一个生产版（保持既有调用点零改动）。
+      if (!loadFzstd) {
+        const { createBrowserFzstdLoader } = await import('./fzstdLoader');
+        const base =
+          (typeof import.meta !== 'undefined' && (import.meta as any).env?.BASE_URL) ||
+          (typeof document !== 'undefined'
+            ? document.querySelector('meta[name="site-base"]')?.getAttribute('content') || ''
+            : '');
+        const loader = createBrowserFzstdLoader(String(base ?? ''));
+        loadFzstd = () => loader.load();
+      }
       const mod = await loadFzstd();
       // fzstd 的 decompress 返回 Uint8Array
       return mod.decompress(data);
@@ -348,7 +355,14 @@ export function createBrowserDecoders(): CodecDecoders {
   };
 }
 
-/** 本端能解哪些编码（喂给 `selectVariant` 的能力集） */
+/**
+ * 本端能解哪些编码（喂给 `selectVariant` 的能力集）。
+ *
+ * ⚠️ 这是**快照**：调用方若在构造时算一次就长期持有，fzstd 之后加载失败也不会反映。
+ * 所以 `catalogueReleaseSource` 每次 select 前都应重算（见那里的注释）。
+ * 这里保留纯函数形态是为了可测；需要「活状态」的调用方传 `hasZstd` 为
+ * `loader.isUsable()` 的**当次求值**，而不是缓存结果。
+ */
 export function detectCodecCapabilities(hasFzstdAvailable: boolean): Set<ReleaseCodec> {
   const caps = new Set<ReleaseCodec>(['identity']);
   if (typeof DecompressionStream !== 'undefined') caps.add('gzip');
