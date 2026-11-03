@@ -19,7 +19,13 @@
 import type { FetchPort } from '../storage/FetchPort';
 import type { ReleaseCodec, ReleaseEntry, ReleaseVariant } from '../storage/releaseContract';
 import { selectVariant } from '../storage/releaseContract';
-import { fetchReleaseManifest, loadCatalogue, type Catalogue, type DeadReleaseEntry } from '../storage/releaseCatalogue';
+import {
+  fetchReleaseManifest,
+  loadCatalogue,
+  orderByAuthority,
+  type Catalogue,
+  type DeadReleaseEntry,
+} from '../storage/releaseCatalogue';
 import { detectCodecCapabilities } from '../storage/chunkAssembler';
 import { LANE_PRODUCT, artifactsOfLane, type LaneProduct } from './laneProducts';
 import type { EngineLane, EngineVariant } from './EngineAssetResolver';
@@ -143,11 +149,8 @@ export function createCatalogueEngineReleaseSource(options: EngineReleaseSourceO
       const capabilities = capabilitiesOf();
       const dead: DeadReleaseEntry[] = [];
 
-      // 上游产物仓优先（与内容侧同一判据：权威产地优先）
-      const ordered = [...catalogue.releases].sort((a, b) => {
-        const up = /^(Octave-Full-Wasm|OpenModelica-Full-Wasm|LLVM-wasm)\//;
-        return (up.test(a.id) ? 0 : 1) - (up.test(b.id) ? 0 : 1);
-      });
+      // 上游产物仓优先（与内容侧**共用同一个** orderByAuthority —— 唯一产地）
+      const ordered = orderByAuthority(catalogue.releases);
 
       for (const release of ordered) {
         const loaded = await fetchReleaseManifest(options.fetchPort, release.base);

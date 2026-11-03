@@ -108,6 +108,30 @@ export async function loadCatalogue(fetchPort: FetchPort, url: string, signal?: 
  * 供上层决定是否使用。这里只解析、不比对；要校验是调用方的事，
  * 写「校验但不阻断」而实际没有比对代码，就是声称与实存不符。
  */
+/**
+ * 「权威产地优先」排序：上游产物仓优先于内容仓的供给副本。
+ *
+ * 唯一产地（2026-11-03 去重）：这条偏序原本在 `catalogueReleaseSource` 与
+ * `engineReleaseSource` 各写一份正则，两处已当场漂移过一次（引擎侧多写了
+ * `ArchivalEra/` 前缀，生产上永不命中）。读同一份 catalogue、同一 TTL、同一偏序的
+ * 两处逻辑不该各写一遍。
+ *
+ * ⚠️ 只是**排序偏好**，不是正确性依赖：同名同 sha 的冗余发布取谁都对，
+ * 这条只让「谁是产地」可解释。
+ *
+ * ⚠️ id 形状是 `<repo>/<asset>`，**不含 GitHub org 前缀**（实测：
+ * `Octave-Extra-Content/supply-msl-4.1.0`、`OpenModelica-Full-Wasm/msl-4.1.0-maint.om`）。
+ */
+const UPSTREAM_REPO_RE = /^(OpenModelica-Full-Wasm|Octave-Full-Wasm|LLVM-wasm)\//;
+
+export function orderByAuthority<T extends { id: string }>(releases: readonly T[]): T[] {
+  return [...releases].sort((a, b) => {
+    const au = UPSTREAM_REPO_RE.test(a.id) ? 0 : 1;
+    const bu = UPSTREAM_REPO_RE.test(b.id) ? 0 : 1;
+    return au - bu;
+  });
+}
+
 export async function fetchReleaseManifest(
   fetchPort: FetchPort,
   base: string,

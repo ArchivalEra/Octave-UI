@@ -13,7 +13,8 @@
 //    ⇒ 「取第一个就开工」会全黑。
 //
 // ③ **每个包有自己的 release**（第二轮复查的 Critical 修正）。
-//    catalogue 实测 18 条，id 形如 `<repo>/<product>-<name>-<version>`：
+//    catalogue 的 id 形如 `<repo>/<product>-<name>-<version>`（条数会随上游发版变，
+//    不在代码里写死条数——要现数值请 `curl .../catalogue.json | jq '.releases|length'`）：
 //    LLVM-wasm/v0.1.6、Octave-Extra-Content/forge-statistics-1.7.7 …
 //    所以**必须先用包名把候选 release 缩下来**，再在那几条里做死链容忍。
 //    我最初写成「取全局第一个活的 release 再找包」——第一个活的是 LLVM，
@@ -29,7 +30,7 @@ import type { FetchPort } from './FetchPort';
 import type { ReleaseSource, ResolvedReleaseTarget } from './DownloadStore';
 import type { ReleaseCodec, ReleaseEntry, ReleaseVariant } from './releaseContract';
 import { selectVariant } from './releaseContract';
-import { fetchReleaseManifest, loadCatalogue } from './releaseCatalogue';
+import { fetchReleaseManifest, loadCatalogue, orderByAuthority } from './releaseCatalogue';
 import type { Catalogue, CatalogueRelease, DeadReleaseEntry } from './releaseCatalogue';
 import { detectCodecCapabilities } from './chunkAssembler';
 
@@ -154,35 +155,12 @@ export function entryMatchesWanted(entry: ReleaseEntry, wanted: WantedArtifact):
  *   市场契约给的是**产物名 + sha**，分发契约给的是**entry.name + sha**，两者同构
  *   ⇒ 直接按产物名全表扫，命中即用。零映射、零猜测。
  *
- * 代价：每次解析最多打开 N 份 manifest（当前 19 条）。用 GetCatalogue 的缓存 +
+ * 代价：每次解析最多打开 N 份 manifest（N = catalogue 的 release 数，**不在代码里写死**）。
+ * 用 getCatalogue() 的缓存 +
  *   这里按需取，实测可接受；且**只在真的要下载时**发生（不是每次页面加载）。
  *
  * `dead` 如实收集：让「这个产物到底哪里去了」可回答，不随 null 消失。
  */
-/**
- * 按「权威产地优先」排序 release。
- *
- * 为什么需要（内容仓 151 §2）：`msl-4.1.0-maint.om.zip` 曾在两条 release 里同名同 sha
- * 发布（Extra-Content 的供给层 + OM 自己的）。同名同 sha ⇒ 取任一都正确，
- * 但「谁是真产地」不是消费端该猜的——这里只按一条**可解释的**偏序排：
- * 上游产物仓（OpenModelica / LLVM / Octave-Full-Wasm）优先于内容仓的供给副本。
- *
- * ⚠️ 这只是**排序偏好**，不是正确性依赖：两条 sha 相同，取谁都对。
- * 内容仓 151 说会撤掉自己的重复件；撤了之后这条排序自然退化为无操作。
- */
-function orderByAuthority(releases: readonly CatalogueRelease[]): CatalogueRelease[] {
-  // ⚠️ id 形状是 `<repo>/<asset>`，**不含 GitHub org 前缀**（实测：
-  // `Octave-Extra-Content/supply-msl-4.1.0`、`OpenModelica-Full-Wasm/msl-4.1.0-maint.om`）。
-  // 我第一版正则写了 `^ArchivalEra\/…`，生产上永远匹配不到 ⇒ 排序静默退化为无操作
-  // （测试抓到的）。这里改成匹配 repo 段本身。
-  const upstreamRepo = /^(OpenModelica-Full-Wasm|Octave-Full-Wasm|LLVM-wasm)\//;
-  return [...releases].sort((a, b) => {
-    const au = upstreamRepo.test(a.id) ? 0 : 1;
-    const bu = upstreamRepo.test(b.id) ? 0 : 1;
-    return au - bu; // 稳定排序：同档保持原序
-  });
-}
-
 async function firstLiveEntryAcrossCatalogue(
   fetchPort: FetchPort,
   catalogue: Catalogue,
