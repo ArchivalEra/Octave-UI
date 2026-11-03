@@ -4,6 +4,7 @@
   import type { ForgePackageItem, InstallPlan } from '../modules/plugins/package/types';
   import type { Locale } from '../modules/i18n/types';
   import type { DownloadRef } from '../modules/storage/downloadTypes';
+  import { isTreeForm } from '../modules/storage/catalogueReleaseSource';
 
   let { isOpen, onClose } = $props<{
     isOpen: boolean;
@@ -234,7 +235,10 @@
   async function executeDownload(item: ForgePackageItem) {
     if (confirmDownloadError) return;
     const ver = selectedVersions[item.name] || item.version;
-    const isTree = item.form === 'tree';
+    // tree 判定**唯一产地** = isTreeForm（看版本候选的 form，回落到包级 form）。
+    // 这里原本手写 `item.form === 'tree'`，只看包级、不看版本 ⇒ 与 storage 层
+    // 的 isTreeForm 形成两个产地（Standards 审查第 5 条）。
+    const isTree = isTreeForm(item, ver);
     const ref: DownloadRef = {
       name: item.name,
       version: ver,

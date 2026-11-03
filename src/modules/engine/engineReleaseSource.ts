@@ -96,6 +96,38 @@ export function collectProductArtifacts(
   return got;
 }
 
+/**
+ * 把「某 release 里属于该 product 的 entry 集」变成「N 件变体链」。
+ *
+ * 抽成具名函数（deepening 2026-11-03）：原本这是三层嵌套（release 循环 → 件循环 →
+ * codec 循环）挤在 `resolveEngine` 里，7 处深嵌套。抽出来后每层只做一件事：
+ *   release 循环 = 死链容忍；本函数 = 「这一组件能不能整组装配」；codec 循环 = 选变体。
+ *
+ * **原子性**：任一件没有本端可解的变体 ⇒ 返回 null（整组不合格），
+ * 由调用方换下一条 release —— 绝不返回「2 件可用」的半套。
+ */
+function buildArtifactChain(
+  got: Map<string, ReleaseEntry>,
+  wanted: readonly string[],
+  codecs: readonly ReleaseCodec[],
+  capabilities: ReadonlySet<ReleaseCodec>,
+): ResolvedEngineArtifact[] | null {
+  const artifacts: ResolvedEngineArtifact[] = [];
+  for (const filename of wanted) {
+    const entry = got.get(filename)!;
+    const variant = selectVariant(entry, codecs, capabilities);
+    if (!variant) return null; // 该件无本端可解编码 ⇒ 整组不合格
+    const fallbacks: ReleaseVariant[] = [];
+    for (const codec of codecs) {
+      if (codec === variant.codec || !capabilities.has(codec)) continue;
+      const alt = entry.variants.find((x) => x.codec === codec);
+      if (alt) fallbacks.push(alt);
+    }
+    artifacts.push({ filename, entry, variant, fallbacks });
+  }
+  return artifacts;
+}
+
 export function createCatalogueEngineReleaseSource(options: EngineReleaseSourceOptions): EngineReleaseSource {
   const successTtl = options.catalogueTtlMs ?? 30 * 60 * 1000;
   const failureTtl = options.failureTtlMs ?? 0;
@@ -160,28 +192,11 @@ export function createCatalogueEngineReleaseSource(options: EngineReleaseSourceO
         }
 
         const got = collectProductArtifacts(loaded.manifest.entries, meta.product, wanted);
-        if (!got) continue; // 这条 release 没有该 product 的三件 —— 不是你坏了，是没在这里发
+        if (!got) continue; // 这条 release 没发该 product 的整套件 —— 换下一条
 
-        // 三件必须**全部**有本端可解的变体；缺一件就整组换 release，不混装
-        const artifacts: ResolvedEngineArtifact[] = [];
-        let incomplete = false;
-        for (const filename of wanted) {
-          const entry = got.get(filename)!;
-          const v = selectVariant(entry, loaded.manifest.codecs, capabilities);
-          if (!v) {
-            incomplete = true;
-            break;
-          }
-          const fallbacks: ReleaseVariant[] = [];
-          for (const codec of loaded.manifest.codecs) {
-            if (codec === v.codec) continue;
-            if (!capabilities.has(codec)) continue;
-            const alt = entry.variants.find((x) => x.codec === codec);
-            if (alt) fallbacks.push(alt);
-          }
-          artifacts.push({ filename, entry, variant: v, fallbacks });
-        }
-        if (incomplete) continue;
+        // 整组装配（缺件/无解编码 ⇒ null ⇒ 换下一条 release，不混装）
+        const artifacts = buildArtifactChain(got, wanted, loaded.manifest.codecs, capabilities);
+        if (!artifacts) continue;
 
         return {
           lane,
