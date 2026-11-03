@@ -24,7 +24,7 @@ import type { ForgeCatalog, ForgePackageItem, PackageVersionCandidate } from '..
 import { EngineAssetResolver } from '../engine/EngineAssetResolver';
 import type { ReleaseEntry, ReleaseVariant } from './releaseContract';
 import type { EngineReleaseSource, ResolvedEngineArtifact } from '../engine/engineReleaseSource';
-import type { EngineLane } from '../engine/EngineAssetResolver';
+import type { EngineLane, EngineVariant } from '../engine/EngineAssetResolver';
 import { LANE_PRODUCT, artifactsOfLane } from '../engine/laneProducts';
 import {
   assembleEntry,
@@ -951,6 +951,34 @@ export class DownloadStore {
     };
   }
 
+  /**
+   * 问引擎发布缝要「该车道 N 件」的解析结果。
+   *
+   * 抽成方法让 **Octave 三件** 与 **OMC 两件** 共用同一条缝——
+   * 之前 OMC 在 `resolveEngineTarget` 里提前 return，永远走不到 release 分支
+   * （Standards 审查第 4 条：`两个引擎都上 catalogue` 未达成）。
+   *
+   * 返回 null = 走站点（不注入 / 解析不出 / 抛异常后回落）。
+   */
+  private async tryEngineRelease(
+    lane: EngineLane,
+    variant: EngineVariant,
+  ): Promise<{ artifacts: ResolvedEngineArtifact[]; base: string; releaseId: string } | null> {
+    if (!this.engineReleaseSource) return null;
+    try {
+      const resolved = await this.engineReleaseSource.resolveEngine(lane, variant);
+      if (!resolved) return null;
+      return { artifacts: [...resolved.artifacts], base: resolved.base, releaseId: resolved.releaseId };
+    } catch (err: any) {
+      // 回落站点是合法路径；但**编程缺陷**必须响亮（不许伪装成降级）
+      console.error(
+        `[DownloadStore] engineReleaseSource.resolveEngine threw for lane "${lane}" — code defect, not a normal fallback:`,
+        err
+      );
+      return null;
+    }
+  }
+
   private async resolveEngineTarget(ref: DownloadRef): Promise<{
     sha256: string | undefined;
     bytes: number;
@@ -1013,6 +1041,44 @@ export class DownloadStore {
       // bytes 从 files 累加（顶层聚合字段已删，重复产地退役）
       const totalBytes = metaWasm.bytes + metaJs.bytes;
 
+      // ★ OMC 也走引擎发布缝（用户 2026-11-03「两个引擎」；Standards 审查第 4 条：
+      //   此前这里是提前 return，缝永远到不了 ⇒ OMC 实际没上 catalogue）。
+      // 与 Octave 同样的原则：**两件都从 release 取，或两件都走站点，不混装**。
+      const omcRelease = await this.tryEngineRelease('omc', variant);
+      if (omcRelease) {
+        const byName = new Map(omcRelease.artifacts.map((a) => [a.filename, a]));
+        const aWasm = byName.get(filenameWasm);
+        const aJs = byName.get(filenameJs);
+        if (aWasm && aJs) {
+          return {
+            sha256: undefined, // 多文件无单值指纹（#12 Q12.2 口径不变）
+            bytes: aWasm.entry.bytes + aJs.entry.bytes,
+            provenanceUrl: omcRelease.base,
+            items: [
+              {
+                filename: filenameWasm,
+                url: aWasm.entry.name,
+                destPath: `downloads/engine/omc/${variant}/${filenameWasm}`,
+                sha256: aWasm.entry.sha256,
+                release: { entry: aWasm.entry, variant: aWasm.variant, base: omcRelease.base, fallbacks: aWasm.fallbacks },
+              },
+              {
+                filename: filenameJs,
+                url: aJs.entry.name,
+                destPath: `downloads/engine/omc/${variant}/${filenameJs}`,
+                sha256: aJs.entry.sha256,
+                release: { entry: aJs.entry, variant: aJs.variant, base: omcRelease.base, fallbacks: aJs.fallbacks },
+              },
+            ],
+          };
+        }
+        // release 只给了一件 ⇒ 整组回落站点，不混装
+        console.warn(
+          `[DownloadStore] omc release "${omcRelease.releaseId}" gave ${omcRelease.artifacts.length} artifact(s), ` +
+            `need 2 — falling back to site for BOTH (no mixing)`
+        );
+      }
+
       // #12 Q12.2：顶层聚合 sha 产地删除（曾有 128hex 拼接串）——
       // 多文件无单值指纹，resolved.sha256 = undefined（Q7A）；
       // 逐件 sha 由 items[] 携带，出口过 64hex 断言，对账走记账 files[]。
@@ -1038,12 +1104,14 @@ export class DownloadStore {
     }
 
     // Octave 引擎档：统一按 downloads/engine/${lane}/${variant}/ 布局存储
-    const candidateFolders: string[] = [];
-    candidateFolders.push(`lanes/${lane}`);
-    if (variant === 'w64') {
-      candidateFolders.push(`lanes/${lane}/w64`);
-      candidateFolders.push('w64');
-    }
+    //
+    // ★ 候选顺序由 **引擎契约**（laneProducts.siteFolders）给出，不在这里手写
+    //   （Standards 审查第 2 条：`siteFolders` 之前只在测试里被断言，生产仍按
+    //    「根目录优先」跑，w64 车道依旧先命中根目录那份 wasm32 镜像 = 假绿）。
+    const laneProduct = LANE_PRODUCT[lane as EngineLane];
+    const candidateFolders: string[] = laneProduct
+      ? [...laneProduct.siteFolders]
+      : [`lanes/${lane}`];
     candidateFolders.push('');
 
     let chosenFolder = '';
@@ -1098,30 +1166,24 @@ export class DownloadStore {
     //   · build.json 只当**能力元数据**，不参与字节核对（否则每条 release 车道
     //     下完立刻判 corrupted）。
     // 两条都记录在案，不静默二选一。
-    let releasePlan: ResolvedEngineArtifact[] | null = null;
-    let releaseBase = '';
-    let releaseId = '';
-    if (this.engineReleaseSource) {
-      try {
-        const resolved = await this.engineReleaseSource.resolveEngine(lane as EngineLane, variant);
-        if (resolved) {
-          releasePlan = [...resolved.artifacts];
-          releaseBase = resolved.base;
-          releaseId = resolved.releaseId;
-        }
-      } catch (err: any) {
-        // 回落站点是合法路径；但**编程缺陷**必须响亮（不许伪装成降级）
-        console.error(
-          `[DownloadStore] engineReleaseSource.resolveEngine threw for lane "${lane}" — code defect, not a normal fallback:`,
-          err
-        );
-        releasePlan = null;
-      }
-    }
+    const engineRelease = await this.tryEngineRelease(lane as EngineLane, variant);
+    const releasePlan = engineRelease?.artifacts ?? null;
+    const releaseBase = engineRelease?.base ?? '';
+    void engineRelease?.releaseId;
 
     if (releasePlan) {
       const byName = new Map(releasePlan.map((a) => [a.filename, a]));
-      void releaseId;
+      // 「不混装」硬判据（Standards 审查第 6 条）：release 能给的件必须**全都在**
+      // build.json 的 files 里。否则会得到「2 件 release + 1 件站点」的混杂形态，
+      // 那正是设计声明禁止的。缺件 ⇒ **整组回落站点**。
+      const missingInBuild = releasePlan.filter((a) => !(a.filename in files));
+      if (missingInBuild.length > 0) {
+        console.warn(
+          `[DownloadStore] engine release for "${lane}" has ${releasePlan.length} artifacts but ` +
+            `octave.build.json only lists ${Object.keys(files).length}; ` +
+            `missing [${missingInBuild.map((a) => a.filename).join(', ')}] — falling back to site for ALL artifacts (no mixing)`
+        );
+      } else {
       for (const [filename, meta] of Object.entries(files)) {
         const fileSubPath = chosenFolder ? `${chosenFolder}/${filename}` : filename;
         const url = this.resolveUrl(fileSubPath);
@@ -1147,6 +1209,7 @@ export class DownloadStore {
           items.push({ filename, url, destPath, sha256: meta.sha256 });
           totalBytes += meta.bytes;
         }
+      }
       }
     } else {
       for (const [filename, meta] of Object.entries(files)) {

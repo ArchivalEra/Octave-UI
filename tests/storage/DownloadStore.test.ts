@@ -330,9 +330,13 @@ describe('DownloadStore Deep Module', () => {
     // 1. 下载 Octave 引擎档 (master)
     //    #6 起引擎下载是「五件套」：build/manifest 两件也随档抓取（sha256: undefined 走 intake 守卫跳过校验）
     mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', sha256OfNode('js-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/octave.js', 'js-content', sha256OfNode('js-content'));
     mockFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
     mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/octave.build.json', '{}', sha256OfNode('{}'));
     mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/assets/manifest.json', '{}', sha256OfNode('{}'));
 
     expect(store.isEngineDownloaded('master')).toBe(false);
     const recOctave = await store.downloadEngine('master');
@@ -534,9 +538,13 @@ describe('DownloadStore Deep Module', () => {
     // 第一次下载记账 files[] 五条全存真算 sha；第二次 resolved.items 两条 undefined
     // ⇒ 三元组比对跳过 sha 维（只比 path）⇒ 幂等命中 ⇒ fetchPort 调用数 === 0。
     mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', sha256OfNode('js-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/octave.js', 'js-content', sha256OfNode('js-content'));
     mockFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
     mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/octave.build.json', '{}', sha256OfNode('{}'));
     mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/assets/manifest.json', '{}', sha256OfNode('{}'));
 
     const first = await store.downloadEngine('master');
     expect(first.files.length).toBe(4);
@@ -553,9 +561,13 @@ describe('DownloadStore Deep Module', () => {
   it('#12 Q12.1: drift in a single file (bytes or sha) breaks idempotency and re-downloads', async () => {
     // 反向断言：目录当日更新（build.json 的 measured.files 变了）⇒ 三元组不等 ⇒ 重拉
     mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', sha256OfNode('js-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/octave.js', 'js-content', sha256OfNode('js-content'));
     mockFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
     mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/octave.build.json', '{}', sha256OfNode('{}'));
     mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/assets/manifest.json', '{}', sha256OfNode('{}'));
 
     await store.downloadEngine('master');
 
@@ -565,6 +577,7 @@ describe('DownloadStore Deep Module', () => {
       bytes: 100,
     };
     mockFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content-v2', sha256OfNode('js-content-v2'));
+    mockFetch.setFile('https://octave.test/lanes/master/w64/octave.js', 'js-content-v2', sha256OfNode('js-content-v2'));
 
     const fetchSpy = vi.spyOn(mockFetch, 'fetchBytes');
     const rec2 = await store.downloadEngine('master');
@@ -794,10 +807,15 @@ describe('DownloadStore Deep Module', () => {
       },
     };
     cleanFetch.setFile('https://octave.test/lanes/master/octave.js', 'js-content', sha256OfNode('js-content'));
+    cleanFetch.setFile('https://octave.test/lanes/master/w64/octave.js', 'js-content', sha256OfNode('js-content'));
     cleanFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
+    cleanFetch.setFile('https://octave.test/lanes/master/w64/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
     cleanFetch.setFile('https://octave.test/lanes/master/octave.data', 'data-content', sha256OfNode('data-content'));
+    cleanFetch.setFile('https://octave.test/lanes/master/w64/octave.data', 'data-content', sha256OfNode('data-content'));
     cleanFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
+    cleanFetch.setFile('https://octave.test/lanes/master/w64/octave.build.json', '{}', sha256OfNode('{}'));
     cleanFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
+    cleanFetch.setFile('https://octave.test/lanes/master/w64/assets/manifest.json', '{}', sha256OfNode('{}'));
     const engineStore = new DownloadStore({
       storage: memoryStore,
       fetchPort: cleanFetch,
@@ -841,6 +859,7 @@ describe('DownloadStore Deep Module', () => {
         bytes: 500,
       };
       cleanFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'tampered-src', sha256OfNode('tampered-src'));
+      cleanFetch.setFile('https://octave.test/lanes/master/w64/octave.wasm', 'tampered-src', sha256OfNode('tampered-src'));
       await expect(engineStore.downloadEngine('master')).rejects.toMatchObject({
         code: 'STORAGE_WRITE_FAILED',
       });
@@ -851,6 +870,7 @@ describe('DownloadStore Deep Module', () => {
         bytes: 500,
       };
       cleanFetch.setFile('https://octave.test/lanes/master/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
+      cleanFetch.setFile('https://octave.test/lanes/master/w64/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
       invSpy.mockRestore();
       readSpy.mockRestore();
     } finally {

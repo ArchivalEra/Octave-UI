@@ -242,7 +242,9 @@ export function createCatalogueReleaseSource(options: CatalogueReleaseSourceOpti
    */
   const capabilitiesOf = (): Set<ReleaseCodec> => {
     const hz = options.hasZstd;
-    const available = typeof hz === 'function' ? hz() : hz ?? true;
+    // 默认 false（不是 true）—— fzstd 是懒加载的，调用方不传 = 还没确认能解；
+    // 默认 true 会让它每次都先白下 zstd 分片再回落 gzip（这正是本文件 45 行记的 bug）。
+    const available = typeof hz === 'function' ? hz() : hz ?? false;
     return detectCodecCapabilities(available);
   };
 

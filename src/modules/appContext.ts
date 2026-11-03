@@ -16,6 +16,8 @@ import { SafePlotSinkPolyfill } from './semantic/SafePlotSinkPolyfill';
 import { WorkspaceStorageManager } from './storage/WorkspaceStorageManager';
 import { DownloadStore } from './storage/DownloadStore';
 import { createCatalogueReleaseSource } from './storage/catalogueReleaseSource';
+import { createCatalogueEngineReleaseSource } from './engine/engineReleaseSource';
+import { createBrowserFzstdLoader } from './storage/fzstdLoader';
 import { BrowserFetchAdapter } from './storage/FetchPort';
 import { EngineAssetResolver } from './engine/EngineAssetResolver';
 import { DockLayoutStore } from './dock/DockLayoutStore';
@@ -61,6 +63,10 @@ export function deriveCatalogueUrl(_siteBase?: string): string {
   return `${origin}/static/catalogue.json`;
 }
 
+// fzstd 加载器**单例**：两条发布缝（包 + 引擎）共享同一个实例，
+// 才能保证「用户没退出网站之前，fzstd 只能拉一次」——两个 loader 会各拉一次。
+const fzstdLoaderForReleases = createBrowserFzstdLoader(getSiteBase());
+
 export const workspaceStorage = new WorkspaceStorageManager();
 export const downloadStore = new DownloadStore({
   storage: workspaceStorage.store,
@@ -83,9 +89,25 @@ export const downloadStore = new DownloadStore({
     // 注意：catalogue 在**域名根**，不在 siteBase 下（见 deriveCatalogueUrl 的实测注释）
     catalogueUrl: deriveCatalogueUrl(),
     fetchPort: new BrowserFetchAdapter(),
+    // zstd 可用性**活查询**（内容仓 151 级别的坑：传死值会「先白下 zstd 再回落」）
+    hasZstd: () => fzstdLoaderForReleases.isUsable(),
     onFallback: ({ packageName, reason }) => {
       console.warn(
         `[downloads] release contract unavailable for "${packageName}": ${reason} — falling back to whole-file path`
+      );
+    },
+  }),
+
+  // ★ 引擎发布缝（**另一条缝**，用户 2026-11-03：「引擎契约另立缝我支持」）。
+  //   没有这一行，`resolveEngineTarget` 的 release 分支在产物里永远走不到
+  //   —— Standards/Spec 两轴审查独立抓到的同一条：写了缝、写了测试、但生产不可达。
+  engineReleaseSource: createCatalogueEngineReleaseSource({
+    catalogueUrl: deriveCatalogueUrl(),
+    fetchPort: new BrowserFetchAdapter(),
+    hasZstd: () => fzstdLoaderForReleases.isUsable(),
+    onFallback: ({ lane, reason }) => {
+      console.warn(
+        `[downloads] engine release unavailable for lane "${lane}": ${reason} — falling back to site lanes path`
       );
     },
   }),

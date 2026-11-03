@@ -95,9 +95,20 @@ export function createCatalogueEngineReleaseSource(options: EngineReleaseSourceO
   const failureTtl = options.failureTtlMs ?? 0;
   let cached: { at: number; catalogue: Catalogue | null } | null = null;
 
+  /**
+   * 能力集**每次现算**。
+   *
+   * ⚠️ 默认值是 `false`（不是 `true`）—— Standards 审查第 3 条抓到的回归：
+   * 我之前抄了 `hz ?? true`，而内容侧 `catalogueReleaseSource` 已明确记着
+   * 「`hasZstd ?? true` 是**谎言**」：fzstd 是懒加载的，调用方不传就意味着
+   * 「本端还没确认能解 zstd」；默认 true 会让它每次都先白下 zstd 分片再回落 gzip。
+   *
+   * 调用方应当传**活查询**（`() => loader.isUsable()`）；不传 = 不信 zstd，
+   * 走 gzip（多下约 27%，但一定能跑）。
+   */
   const capabilitiesOf = (): Set<ReleaseCodec> => {
     const hz = options.hasZstd;
-    return detectCodecCapabilities(typeof hz === 'function' ? hz() : hz ?? true);
+    return detectCodecCapabilities(typeof hz === 'function' ? hz() : hz ?? false);
   };
 
   async function getCatalogue(): Promise<Catalogue | null> {
