@@ -56,12 +56,14 @@ function port(opts: {
   };
 }
 
+// 市场契约给的是**产物名 + sha**（url 的 basename 与分发契约 entry.name 同构）
 const pkg: ForgePackageItem = {
   name: 'statistics',
   version: '1.7.7',
   form: 'pkg',
   content: ['m'],
-};
+  url: 'assets/forge/statistics-1.7.7.tar.gz',
+} as ForgePackageItem;
 
 const ref: DownloadRef = { kind: 'src', name: 'statistics', version: '1.7.7' } as DownloadRef;
 
@@ -168,7 +170,8 @@ describe('解析不出时必须**如实上报原因**（不静默吞）', () => 
     expect(await src.resolve(pkg, ref)).toBeNull();
     // onDead 给出的诊断比笼统的「no live release」更具体：逐条目 id + 拒绝类别
     const reason = onFallback.mock.calls[0][0].reason;
-    expect(reason).toContain('every candidate release');
+    expect(reason).toContain('no live release carried artifact');
+    expect(reason).toContain('statistics-1.7.7.tar.gz');
     expect(reason).toContain('X/statistics-a');
     expect(reason).toContain('X/statistics-b');
   });
@@ -181,8 +184,8 @@ describe('解析不出时必须**如实上报原因**（不静默吞）', () => 
     });
     const src = createCatalogueReleaseSource({ catalogueUrl: CATALOGUE_URL, fetchPort: p, onFallback });
     expect(await src.resolve(pkg, ref)).toBeNull();
-    expect(onFallback.mock.calls[0][0].reason).toContain('no candidate release had an entry');
-    expect(onFallback.mock.calls[0][0].reason).toContain('statistics');
+    expect(onFallback.mock.calls[0][0].reason).toContain('no release carried artifact');
+    expect(onFallback.mock.calls[0][0].reason).toContain('statistics-1.7.7.tar.gz');
   });
 
   it('★ 本端解不了任何编码 ⇒ null + 原因列出能力集', async () => {
@@ -281,18 +284,58 @@ describe('★ NEW-1 反向断言：每个包有自己的 release（真实 catalo
     expect(r).toBeNull(); // 必须回落，不许拿 LLVM 的 release 凑数
   });
 
-  it('releaseIdMatchesPackage：按真实 id 形状判定（导出函数单测）', async () => {
-    const { releaseIdMatchesPackage } = await import('../../src/modules/storage/catalogueReleaseSource');
-    // 正例
-    expect(releaseIdMatchesPackage('Octave-Extra-Content/forge-statistics-1.7.7', pkg)).toBe(true);
-    expect(releaseIdMatchesPackage('Octave-Extra-Content/statistics-1.7.7', pkg)).toBe(true);
-    expect(releaseIdMatchesPackage('statistics', pkg)).toBe(true);
-    // 负例：别的包
-    expect(releaseIdMatchesPackage('LLVM-wasm/v0.1.6', pkg)).toBe(false);
-    expect(releaseIdMatchesPackage('Octave-Extra-Content/forge-cgi-0.1.2', pkg)).toBe(false);
-    expect(releaseIdMatchesPackage('Octave-Extra-Content/forge-tsa-4.6.3', pkg)).toBe(false);
-    // 前缀陷阱：`statisticsX` 不该匹配 `statistics`
-    expect(releaseIdMatchesPackage('X/statisticsX-1.0.0', pkg)).toBe(false);
+  it('★ 产物名匹配（wantedArtifactOf / entryMatchesWanted）：按市场契约的 url basename', async () => {
+    const { wantedArtifactOf, entryMatchesWanted, artifactNameOf } = await import(
+      '../../src/modules/storage/catalogueReleaseSource'
+    );
+    // 产物名来自 url 的 basename —— 不是包名
+    expect(artifactNameOf('assets/forge/statistics-1.7.7.tar.gz')).toBe('statistics-1.7.7.tar.gz');
+    expect(artifactNameOf('omc/OpenModelicaCompiler_bg.wasm?v=1')).toBe('OpenModelicaCompiler_bg.wasm');
+
+    // 市场契约 → 想要哪个产物
+    const statPkg = {
+      name: 'statistics',
+      version: '1.7.7',
+      form: 'pkg' as const,
+      content: ['m' as const],
+      url: 'assets/forge/statistics-1.7.7.tar.gz',
+      sha256: 'c'.repeat(64),
+      size: 100,
+    };
+    const wanted = wantedArtifactOf(statPkg)!;
+    expect(wanted.name).toBe('statistics-1.7.7.tar.gz');
+    expect(wanted.sha256).toBe('c'.repeat(64));
+
+    // 名字 + sha 双确认：名字对、sha 不对 ⇒ 不匹配（同名不同字节是真实风险）
+    const mk = (name: string, sha: string) => ({ product: 'p', name, bytes: 1, sha256: sha, variants: [] });
+    expect(entryMatchesWanted(mk('statistics-1.7.7.tar.gz', 'c'.repeat(64)), wanted)).toBe(true);
+    expect(entryMatchesWanted(mk('statistics-1.7.7.tar.gz', 'd'.repeat(64)), wanted)).toBe(false);
+    // 名字不对 ⇒ 不匹配（哪怕 sha 一致）
+    expect(entryMatchesWanted(mk('cgi-0.1.2.tar.gz', 'c'.repeat(64)), wanted)).toBe(false);
+
+    // 市场契约没有 sha ⇒ 只按名字
+    const noSha = wantedArtifactOf({ ...statPkg, sha256: undefined } as any)!;
+    expect(noSha.sha256).toBeUndefined();
+    expect(entryMatchesWanted(mk('statistics-1.7.7.tar.gz', 'e'.repeat(64)), noSha)).toBe(true);
+
+    // 没有 url ⇒ null（不许猜）
+    expect(wantedArtifactOf({ name: 'x', version: '1', form: 'pkg', content: [] } as any)).toBeNull();
+  });
+
+  it('★ pyodide 形态：url 指向包内文件、release 发的是压缩包 ⇒ 匹配不上（如实回落，不猜）', async () => {
+    const { wantedArtifactOf } = await import('../../src/modules/storage/catalogueReleaseSource');
+    // 真实形态（实测）：url = assets/pyodide/pyodide/pyodide.asm.wasm (form=tree)
+    const wanted = wantedArtifactOf({
+      name: 'pyodide',
+      version: '314.0.7',
+      form: 'tree',
+      content: [],
+      url: 'assets/pyodide/pyodide/pyodide.asm.wasm',
+      size: 22013349,
+    } as any)!;
+    // 产物名是包内文件，而 release 里是 pyodide-core-314.0.7.tar.bz2 —— 不同身份
+    expect(wanted.name).toBe('pyodide.asm.wasm');
+    // 这正是缺口：它永远匹配不上，必须回落（等内容仓裁 A/B/C）
   });
 
   it('★ 失败不缓存（NEW-3）：一次抖动不许封死半小时', async () => {

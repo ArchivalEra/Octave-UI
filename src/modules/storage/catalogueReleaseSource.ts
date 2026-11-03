@@ -61,85 +61,115 @@ export interface CatalogueReleaseSourceOptions {
   onFallback?: (info: { packageName: string; reason: string }) => void;
 }
 
-function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** 取 url 的 basename —— 市场契约的「产物名」就在这里 */
+export function artifactNameOf(url: string): string {
+  const clean = url.split('?')[0].split('#')[0];
+  const parts = clean.split('/');
+  return parts[parts.length - 1] || '';
+}
+
+/** 市场契约里的一个版本候选（只取定位与核验需要的字段） */
+export interface WantedArtifact {
+  /** 产物名（= 发布 manifest 的 entry.name） */
+  name: string;
+  /** 市场契约给的期望指纹；有值才做双确认 */
+  sha256?: string;
+  /** 期望字节数（可选，仅诊断） */
+  bytes?: number;
 }
 
 /**
- * catalogue 的 release id 是否「可能就是承载这个包的 release」。
+ * 从市场契约的包记录里推出「我要哪个产物」。
  *
- * 实测 id 形状：`<repo>/<product>-<name>-<version>`，例如
- *   Octave-Extra-Content/forge-statistics-1.7.7  ← 包名 statistics
- *   Octave-Full-Wasm/octave-full-wasm-v0.1.0     ← product octave
+ * 判据链（**不猜包名、不查 release id**）：
+ *   · 优先用调用方指定的 version 候选（`versions[]` 里 stage!=='withheld' 的）；
+ *   · 否则用顶层 `url`；
+ *   · 产物名 = url 的 basename；
+ *   · 期望 sha = 同一候选里的 `sha256`。
  *
- * ⚠️ 这是**宽松筛选**，不是权威匹配：筛出候选后仍要打开 manifest 按 entry 名核。
- * 宽松是对的——漏掉一条真 release 比多打开一份 manifest 代价大得多。
+ * 为什么这么做（2026-11-03 与用户对齐后的结论）：
+ *   分发契约的 `entry.name` 与市场契约 `url` 的 basename **是同一个身份**（产物文件名），
+ *   两边还都带 sha256 ⇒ 两套契约自己就能完整表述，消费端不需要任何映射表。
+ *   我上一版用「包名」去猜 release id（`releaseIdMatchesPackage`）是越权且已失灵：
+ *   `modelica-standard-library` 匹配不上 `supply-msl-4.1.0`，`msl` 会命中两条。
+ *
+ * 返回 null = 这个包**没有可定位的单产物**（例如 `form:"tree"` 的 pyodide：
+ * 它的 url 指向包内文件 `pyodide.asm.wasm`，而 release 发的是 `pyodide-core-*.tar.bz2`
+ * ——两者不是同一身份）。此时调用方应回落原路径，**不许猜**。
  */
-export function releaseIdMatchesPackage(releaseId: string, pkg: ForgePackageItem): boolean {
-  const tail = releaseId.includes('/') ? releaseId.slice(releaseId.lastIndexOf('/') + 1) : releaseId;
-  const name = pkg.name;
-  if (!name) return false;
-  const esc = escapeRe(name);
-  return new RegExp(`(^|[-_])${esc}($|[-_])`).test(tail);
-}
+export function wantedArtifactOf(pkg: ForgePackageItem, version?: string): WantedArtifact | null {
+  type Cand = { version?: string; url?: string; sha256?: string; size?: number; stage?: string };
+  const candidates: Cand[] = (Array.isArray(pkg.versions) && pkg.versions.length > 0
+    ? (pkg.versions as Cand[])
+    : [{ version: pkg.version, url: pkg.url, sha256: (pkg as any).sha256, size: pkg.size, stage: 'staged' }]
+  ).filter((c) => c && c.stage !== 'withheld');
 
-/** 包名 → manifest entry 的 name 匹配（entry 名是产物文件名） */
-function matchesPackage(entry: ReleaseEntry, pkg: ForgePackageItem): boolean {
-  const n = entry.name;
-  if (n === pkg.name) return true;
-  if (n.startsWith(`${pkg.name}-`)) return true;
-  if (n.startsWith(`${pkg.name}.`)) return true;
-  return false;
-}
+  const chosen =
+    (version ? candidates.find((c) => c.version === version) : undefined) ??
+    candidates[0] ??
+    (pkg.url ? ({ url: pkg.url, sha256: (pkg as any).sha256, size: pkg.size } as Cand) : undefined);
 
-/** 同一包多个版本时优先取 entry.name 里含该版本的 */
-function pickBestVersion(hits: ReleaseEntry[], version: string): ReleaseEntry {
-  const scored = hits.map((e) => ({ e, s: version && e.name.includes(version) ? 1 : 0 }));
-  scored.sort((a, b) => b.s - a.s);
-  return scored[0].e;
+  const url = chosen?.url;
+  if (!url) return null;
+  const name = artifactNameOf(url);
+  if (!name) return null;
+
+  return { name, sha256: chosen?.sha256, bytes: chosen?.size };
 }
 
 /**
- * 在一批候选 release 里找第一个「manifest 活着且真有这个包 entry」的。
+ * 一个 entry 是否就是我要的那个产物。
  *
- * 抽成具名函数（deepening 2026-11-03）：原本这段嵌在 `resolve` 里，与
- * 「筛候选 / 选变体 / 组回落链」挤在一起，让 resolve 有 5 层深嵌套。
- * 现在它自己是一个可读的循环：死链跳过、无 entry 跳过、命中即返回。
+ * 判据：**名字逐字相等**；若市场契约给了 sha，**还要求 sha 逐字相等**（双确认）。
  *
- * 返回 `dead` 是为了让调用方能如实说出「N 条候选里这些是死的」——
- * 诊断信息不许随 null 消失。
+ * 为什么必须双确认而不是只信名字：同名不同字节在多文件包里是常态
+ * （例如两个 release 都发 `msl-4.1.0-maint.om.zip`，实测同 sha ⇒ 取哪条都对；
+ *  但若哪天不同 sha，只按名字就会取错）。sha 是市场契约自己给的，用它不算猜。
  */
-async function firstLiveCandidateWithEntry(
+export function entryMatchesWanted(entry: ReleaseEntry, wanted: WantedArtifact): boolean {
+  if (entry.name !== wanted.name) return false;
+  if (wanted.sha256 && entry.sha256 !== wanted.sha256) return false;
+  return true;
+}
+
+/**
+ * 全表扫：找第一个「manifest 活着且真有这个产物」的 release。
+ *
+ * 为什么是**全表**而不是先筛 release（2026-11-03 修正）：
+ *   消费端不知道「哪个包在哪条 release」——那是内容契约/分发命名的职责。
+ *   市场契约给的是**产物名 + sha**，分发契约给的是**entry.name + sha**，两者同构
+ *   ⇒ 直接按产物名全表扫，命中即用。零映射、零猜测。
+ *
+ * 代价：每次解析最多打开 N 份 manifest（当前 19 条）。用 GetCatalogue 的缓存 +
+ *   这里按需取，实测可接受；且**只在真的要下载时**发生（不是每次页面加载）。
+ *
+ * `dead` 如实收集：让「这个产物到底哪里去了」可回答，不随 null 消失。
+ */
+async function firstLiveEntryAcrossCatalogue(
   fetchPort: FetchPort,
-  candidates: readonly CatalogueRelease[],
-  pkg: ForgePackageItem,
-  version: string,
+  catalogue: Catalogue,
+  wanted: WantedArtifact,
 ): Promise<{
   hit: { entry: ReleaseEntry; base: string; codecs: readonly ReleaseCodec[] } | null;
   dead: DeadReleaseEntry[];
 }> {
   const dead: DeadReleaseEntry[] = [];
-  for (const release of candidates) {
+  for (const release of catalogue.releases) {
     const loaded = await fetchReleaseManifest(fetchPort, release.base);
     if (!loaded.ok) {
       dead.push({ id: release.id, rejection: loaded.rejection });
       continue;
     }
-    const entries = loaded.manifest.entries.filter((e) => matchesPackage(e, pkg));
-    if (entries.length === 0) continue;
-    return {
-      hit: { entry: pickBestVersion(entries, version), base: release.base, codecs: loaded.manifest.codecs },
-      dead,
-    };
+    const entry = loaded.manifest.entries.find((e) => entryMatchesWanted(e, wanted));
+    if (!entry) continue;
+    return { hit: { entry, base: release.base, codecs: loaded.manifest.codecs }, dead };
   }
   return { hit: null, dead };
 }
 
 /**
  * 按契约 codecs 链给出「主变体 + 本端能解的其余变体」。
- *
- * 回落链的意义在 chunkAssembler 里兑现（运行时失败才换下一个）；
- * 这里只负责按契约顺序**列出**候选，不预判哪个会失败。
+ * 回落链的意义在 chunkAssembler 里兑现（运行时失败才换下一个）；这里只负责列出候选。
  */
 function pickVariantChain(
   entry: ReleaseEntry,
@@ -191,24 +221,32 @@ export function createCatalogueReleaseSource(options: CatalogueReleaseSourceOpti
         return null;
       };
 
+      // ① 先从**市场契约**推出「我要哪个产物」（产物名 + 期望 sha）。
+      //    这不是猜：市场契约的 url basename 与分发契约的 entry.name 是同一个身份。
+      const wanted = wantedArtifactOf(pkg, ref.version || pkg.version);
+      if (!wanted) {
+        return fail('market contract gives no locatable single artifact (missing url)');
+      }
+
       const catalogue = await getCatalogue();
       if (!catalogue) return fail('catalogue unavailable or empty');
 
-      // ③ 每个包有自己的 release ⇒ 先按包名筛候选
-      const candidates = catalogue.releases.filter((r) => releaseIdMatchesPackage(r.id, pkg));
-      if (candidates.length === 0) {
-        return fail(`no catalogue release looks like it carries "${pkg.name}" (${catalogue.releases.length} entries scanned)`);
-      }
+      // ② 全表扫：找「该产物名 + sha 双确认」的 entry。
+      //    不再按包名筛 release —— 那是内容契约的职责，消费端不该猜。
+      const { hit, dead } = await firstLiveEntryAcrossCatalogue(
+        options.fetchPort,
+        catalogue,
+        wanted,
+      );
 
-      // ② 候选里做死链容忍（内部 seam：firstLiveCandidateWithEntry）
-      const version = ref.version || pkg.version || '';
-      const { hit, dead } = await firstLiveCandidateWithEntry(options.fetchPort, candidates, pkg, version);
       if (!hit) {
         const kinds = dead.map((d) => `${d.id}:${d.rejection.kind}`).join(', ');
         return fail(
           dead.length
-            ? `every candidate release for "${pkg.name}" is dead (${kinds})`
-            : `no candidate release had an entry for "${pkg.name}"`
+            ? `no live release carried artifact "${wanted.name}" (dead: ${kinds})`
+            : `no release carried artifact "${wanted.name}"` +
+              ` (${catalogue.releases.length} releases scanned)` +
+              (wanted.sha256 ? ' with expected sha' : '')
         );
       }
 
