@@ -18,7 +18,7 @@
 
 import type { FetchPort } from '../storage/FetchPort';
 import type { ReleaseCodec, ReleaseEntry, ReleaseVariant } from '../storage/releaseContract';
-import { selectVariant } from '../storage/releaseContract';
+import { selectVariant, type CodecPreference } from '../storage/releaseContract';
 import {
   fetchReleaseManifest,
   loadCatalogue,
@@ -69,6 +69,8 @@ export interface EngineReleaseSourceOptions {
   /** 成功缓存毫秒数；失败默认不缓存（同内容侧，避免一次抖动封死） */
   catalogueTtlMs?: number;
   failureTtlMs?: number;
+  /** 编码偏好（与内容侧同形状；引擎按 product 的整套件统一决策也可） */
+  codecPreference?: CodecPreference;
   /** 回落原因观察口（不静默吞） */
   onFallback?: (info: { lane: EngineLane; reason: string }) => void;
 }
@@ -112,11 +114,12 @@ function buildArtifactChain(
   wanted: readonly string[],
   codecs: readonly ReleaseCodec[],
   capabilities: ReadonlySet<ReleaseCodec>,
+  preference?: CodecPreference,
 ): ResolvedEngineArtifact[] | null {
   const artifacts: ResolvedEngineArtifact[] = [];
   for (const filename of wanted) {
     const entry = got.get(filename)!;
-    const variant = selectVariant(entry, codecs, capabilities);
+    const variant = selectVariant(entry, codecs, capabilities, preference);
     if (!variant) return null; // 该件无本端可解编码 ⇒ 整组不合格
     const fallbacks: ReleaseVariant[] = [];
     for (const codec of codecs) {
@@ -196,7 +199,7 @@ export function createCatalogueEngineReleaseSource(options: EngineReleaseSourceO
         if (!got) continue; // 这条 release 没发该 product 的整套件 —— 换下一条
 
         // 整组装配（缺件/无解编码 ⇒ null ⇒ 换下一条 release，不混装）
-        const artifacts = buildArtifactChain(got, wanted, loaded.manifest.codecs, capabilities);
+        const artifacts = buildArtifactChain(got, wanted, loaded.manifest.codecs, capabilities, options.codecPreference);
         if (!artifacts) continue;
 
         return {

@@ -475,3 +475,49 @@ describe('V5 跨变体块数一致（一个只在部分编码下有效的 manife
     expect(r.ok).toBe(true);
   });
 });
+
+describe('codecPreference：消费端按条目决定编码（信 069 提、信 102 采纳）', () => {
+  const entryWithBoth: ReleaseEntry = {
+    product: 'p',
+    name: 'big.wasm',
+    bytes: 8,
+    sha256: 'a'.repeat(64),
+    variants: [
+      { codec: 'zstd', chunks: [{ part: 0, file: 'z', bytes: 4, sha256: 'a'.repeat(64) }] },
+      { codec: 'gzip', chunks: [{ part: 0, file: 'g', bytes: 5, sha256: 'a'.repeat(64) }] },
+      { codec: 'identity', chunks: [{ part: 0, file: 'i', bytes: 8, sha256: 'a'.repeat(64) }] },
+    ],
+  };
+  const all = new Set<ReleaseCodec>(['zstd', 'gzip', 'identity']);
+
+  it('★ 无偏好 ⇒ 按 manifest 顺序（zstd 第一）', () => {
+    expect(selectVariant(entryWithBoth, ['zstd', 'gzip', 'identity'], all)?.codec).toBe('zstd');
+  });
+
+  it('★ 全局链 ["gzip","zstd"] ⇒ 优先 gzip', () => {
+    expect(selectVariant(entryWithBoth, ['zstd', 'gzip', 'identity'], all, ['gzip', 'zstd'])?.codec).toBe('gzip');
+  });
+
+  it('★ 按条目回调：大件走 zstd、小件走 gzip（同一条 release 内两种成本决策）', () => {
+    const pref = (e: { name: string; bytes: number }): readonly ReleaseCodec[] =>
+      e.bytes > 1024 ? ['zstd'] : ['gzip'];
+    expect(selectVariant({ ...entryWithBoth, bytes: 999_999 }, ['zstd', 'gzip', 'identity'], all, pref)?.codec).toBe('zstd');
+    expect(selectVariant({ ...entryWithBoth, bytes: 512 }, ['zstd', 'gzip', 'identity'], all, pref)?.codec).toBe('gzip');
+  });
+
+  it('★ 回调返回 undefined / [] ⇒ 回落 manifest 顺序，不是错误', () => {
+    expect(selectVariant(entryWithBoth, ['zstd', 'gzip', 'identity'], all, () => undefined)?.codec).toBe('zstd');
+    expect(selectVariant(entryWithBoth, ['zstd', 'gzip', 'identity'], all, () => [])?.codec).toBe('zstd');
+  });
+
+  it('★ 偏好链里的 codec 本端解不了 ⇒ 跳过，继续按 manifest 找', () => {
+    const caps = new Set<ReleaseCodec>(['gzip', 'identity']); // 无 zstd
+    expect(selectVariant(entryWithBoth, ['zstd', 'gzip', 'identity'], caps, ['zstd', 'gzip'])?.codec).toBe('gzip');
+  });
+
+  it('★ 偏好不是要求：链没覆盖到的 codec 仍按 producer 建议找', () => {
+    expect(selectVariant(entryWithBoth, ['zstd', 'gzip', 'identity'], all, ['gzip'])?.codec).toBe('gzip');
+    // 只偏好 gzip，但 manifest 里 zstd 在前且也可解 ⇒ 仍可能被 manifest 链覆盖？
+    // 实际形状：消费端链**优先**，所以这里应严格是 gzip（已断言）。
+  });
+});

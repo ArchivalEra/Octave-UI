@@ -88,7 +88,20 @@ export type AssembleResult =
   | { ok: true; data: Uint8Array; codec: ReleaseCodec; chunkCount: number }
   | { ok: false; failure: AssembleFailure };
 
-const DEFAULT_CONCURRENCY = 8;
+/**
+ * 默认并发。
+ *
+ * ⚠️ 2026-11-05 改 8 → 2，因为**生产镜像变了**：站点现在把 release 放在
+ * `static.isui.ren`（EO 免费版）与 CF 备线上。Static-Contract 101 实测：
+ *   EO 免费版在并发拉取 **10~15 MiB** 后开始限速，chunkSize=5 MiB，
+ *   2×5=10 MiB 刚好在阈值下，3×5=15 MiB 过线 ⇒ 并发调高会**变慢**。
+ * 内容仓 098 的「8 是拐点（4.89×）」是在**自建每连接限速服务器**上测的——
+ * 那种服务器没有全局带宽闸，并发越多越接近线速。**两者不矛盾，是镜像属性差异**。
+ *
+ * 所以：库默认给 2（面向当前真实镜像），`AssembleOptions.concurrency` 可覆盖；
+ * 自建无限速镜像的调用方显式给 8。
+ */
+export const DEFAULT_CONCURRENCY = 2;
 const DEFAULT_MAX_RETRIES = 3;
 
 /** 指数退避：0.3s / 0.6s / 1.2s …（可被 abort 打断） */

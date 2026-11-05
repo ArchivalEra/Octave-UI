@@ -289,13 +289,49 @@ function parseLicense(raw: unknown): ReleaseLicense | undefined {
  * `capabilities` 由调用方给出（浏览器有没有原生 gzip / fzstd 挂上了没有），
  * 这样这个函数保持纯函数、可在 Node 里逐条测——不必模拟浏览器。
  */
+/**
+ * 消费端的编码偏好（**按条目**）。
+ *
+ * 形状与 Static-Contract 参考客户端对齐（信 069 §1.2 我提、信 102 §2 他们采纳）：
+ *   `string[]` = 全局一条链；`(entry) => string[] | undefined` = 按条目决定。
+ *
+ * 为什么需要按条目：同一 release 里 `octave.wasm`（约 29.6 MB）值得付 fzstd 成本
+ * 换 zstd 的 27% 体积，`octave.js`（约 464 KB）不值得。整条 release 一个策略
+ * 会把成本决策做粗。
+ *
+ * ⚠️ 回调看到的 `EntryChoice` 是 `ReleaseEntry` **去掉 variants** 的投影——
+ *    它不能看见自己将要决定的结果，也不该被许可字段影响（那是展示信息，不是成本输入）。
+ *
+ * 返回 `undefined` / `[]` / 空命中都**回落到 manifest 顺序**，不是错误。
+ * 这是**偏好不是要求**：链没覆盖到的编码器仍按 producer 的建议找。
+ */
+export type CodecPreference =
+  | readonly ReleaseCodec[]
+  | ((entry: EntryChoice) => readonly ReleaseCodec[] | undefined);
+
+/** `selectVariant` 传给偏好回调的条目投影（不含变体/许可） */
+export interface EntryChoice {
+  readonly product: string;
+  readonly name: string;
+  readonly bytes: number;
+  readonly sha256: string;
+}
+
 export function selectVariant(
   entry: ReleaseEntry,
   manifestCodecs: readonly ReleaseCodec[],
   capabilities: ReadonlySet<ReleaseCodec>,
+  preference?: CodecPreference,
 ): ReleaseVariant | null {
-  // 先按 manifest 声明的优先级，再按本端能力过滤
-  for (const codec of manifestCodecs) {
+  const { product, name, bytes, sha256 } = entry;
+  const preferred = typeof preference === 'function'
+    ? preference({ product, name, bytes, sha256 }) ?? []
+    : preference ?? [];
+
+  // 消费端链优先，然后 manifest 链；去重（同一 codec 在两处出现不查两次）。
+  const chain: ReleaseCodec[] = [...new Set([...preferred, ...manifestCodecs])] as ReleaseCodec[];
+
+  for (const codec of chain) {
     if (!capabilities.has(codec)) continue;
     const hit = entry.variants.find((v) => v.codec === codec);
     if (hit) return hit;

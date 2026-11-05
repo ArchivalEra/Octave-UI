@@ -29,7 +29,7 @@ import type { DownloadRef } from './downloadTypes';
 import type { FetchPort } from './FetchPort';
 import type { ReleaseSource, ResolvedReleaseTarget } from './DownloadStore';
 import type { ReleaseCodec, ReleaseEntry, ReleaseVariant } from './releaseContract';
-import { selectVariant } from './releaseContract';
+import { selectVariant, type CodecPreference } from './releaseContract';
 import { fetchReleaseManifest, loadCatalogue, orderByAuthority } from './releaseCatalogue';
 import type { Catalogue, CatalogueRelease, DeadReleaseEntry } from './releaseCatalogue';
 import { detectCodecCapabilities } from './chunkAssembler';
@@ -59,6 +59,13 @@ export interface CatalogueReleaseSourceOptions {
    * 只会让用户多等。失败的下一次调用立刻重试。
    */
   failureTtlMs?: number;
+  /**
+   * 编码偏好（按条目回调或全局链）。
+   *
+   * 生产默认给一条**按体积**的策略：大件优先 zstd（省 27% 字节），
+   * 小件（< 1 MiB）优先 gzip（不值得为它挂 fzstd）。
+   */
+  codecPreference?: CodecPreference;
   /** 解析失败/回落的观察口（生产接日志；不吞掉原因） */
   onFallback?: (info: { packageName: string; reason: string }) => void;
 }

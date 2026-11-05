@@ -107,6 +107,18 @@ export function deriveCatalogueUrl(_siteBase?: string): string {
 // 才能保证「用户没退出网站之前，fzstd 只能拉一次」——两个 loader 会各拉一次。
 const fzstdLoaderForReleases = createBrowserFzstdLoader(getSiteBase());
 
+/**
+ * 编码偏好（生产策略，**按条目体积**）。
+ *
+ * 大件优先 zstd（省 27% 字节），小件优先 gzip（不值得为它挂 fzstd）。
+ * 阈值 1 MiB 是成本决策不是契约要求：链没命中就回落 manifest 顺序，所以
+ * 即便判断错了也只是多下一点字节，不会失败。
+ *
+ * 与 Static-Contract 信 102 §2 采纳的 `codecPreference` 同形状。
+ */
+const codecPreferenceBySize = (entry: { bytes: number }) =>
+  entry.bytes >= 1024 * 1024 ? (['zstd', 'gzip', 'identity'] as const) : (['gzip', 'zstd', 'identity'] as const);
+
 export const workspaceStorage = new WorkspaceStorageManager();
 export const downloadStore = new DownloadStore({
   storage: workspaceStorage.store,
@@ -131,6 +143,7 @@ export const downloadStore = new DownloadStore({
     fetchPort: new BrowserFetchAdapter(),
     // zstd 可用性**活查询**（内容仓 151 级别的坑：传死值会「先白下 zstd 再回落」）
     hasZstd: () => fzstdLoaderForReleases.isUsable(),
+    codecPreference: codecPreferenceBySize,
     onFallback: ({ packageName, reason }) => {
       console.warn(
         `[downloads] release contract unavailable for "${packageName}": ${reason} — falling back to whole-file path`
@@ -145,6 +158,7 @@ export const downloadStore = new DownloadStore({
     catalogueUrl: catalogueUrlCandidates(),
     fetchPort: new BrowserFetchAdapter(),
     hasZstd: () => fzstdLoaderForReleases.isUsable(),
+    codecPreference: codecPreferenceBySize,
     onFallback: ({ lane, reason }) => {
       console.warn(
         `[downloads] engine release unavailable for lane "${lane}": ${reason} — falling back to site lanes path`
