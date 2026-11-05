@@ -35,3 +35,35 @@ describe('deriveCatalogueUrl：catalogue 在域名根，不在站点 base 下', 
     expect(url).not.toContain('/deep/path/');
   });
 });
+describe('catalogue 候选列表（2026-11-05：原地址 404，站点迁到 static.* 双线）', () => {
+  it('★ 候选里必须含已知的静态分发域名（EO 主 + CF 备）', async () => {
+    const { catalogueUrlCandidates } = await import('../../src/modules/appContext');
+    const urls = catalogueUrlCandidates();
+    expect(urls).toContain('https://static.isui.ren/catalogue.json');
+    expect(urls).toContain('https://static.mango-mesa.ccwu.cc/catalogue.json');
+  });
+
+  it('★ EO 在主、CF 在备（顺序 = 优先级）', async () => {
+    const { catalogueUrlCandidates } = await import('../../src/modules/appContext');
+    const urls = catalogueUrlCandidates();
+    expect(urls.indexOf('https://static.isui.ren/catalogue.json')).toBeLessThan(
+      urls.indexOf('https://static.mango-mesa.ccwu.cc/catalogue.json'),
+    );
+  });
+
+  it('★ 候选不许有重复（去重后仍是同一批）', async () => {
+    const { catalogueUrlCandidates } = await import('../../src/modules/appContext');
+    const urls = catalogueUrlCandidates();
+    expect(new Set(urls).size).toBe(urls.length);
+  });
+
+  it('★ 显式配置优先（构建期注入可换域名，不用改代码）', async () => {
+    const { catalogueUrlCandidates } = await import('../../src/modules/appContext');
+    (window as any).__catalogueUrl = 'https://custom.test/cat.json';
+    try {
+      expect(catalogueUrlCandidates()[0]).toBe('https://custom.test/cat.json');
+    } finally {
+      delete (window as any).__catalogueUrl;
+    }
+  });
+});

@@ -61,7 +61,8 @@ export interface EngineReleaseSource {
 
 export interface EngineReleaseSourceOptions {
   /** catalogue 地址（域名根，不在站点 base 下） */
-  catalogueUrl: string;
+  /** catalogue 地址或**候选列表**（按序探测；域名会变，见 appContext 的实测注释） */
+  catalogueUrl: string | readonly string[];
   fetchPort: FetchPort;
   /** zstd 可用性查询（传函数则每次现问；传布尔为快照，仅测试） */
   hasZstd?: boolean | (() => boolean);

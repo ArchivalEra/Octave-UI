@@ -100,7 +100,7 @@ describe('parseManifest：契约铁律在消费侧真的被拦', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.rejection.kind).toBe('shape-invalid');
-    expect((r.rejection as { reason: string }).reason).toContain('bare filename');
+    expect((r.rejection as { reason: string }).reason).toContain('V1 name whitelist');
   });
 
   it('★ chunks[].file 含 .. ⇒ 拒（路径穿越）', () => {
@@ -365,5 +365,113 @@ describe('V11 许可规则：entry.license ?? manifest.license（唯一一条）
     if (!r.ok) return;
     expect(r.manifest.entries[0].license?.id).toBe('Apache-2.0');
     expect(r.manifest.entries[0].license?.url).toBe('https://a/L');
+  });
+});
+
+  it('★ 安全：`//evil.example/x` 这类名字必须被白名单拒（会 new URL 到别的 host）', () => {
+    const r = parseManifest(
+      baseManifest({
+        entries: [
+          entryOf({
+            variants: [
+              { codec: 'identity', chunks: [{ part: 0, file: '//evil.example/x', bytes: 1, sha256: 'a'.repeat(64) }] },
+            ],
+          }),
+        ],
+      }),
+      'b/',
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect((r.rejection as { reason: string }).reason).toContain('V1 name whitelist');
+  });
+
+  it('★ `?` / `#` 也会被拼进 URL ⇒ 同样必须拒（旧实现只拒 / 和 ..，这条会漏）', () => {
+    for (const bad of ['x.000?evil=1', 'x.000#frag']) {
+      const r = parseManifest(
+        baseManifest({
+          entries: [
+            entryOf({
+              variants: [{ codec: 'identity', chunks: [{ part: 0, file: bad, bytes: 1, sha256: 'a'.repeat(64) }] }],
+            }),
+          ],
+        }),
+        'b/',
+      );
+      expect(r.ok, `${bad} 应被拒`).toBe(false);
+    }
+  });
+
+  it('★ V6：单块 > 2^25 ⇒ 拒（fzstd backreference 上限，超了解不出）', () => {
+    const r = parseManifest(
+      baseManifest({
+        entries: [
+          entryOf({
+            bytes: 2 ** 25 + 1,
+            variants: [
+              {
+                codec: 'identity',
+                chunks: [{ part: 0, file: 'a.000', bytes: 2 ** 25 + 1, sha256: 'a'.repeat(64) }],
+              },
+            ],
+          }),
+        ],
+      }),
+      'b/',
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect((r.rejection as { reason: string }).reason).toContain('V6 max');
+  });
+
+describe('V5 跨变体块数一致（一个只在部分编码下有效的 manifest 是坏的）', () => {
+  it('★ zstd 3 块 / gzip 2 块 ⇒ 必须拒（否则 gzip 客户端永远不知道自己拿到坏 manifest）', () => {
+    const r = parseManifest(
+      baseManifest({
+        entries: [
+          entryOf({
+            bytes: 8,
+            variants: [
+              {
+                codec: 'zstd',
+                chunks: [
+                  { part: 0, file: 'a.z.000', bytes: 3, sha256: 'a'.repeat(64) },
+                  { part: 1, file: 'a.z.001', bytes: 3, sha256: 'a'.repeat(64) },
+                  { part: 2, file: 'a.z.002', bytes: 2, sha256: 'a'.repeat(64) },
+                ],
+              },
+              {
+                codec: 'gzip',
+                chunks: [
+                  { part: 0, file: 'a.g.000', bytes: 4, sha256: 'a'.repeat(64) },
+                  { part: 1, file: 'a.g.001', bytes: 4, sha256: 'a'.repeat(64) },
+                ],
+              },
+            ],
+          }),
+        ],
+      }),
+      'b/',
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect((r.rejection as { reason: string }).reason).toContain('codecs disagree on chunk count');
+    expect((r.rejection as { reason: string }).reason).toContain('zstd=3');
+    expect((r.rejection as { reason: string }).reason).toContain('gzip=2');
+  });
+
+  it('块数一致（同为 2）⇒ 通过', () => {
+    const mk = (codec: string, p: string) => ({
+      codec,
+      chunks: [
+        { part: 0, file: `a.${p}.000`, bytes: 4, sha256: 'a'.repeat(64) },
+        { part: 1, file: `a.${p}.001`, bytes: 4, sha256: 'a'.repeat(64) },
+      ],
+    });
+    const r = parseManifest(
+      baseManifest({ entries: [entryOf({ bytes: 8, variants: [mk('zstd', 'z'), mk('gzip', 'g')] })] }),
+      'b/',
+    );
+    expect(r.ok).toBe(true);
   });
 });

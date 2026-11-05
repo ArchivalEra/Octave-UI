@@ -75,6 +75,18 @@ export type ManifestLoadResult =
   | { ok: true; manifest: ReleaseManifest; base: string }
   | { ok: false; rejection: ManifestRejection };
 
+/**
+ * 契约 V1 的资产名白名单（与 Static-Contract 参考客户端逐字一致）：
+ * `^[A-Za-z0-9_-][A-Za-z0-9._-]*$`。
+ *
+ * 为什么从严：块 URL 由 `base + chunk.file` 拼成。名字里若允许 `//`，
+ * `new URL('//evil.example/x', base)` 会**换 host** —— manifest 能劫持下载源。
+ */
+const ASSET_NAME_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
+
+/** 契约 V6：单块上限 2^25 字节（fzstd backreference 安全边界） */
+const MAX_CHUNK_BYTES = 2 ** 25;
+
 const CODEC_ALIASES: Readonly<Record<string, ReleaseCodec>> = {
   zstd: 'zstd',
   gzip: 'gzip',
@@ -169,17 +181,40 @@ export function parseManifest(raw: unknown, url: string): ManifestLoadResult {
         if (typeof c.file !== 'string' || !c.file) {
           return { ok: false, rejection: { kind: 'shape-invalid', reason: `entry "${e.name}" chunk.file missing`, url } };
         }
-        // 铁律 ①：纯文件名、无路径
-        if (c.file.includes('/') || c.file.includes('..')) {
+        // 铁律 ①：名字必须在**契约白名单**内（V1：`^[A-Za-z0-9_-][A-Za-z0-9._-]*$`）。
+        //
+        // 移植自 Static-Contract 参考客户端（2026-11-05）。**这是安全控制不是洁癖**：
+        // 块 URL 是 `new URL(chunk.file, root)` 拼的，一个 `//evil.example/x`
+        // 会解析到**别的 host** —— 一份恶意 manifest 就能把客户端带离镜像。
+        // 我们原来只拒 `/` 与 `..`，`?`/`#` 会被拼进 URL（同一类风险的弱版本）。
+        if (!ASSET_NAME_RE.test(c.file)) {
           return {
             ok: false,
-            rejection: { kind: 'shape-invalid', reason: `chunk.file must be a bare filename: "${c.file}"`, url },
+            rejection: {
+              kind: 'shape-invalid',
+              reason: `chunk.file violates the V1 name whitelist: "${c.file}"`,
+              url,
+            },
           };
         }
         if (!isNonNegativeInt(c.part) || !isPositiveInt(c.bytes) || !isSha256Hex(c.sha256)) {
           return { ok: false, rejection: { kind: 'shape-invalid', reason: `entry "${e.name}" chunk fields invalid`, url } };
         }
         chunks.push({ part: c.part as number, file: c.file, bytes: c.bytes as number, sha256: c.sha256 });
+      }
+
+      // 契约 V6：单块不得超过 2^25（fzstd backreference 上限）。超了就解不出。
+      for (const c of chunks) {
+        if (c.bytes > MAX_CHUNK_BYTES) {
+          return {
+            ok: false,
+            rejection: {
+              kind: 'shape-invalid',
+              reason: `entry "${e.name}" chunk "${c.file}" is ${c.bytes} B > V6 max ${MAX_CHUNK_BYTES}`,
+              url,
+            },
+          };
+        }
       }
 
       // part 必须从 0 连续：拼接顺序靠它，缺号会静默拼错
@@ -197,6 +232,24 @@ export function parseManifest(raw: unknown, url: string): ManifestLoadResult {
 
     if (variants.length === 0) {
       return { ok: false, rejection: { kind: 'shape-invalid', reason: `entry "${e.name}" has no usable variant`, url } };
+    }
+
+    // 契约 V5 后半：**同一 entry 的所有 codec 必须切出相同块数**（它们切的是同一批原始字节）。
+    //
+    // 为什么必须查所有变体、而不只查本端要选的那个（移植自参考客户端 2026-11-05）：
+    // 否则同一份 manifest 会对 zstd 客户端「有效」、对 gzip 客户端「无效」，
+    // 而选不了 zstd 的客户端**永远不会知道这份 manifest 是坏的**——它会以为是自己解不了。
+    const counts = new Set(variants.map((v) => v.chunks.length));
+    if (counts.size > 1) {
+      const detail = variants.map((v) => `${v.codec}=${v.chunks.length}`).join(', ');
+      return {
+        ok: false,
+        rejection: {
+          kind: 'shape-invalid',
+          reason: `entry "${e.name}" codecs disagree on chunk count (${detail}); V5 requires them to slice the same bytes`,
+          url,
+        },
+      };
     }
     entries.push({
       product: typeof e.product === 'string' ? e.product : '',

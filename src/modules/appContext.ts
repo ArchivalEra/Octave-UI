@@ -55,12 +55,52 @@ function getSiteBase(): string {
  * 所以要从 siteBase 里剥出 origin 再拼 `/static/catalogue.json`，
  * 不能直接 `${siteBase}/static/catalogue.json`。
  */
-export function deriveCatalogueUrl(_siteBase?: string): string {
-  // 参数**故意不参与计算**（保留是为了让调用点自说明「我传了 siteBase 但没用它」）。
-  // 原因：catalogue 在域名根，与 siteBase 无关；从 siteBase 里剥 origin 在
-  // 非浏览器环境（测试/SSR，没有 location）会得到空串，反而更脆。直接用 location.origin。
+/**
+ * catalogue 的**候选地址列表**（按序探测，第一个能用的说了算）。
+ *
+ * ⚠️ 为什么是列表而不是一个地址（2026-11-05 实测教训）：
+ *   我原先写死 `location.origin + '/static/catalogue.json'`，并在注释里写「catalogue
+ *   在域名根，与 siteBase 无关」。**今天那个地址 404 了**：
+ *
+ *     https://isui.ren/static/catalogue.json          ⇒ 404  ← 我曾经用的
+ *     https://static.isui.ren/catalogue.json          ⇒ 200  ← 现在真的在这
+ *     https://static.mango-mesa.ccwu.cc/catalogue.json ⇒ 200 ← CF 镜像（双线）
+ *
+ *   站点侧把静态分发挪到了独立的 `static.*` 域名（正是 `101` 里说的 EO/CF 双线）。
+ *   ⇒ 写死任何单个域名都会在某天 404，而**这个错误是静默的**（拿不到 catalogue
+ *     就回落整包路径，用户看不出区别，只是所有 release 收益全丢）。
+ *
+ *   所以：**给一组候选，按序试**。第一个 200 的说了算；全挂才回落整条路径。
+ */
+export function catalogueUrlCandidates(): string[] {
+  const out: string[] = [];
+  // ① 显式配置（构建期可注入；换域名不用改代码）
+  const configured =
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.PUBLIC_CATALOGUE_URL) ||
+    (typeof document !== 'undefined'
+      ? document.querySelector('meta[name="catalogue-url"]')?.getAttribute('content')
+      : '') ||
+    (typeof window !== 'undefined' ? (window as any).__catalogueUrl : '');
+  if (configured) out.push(String(configured));
+
+  // ② 同源（若站点把 catalogue 与页面放一起；某些部署就是这样）
   const origin = typeof location !== 'undefined' && location.origin ? location.origin : '';
-  return `${origin}/static/catalogue.json`;
+  if (origin) {
+    out.push(`${origin}/static/catalogue.json`);
+    out.push(`${origin}/catalogue.json`);
+  }
+
+  // ③ 已知的静态分发域名（EO 主 + CF 备；**顺序 = 优先级**）
+  out.push('https://static.isui.ren/catalogue.json');
+  out.push('https://static.mango-mesa.ccwu.cc/catalogue.json');
+
+  // 去重（保留首现顺序）
+  return [...new Set(out)];
+}
+
+/** 兼容旧调用点：返回首选项（真正取用时应当遍历 `catalogueUrlCandidates()`） */
+export function deriveCatalogueUrl(_siteBase?: string): string {
+  return catalogueUrlCandidates()[0] ?? '/static/catalogue.json';
 }
 
 // fzstd 加载器**单例**：两条发布缝（包 + 引擎）共享同一个实例，
@@ -87,7 +127,7 @@ export const downloadStore = new DownloadStore({
   // 但原因走 onFallback 出去，不静默吞。
   releaseSource: createCatalogueReleaseSource({
     // 注意：catalogue 在**域名根**，不在 siteBase 下（见 deriveCatalogueUrl 的实测注释）
-    catalogueUrl: deriveCatalogueUrl(),
+    catalogueUrl: catalogueUrlCandidates(),
     fetchPort: new BrowserFetchAdapter(),
     // zstd 可用性**活查询**（内容仓 151 级别的坑：传死值会「先白下 zstd 再回落」）
     hasZstd: () => fzstdLoaderForReleases.isUsable(),
@@ -102,7 +142,7 @@ export const downloadStore = new DownloadStore({
   //   没有这一行，`resolveEngineTarget` 的 release 分支在产物里永远走不到
   //   —— Standards/Spec 两轴审查独立抓到的同一条：写了缝、写了测试、但生产不可达。
   engineReleaseSource: createCatalogueEngineReleaseSource({
-    catalogueUrl: deriveCatalogueUrl(),
+    catalogueUrl: catalogueUrlCandidates(),
     fetchPort: new BrowserFetchAdapter(),
     hasZstd: () => fzstdLoaderForReleases.isUsable(),
     onFallback: ({ lane, reason }) => {

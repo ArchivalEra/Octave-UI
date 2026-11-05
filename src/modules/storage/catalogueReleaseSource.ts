@@ -36,7 +36,8 @@ import { detectCodecCapabilities } from './chunkAssembler';
 
 export interface CatalogueReleaseSourceOptions {
   /** catalogue 的 URL（派生件；在**域名根**，不在站点 base 下——见 deriveCatalogueUrl） */
-  catalogueUrl: string;
+  /** catalogue 地址或**候选列表**（按序探测；域名会变，见 appContext 的实测注释） */
+  catalogueUrl: string | readonly string[];
   /** 取字节/JSON 的端口（与 DownloadStore 共用同一个 ⇒ 测试可注入 Mock） */
   fetchPort: FetchPort;
   /**

@@ -15,13 +15,26 @@
 // 上游换 tag 我们不用改代码。
 
 import type { FetchPort } from './FetchPort';
+import { computeSha256 } from './FetchPort';
 import type { ReleaseManifest } from './releaseContract';
 import { parseManifest, type ManifestLoadResult, type ManifestRejection } from './releaseContract';
 
 /** catalogue 里的一个 release 条目（派生件，字段随 Static-Contract 演进） */
 export interface CatalogueRelease {
   readonly id: string;
+  /** 集群镜像（先试） */
   readonly base: string;
+  /**
+   * 兜底 source（契约 §5.3 的 `base_proxy`）：`base` 不可达时换它。
+   *
+   * 移植自 Static-Contract 参考客户端（2026-11-05）：他们有完整的多 root 回退
+   * （`base` → `base_proxy` + 共享失败账本 + 按字节量推导的重试预算）。
+   * 我们之前只有单一 base 的固定退避 ⇒ **镜像挂了没有旁路**。
+   *
+   * 实测此刻 catalogue 只给 `base`（无 `base_proxy`）——所以这是**契约就绪、
+   * 数据未用**的状态：字段有则用、无则跳过，零行为变化。
+   */
+  readonly base_proxy?: string | null;
   readonly manifest_sha256?: string;
   readonly license?: { readonly id?: string; readonly url?: string };
   readonly verified_at?: string;
@@ -68,6 +81,7 @@ export function parseCatalogue(raw: unknown): Catalogue | null {
     releases.push({
       id: e.id,
       base: e.base,
+      base_proxy: typeof e.base_proxy === 'string' && e.base_proxy ? e.base_proxy : null,
       manifest_sha256: typeof e.manifest_sha256 === 'string' ? e.manifest_sha256 : undefined,
       license:
         e.license && typeof e.license === 'object'
@@ -90,23 +104,35 @@ export function parseCatalogue(raw: unknown): Catalogue | null {
 }
 
 /** 拉取并解析 catalogue。空目录 / 坏形状 ⇒ null（调用方必须明说，不许当成空市场） */
-export async function loadCatalogue(fetchPort: FetchPort, url: string, signal?: AbortSignal): Promise<Catalogue | null> {
-  try {
-    const raw = await fetchPort.fetchJSON<unknown>(url, { signal });
-    return parseCatalogue(raw);
-  } catch {
-    return null;
+export async function loadCatalogue(
+  fetchPort: FetchPort,
+  url: string | readonly string[],
+  signal?: AbortSignal,
+): Promise<Catalogue | null> {
+  // 支持**候选列表**：按序试，第一个成功的说了算（2026-11-05 实测教训：
+  // 静态分发域名会变，写死单个地址某天就 404，而拿不到 catalogue 是**静默降级**
+  // ——所有 release 收益全丢，用户看不出区别）。全挂才返回 null。
+  const candidates = typeof url === 'string' ? [url] : [...url];
+  for (const candidate of candidates) {
+    if (signal?.aborted) return null;
+    try {
+      const raw = await fetchPort.fetchJSON<unknown>(candidate, { signal });
+      const parsed = parseCatalogue(raw);
+      if (parsed) return parsed;
+      // 拿到了但不是合法 catalogue（例如 HTML 落地页）⇒ 换下一个候选
+    } catch {
+      // 这个候选不可用 ⇒ 换下一个
+    }
   }
+  return null;
 }
 
 /**
  * 取一个 release 的 manifest，失败返回结构化原因（不 throw——死链是常态，不是异常）。
  *
- * ⚠️ catalogue 的 `manifest_sha256` **本层不做校验**（如实说明，不假装做了）：
- * 它证明「我拿到的是派生件记的那份 manifest」，但派生滞后期间新 tag 的 manifest
- * 还不该被旧 sha 判死——所以它只作为**诊断信号**被 `CatalogueRelease` 带出来，
- * 供上层决定是否使用。这里只解析、不比对；要校验是调用方的事，
- * 写「校验但不阻断」而实际没有比对代码，就是声称与实存不符。
+ * `manifest_sha256`（可选）：catalogue 给了就**校验**（2026-11-05 起，移植自参考客户端）。
+ * 没给就只解析——派生滞后期间新 tag 的 manifest 还不该被旧 sha 判死，所以是
+ * **有则校验、无则跳过**，不是「校验但不阻断」（后者是假字段）。
  */
 /**
  * 「权威产地优先」排序：上游产物仓优先于内容仓的供给副本。
@@ -136,9 +162,55 @@ export async function fetchReleaseManifest(
   fetchPort: FetchPort,
   base: string,
   signal?: AbortSignal,
+  expectedSha256?: string | null,
 ): Promise<ManifestLoadResult> {
   // base 拼接的唯一产地：与 chunkAssembler.chunkUrl 同形（base 末尾补 / 再拼裸名）
   const url = `${base.endsWith('/') ? base : `${base}/`}manifest.json`;
+
+  // ★ `manifest_sha256` 钉（移植自 Static-Contract 参考客户端 2026-11-05）。
+  //   有期望值时**必须取字节**而不是 fetchJSON——校验要的是原始字节。
+  //
+  //   为什么值得付这一步（我们之前把它当"诊断信号"、从不校验，等于假字段）：
+  //   manifest 是**整棵下载树的根**。CDN/代理返回一份被篡改或串了的 manifest，
+  //   后续每个块都会「按错的 sha 校验」——症状是逐块全红却查不出为什么。
+  //   钉住根比校验叶子便宜得多。
+  //
+  //   兼容性：catalogue 没给 `manifest_sha256` 时（当前线上就是）走原路径，
+  //   零额外开销、零行为变化。
+  if (expectedSha256) {
+    let bytes: Uint8Array;
+    try {
+      const res = await fetchPort.fetchBytes(url, { signal });
+      if (!res.ok) {
+        return { ok: false, rejection: { kind: 'network', httpStatus: res.status, url } };
+      }
+      bytes = res.data;
+    } catch (err: any) {
+      const status = typeof err?.status === 'number' ? err.status : 0;
+      return { ok: false, rejection: { kind: 'network', httpStatus: status, url } };
+    }
+    const actual = await computeSha256(bytes);
+    if (actual !== expectedSha256) {
+      // 根不对 ⇒ 整条 release 不可信。归到 network（换下一条 release 是对的），
+      // 但原因要能看出是「内容不符」而不是「连不上」。
+      return {
+        ok: false,
+        rejection: {
+          kind: 'network',
+          httpStatus: 0,
+          url: `${url} (manifest sha256 mismatch: expected ${expectedSha256.slice(0, 16)}…, got ${actual.slice(0, 16)}…)`,
+        },
+      };
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      return { ok: false, rejection: { kind: 'shape-invalid', reason: 'manifest is not valid JSON', url } };
+    }
+    return parseManifest(raw, base);
+  }
+
   let raw: unknown;
   try {
     raw = await fetchPort.fetchJSON<unknown>(url, { signal });
