@@ -35,11 +35,20 @@ function manifest(schema = 3): Record<string, unknown> {
   };
 }
 
+/** 共用的 fetchBytes 桩：一律 404 —— 这些判据只走 fetchJSON，字节面不参与。
+ *  全文件 FetchPort 复用这一份，避免每条用例各内联一份会漂移的假实现
+ *  （code-review Standards 轴：消除重复 stub）。 */
+const fetchBytes404: FetchPort['fetchBytes'] = async () => ({
+  ok: false,
+  status: 404,
+  data: new Uint8Array(0),
+  sha256: '',
+  totalBytes: null,
+});
+
 function portWith(manifests: Record<string, unknown | { fail: number } | { throw: true }>): FetchPort {
   return {
-    async fetchBytes() {
-      return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
-    },
+    fetchBytes: fetchBytes404,
     async fetchJSON<T>(url: string): Promise<T> {
       if (!(url in manifests)) throw Object.assign(new Error('404'), { status: 404 });
       const v = manifests[url];
@@ -105,9 +114,7 @@ describe('fetchReleaseManifest：失败要分得清「网络坏」与「manifest
   it('URL 拼接：base 有尾斜杠 / 无尾斜杠都得到 base/manifest.json', async () => {
     const calls: string[] = [];
     const port: FetchPort = {
-      async fetchBytes() {
-        return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
-      },
+      fetchBytes: fetchBytes404,
       async fetchJSON<T>(url: string): Promise<T> {
         calls.push(url);
         return manifest() as T;
@@ -191,9 +198,7 @@ describe('resolveFirstLiveRelease：死链容忍（本期最重要的一条）',
   it('maxAttempts 限制试探数量（派生窗口大时不许无限打空请求）', async () => {
     let tries = 0;
     const port: FetchPort = {
-      async fetchBytes() {
-        return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
-      },
+      fetchBytes: fetchBytes404,
       async fetchJSON<T>(): Promise<T> {
         tries++;
         throw Object.assign(new Error('404'), { status: 404 });
@@ -208,9 +213,7 @@ describe('回信 103：catalogue 全探测失败必须响亮（不许静默回�
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const urls = ['https://a.test/catalogue.json', 'https://b.test/catalogue.json'];
     const port: FetchPort = {
-      async fetchBytes() {
-        return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
-      },
+      fetchBytes: fetchBytes404,
       async fetchJSON<T>(url: string): Promise<T> {
         throw new Error(`HTTP 404 fetching ${url}`);
       },
@@ -232,9 +235,7 @@ describe('回信 103：catalogue 全探测失败必须响亮（不许静默回�
   it('★ 200 但返回 SPA 落地页（不是合法 catalogue）⇒ 也算失败、要响亮', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const port: FetchPort = {
-      async fetchBytes() {
-        return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
-      },
+      fetchBytes: fetchBytes404,
       async fetchJSON<T>(): Promise<T> {
         return '<!doctype html><html>SPA fallback</html>' as T;
       },
@@ -251,12 +252,12 @@ describe('回信 103：catalogue 全探测失败必须响亮（不许静默回�
   it('★ 第一个候选成功 ⇒ 不报错（零误报）', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const port: FetchPort = {
-      async fetchBytes() {
-        return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
-      },
+      fetchBytes: fetchBytes404,
       async fetchJSON<T>(url: string): Promise<T> {
         if (url === 'https://a.test/catalogue.json') {
-          return { schema: 1, releases: [{ id: 'X/r1', base: 'https://r/' }] } as T;
+          // 标识来自真实产物（与 releaseCatalogue.ts 的 id 形状锚点一致），不许编：
+          // 内容仓 100 §4.2 点名 'X/r1' 这类编造 id 为假 fixture 反例。
+          return { schema: 1, releases: [{ id: 'Octave-Extra-Content/supply-msl-4.1.0', base: 'https://r/' }] } as T;
         }
         throw new Error('should not be reached');
       },

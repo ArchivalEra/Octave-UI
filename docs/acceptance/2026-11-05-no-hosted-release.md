@@ -109,16 +109,24 @@ for t in A B C D E F G H; do git -C /mnt/hdd/antigravity-projects/Octave-UI log 
 | 22 | 默认并发 2 在真下载上被观测（峰值 ≤ 2） | **PASS（受控补头）** | `F-fzstd.md` §F7（`peakInFlight = 2`，分片时序复核 `F-raw.log`:213-231） |
 | 23 | catalogue 全探测失败时响亮报错 | **PASS**（修复后产物） | `G-A.log` 第 30 行 `[catalogue] ALL 4 candidate(s) failed … release benefits are LOST`（`=== MODE=A: 11 PASS / 0 FAIL ===`）；`G-reverse.md` §1/§3 |
 | 24 | 探测失败与「确实没有 release」在 UI/日志里可区分 | **PASS** | `G-reverse.md` §2：甲 `ALL 4 … failed`（error 级，`loadCatalogue`）vs 乙 `no release carried artifact …`（warn 级，`onFallback`），级别/前缀/原因串/出处皆不同 |
-| 25 | 每个子代理的钓鱼结果落成可复跑证据文件 | **PASS** | 本报告 §1 表（A–G 七个 .md + 各 -raw.log + 复跑命令）；票 G §5 记「MISSING：无」 |
+| 25 | 每个子代理的钓鱼结果落成可复跑证据文件 | **PASS** | A–G 七份 `.md` 报告已收进本 PR 分支 `docs/acceptance/evidence/`（换 checkout 不丢）；原始 `-raw.log` 体量较大，留在 `/tmp/fishing-2026-11-05/evidence/` 并在各报告里给出绝对路径 + 复跑命令。本报告 §1 表（七份 .md + 各 -raw.log + 复跑命令）；票 G §5 记「MISSING：无」 |
 | 26 | 每张票都有反向断言（把能力拿掉必须红） | **PASS（6 张成立）/ PARTIAL（C）** | `G-reverse.md` §5：A/B/D/E/F 成立、**C=PARTIAL**（C 自注 main 本就未绿，反证只证能力缺席态）；G 自身 §3 成立 |
-| 27 | 所有证据在同一份 dist 副本上采集 | **PASS（dist-clean）/ 但非最终口径** | `SHARED.md` §共享路径；`A-supply.md` §1.1（394 文件）；**注意** `SHARED.md` ★★：dist-clean 漏 4 个 `.tar`，最终口径应为 `dist-full`（79） |
+| 27 | 所有证据在同一份 dist 副本上采集 | **PARTIAL（不是 PASS）** | `SHARED.md` §共享路径；`A-supply.md` §1.1（394 文件）。**破纪律三处**：① 票 G 为产物级反向断言另建 `dist-G` / `dist-G-rev` 并重编 `App.js`（`G-reverse.md` §3）；② 票 B / F 用本地中继回放真实字节、补 CORS/CORP 头（`B-octave.md` 正控、`F-fzstd.md` §受控补头）；③ 票 A 另用 `dist-precise` / `dist-full` 做分类对照。spec 要求「共用这份副本，不各自建自己的 dist，避免两张皮」⇒ 已破。另 `dist-clean` 漏 4 个 `.tar`，最终口径应为 `dist-full`（79）。**修复后需在 `dist-full` 上重跑 A–G 同一判据**（列入 §5 未验边界） |
 | 28 | 验收集合覆盖 EO 主线与 CF 备线各至少一次 | **PASS** | `A-supply.md` §3/§4/§4.1（EO 18/18、CF 18/18）；`F-fzstd.md`（受控补头用两份真 catalogue 11245/11425 B） |
 | 29 | `EngineAssetResolver.assertBootable` 在真盘返回 verified | **未验** | A–G 七份报告均未出现 `assertBootable` / `verified` 的实测判据；票 B 的 boot 判据走 `window.octave`/`__octaveReady`，未直接调该断言。如实记未验，不推断 |
 | 30 | 最终拿到逐项 PASS/FAIL 报告 + 诚实列出没验到的边界 | **PASS（本文件）** | 本文件 §2（本表）、§4（裁定）、§5（未验边界清单） |
 
-**统计（避免「全部通过」误读）**：PASS = 19 条（其中 #8/#18 含「正控/受控」限定、#5/#12 为分层判定）、
-FAIL = 7 条、未验 = 2 条（#10 SKIPPED、#29 未验）、分层/条件 PASS = 2 条。
-**没有任何一条可以读成「全链路通过」**。
+**统计（避免「全部通过」误读）**：30 条里 **FAIL = 7 条**，**PARTIAL = 2 条**（#26 中票 C 的反向断言、#27 同一份 dist 副本纪律），
+**未验 = 2 条**（#10 SKIPPED、#29 未验），其余为 PASS 或分层/条件 PASS（#5/#8/#12/#18 带「正控 / 受控 / 分层」限定）。
+双判定行（#26 的「6 张成立 / C=PARTIAL」）不压成单一计数，判定列已逐项拆开。
+**没有任何一条可以读成「全链路通过」**；#27 由初稿的 PASS 降为 PARTIAL，是 code-review 双轴审查
+（Spec 轴发现票 G 另建 `dist-G`/`dist-G-rev`、票 B/F 走中继补头 ⇒ 破「共用一份副本」纪律）。
+
+**双斜杠判定归类口径（#3 / #6 / #8 / #11 / #12 / #18）**：判定列里带 `/` 的双判定
+（如「PASS（正控）/ 未验（默认网络）」）**左边为受控条件下成立、右边为默认线上路径未验**，
+两者各自独立、不许合并读成 PASS；写成双判定正是因为默认线上路径没有被验到
+（受控补头 / 正控回放不等于线上路径已通）。本表其余带括号限定（如「PASS（受控补头）」）
+同此口径：括号是成立条件，不是可省略的修饰。
 
 ---
 
@@ -198,6 +206,12 @@ to site lanes path`）。上级看不出「release 全线不可达」，与回�
   ```
 - 定性：**FAIL / 待修（本仓可修的真缺陷，钓鱼不改代码自证）**。注意与 §3.1 分开：
   人造 abort（情形甲）与真实 CORS 失败不同源、同形，`G-reverse.md` §4.1 已明确区分。
+- **已知未修缺陷（spec 口径的如实记录）**：spec 对「唯一允许改产品行为的一处」还要求
+  「**结构化原因 + 用户/维护者看得到**」。当前实现（`loadCatalogue` 全候选失败）只有
+  `console.error` 一条字符串，**无结构化原因通道、无 UI 呈现**。本 PR 只实现
+  `console.error` 一次；结构化原因与 UI 呈现属后续票，本次未做——不在本次修票范围
+  擅自补 UI / 结构化通道（那会超出「唯一允许改产品行为的一处」，构成 scope creep）。
+  故 `MODE=natural` 的 FAIL 保持 FAIL，不因本次修票改判。
 - 建议（仅记录，不实现）：`resolveFirstLiveRelease` / `firstLiveEntryAcrossCatalogue`
   全表扫完且 `dead.length === catalogue.releases.length` 时补一条 error 级诊断，与
   `[catalogue] ALL … failed`、`no release carried artifact` 三者各自独立；修完补一条真浏览器
@@ -376,13 +390,13 @@ node fish-b-eval42.mjs            # → B-eval42.log（value:42）
   原始日志**未复制进仓**，全在 `/tmp/fishing-2026-11-05/evidence/`；报告内给出的绝对路径
   与复跑命令即为取证入口。
 - 本票**未改任何产品代码**、未改 `SHARED.md`、未碰净化 dist。除报告外，本次提交还含事实系统
-  **机器维护**的两份台账更新（不是人工撰写的内容）：`FACTS.json`（`md_files` 89→90、
-  `md_lines` 7602→7996，由 `python3 zreflect/facts.py --accept-changes=md_files,md_lines`
-  逐条放行重测）与 `STATE.md` 的 `AUTO:FACTS` 机器块（pre-commit 自动
-  `--render-doc` + `git add`）。原因是加了一份被 git 跟踪的 `.md` 后，
-  `check_facts_replay.py` 的逐字复跑判据（`git ls-files -- '*.md' | wc -l`）必然变 90；
-  不重测会让「能复跑」断言永久变红、CI 也会拒。语义 diff 复核：其余 20 条事实的
-  `value` / `cmd` / `first_seen` 均未变，只有这两条值改口。
+  **机器维护**的台账更新（不是人工撰写的内容）：`FACTS.json` 由
+  `python3 zreflect/facts.py --accept-changes=md_files,md_lines` 逐键放行重测，
+  `STATE.md` 的 `AUTO:FACTS` 机器块由 pre-commit 自动 `--render-doc` 重渲染。
+  原因是新增被 git 跟踪的 `.md` 后，`check_facts_replay.py` 的逐字复跑判据
+  （`git ls-files -- '*.md' | wc -l`）输出必然变化；不重测会让「能复跑」断言
+  永久变红、CI 也会拒。报告不手抄这些数值：数值以 `FACTS.json` 为唯一产地，
+  由 `--render-doc` 重渲染进 `STATE.md`，本报告不作第二产地（纪律 2：数字只生产一次）。
 - **闸门环境状态（如实记录）**：`wt-H` 是新建 worktree，`check_locks.py` 会因缺少
   gitignored 的 `*.wasm` 工件而红。已从主仓
   `/mnt/hdd/antigravity-projects/Octave-UI/public/{bridge/w64,lanes/*/…}/octave.wasm`
