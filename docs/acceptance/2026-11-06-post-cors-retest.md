@@ -5,6 +5,11 @@
 > `Access-Control-Allow-Origin: *` + `Cross-Origin-Resource-Policy: cross-origin`。
 > 本文件记录**补齐后的默认线上路径复跑**、期间发现并修掉的四处产品/探针缺陷，
 > 以及一次「为了过判据把站点特色改没了」的回归与回退。
+>
+> **⚠️ 2026-11-06 晚间 code-review 后追加（§7）：真站 `https://isui.ren/repo/Octave/`
+> 的编译链实测仍 FAIL**（Forge 货架 404）。§0 的五个 PASS 表只成立于
+> `localhost:8906` 的净化副本与各自判据面，**不构成真站全链路跑通**。
+> 该缺陷已定位并修复，证据见 §7；判定口径见 §7.4。
 
 ---
 
@@ -218,5 +223,94 @@ for g in zreflect/check_*.py; do python3 "$g" || exit 1; done
 `Einfacht.env` 把 `REFLECT_READMES=README.md` 设为单条目 ⇒ 互链判据退化；
 不加载该 env 时 `python3 zreflect/check_readme_sync.py` 裸跑报 4 个问题。
 钩子实际执行时通过 `reflect-hooks/einfacht-env.sh` 加载该文件 ⇒ pre-push 绿。
-本轮**未改 README**（回滚了事实摘要句，信息移到本文件 §0），
-避免触发 AGENTS.md「改任何一份 ⇒ 三份全含」的判据。
+单条目清单下 `--changed` 判据**仍要求本次推送的改动集含 `README.md`**
+（AGENTS.md 硬坑「改任何一份 ⇒ 同批」），故最终提交 `e0a430e` 把 §0 的
+事实摘要同步进了 `README.md` 一并推送；`README.zh.md` / `README.de.md`
+在仓内不存在，是 `Einfacht.env` 单条目配置造成的既有缺口，如实记录未修。
+
+---
+
+## 7. 真站线上复测（code-review 后追加，2026-11-06 晚间）
+
+### 7.1 线上实测失败（用户贴回，不是推断）
+
+```
+[failed] 编译失败：读不到 Forge 货架（assets/forge-catalog.json）：
+取清单失败 /repo/Octave/lanes/wasm32-final/assets/forge-catalog.json → HTTP 404
+errCode@https://isui.ren/repo/Octave/bridge/bundle.js:82:15
+createOctaveAssets/catalog/_catalogP<@https://isui.ren/repo/Octave/bridge/bundle.js:1050:17
+```
+
+本地净化盘与真站逐字复现（复跑
+`curl -sS -o /dev/null -w '%{http_code}' <url>`）：
+
+| 路径 | 本地 8906 | 真站 |
+|---|---|---|
+| `/repo/Octave/assets/forge-catalog.json` | 200 | 200 |
+| `/repo/Octave/bridge/assets/forge-catalog.json` | 200 | 200 |
+| `/repo/Octave/lanes/wasm32-final/assets/forge-catalog.json` | **404** | **404** |
+
+### 7.2 根因（两轴审查一致判定）
+
+`WasmEmbedAdapter.ts` 传给 `OctaveEmbed.create({base})` 的是
+`${normalizedBase}lanes/${laneFolder}/` —— 这是**引擎产物 base**
+（胶水 / `octave.build.json` / `assets/manifest.*.json` 都在 `lanes/<lane>/` 下，正确）。
+但 `public/bridge/assets-loader.js` 的 `createOctaveAssets(module, base, isReady)`
+把同一个 `base` 用 `withBase(u){return base+u}` 套到**站点级资产**上：
+`catalog()` 的 `fetchJSON('assets/forge-catalog.json')` ⇒ 拼出
+`/repo/Octave/lanes/wasm32-final/assets/forge-catalog.json` ⇒ 404。
+
+一个 `base` 承载两种语义（Primitive Obsession / Mysterious Name）。
+11-05 报告 §3.4 已判「`assets-loader.js` 硬编码站内路径」FAIL，
+11-06 §5.1 却把它降级成「未闭合的债 / 没验真编一次 .oct」——
+**把已实测的 FAIL 写成未验边界**，违反 AGENTS.md 纪律 5（活状态只写实测）。
+
+### 7.3 为什么之前的「全绿」没抓到（纪律 3 反例）
+
+- `git diff main...e0a430e -- public/` 为空：`public/bridge/` 一行未改。
+- 770 个 vitest 用例里 `tests/` 对 `createOctaveAssets` / `API.catalog()` /
+  `CATALOG_UNREADABLE` **零引用**；`BrowserAssetsAdapter.test.ts` 用的是注入的
+  `window.OctaveAssets.catalog()`，不是 bridge 实例。
+- 票 B/C/E/F 的判据面是 boot / MSL 装载 / 插件 WebMCP / fzstd；票 E 的反向
+  `abort` 刻意模拟的是**站点根** `assets/forge-catalog.json`，
+  从没走一次带 `lanes/<lane>/` 前缀的 `API.catalog()`。
+- 11-05 §5.19 把「线上 `isui.ren` 路径」列为 spec Out of Scope，
+  于是真站已发生的 FAIL 在验收口径里没有归属。
+  这正是「测不到 ≠ 不存在」：探针面根本没对准缺陷面。
+
+### 7.4 修复与复跑
+
+`public/bridge/assets-loader.js`：
+- 新增 `siteRoot()` 从 `base` 剥掉 `lanes/<lane>/` 段得站点根，`withSiteBase(u)`；
+- `fetchJSON(url, siteLevel)` / `fetchBinary(url, siteLevel)` 在 `siteLevel` 时走站点根；
+- 6 个站点级调用（`forge-catalog` / `llvm/manifest` / `llvm/config.h` ×3 /
+  `pkg-module-table` / `octinc`）显式标 `true`；
+- `fetchJSON(url || MANIFEST_URL)`（lane 级引擎清单）**不标**，保持 `withBase`。
+
+复跑（`/mnt/hdd/zcode-test/harness`）：
+
+```bash
+node probe-bridge-catalog-1106.mjs     # === BRIDGE_CATALOG: PASS ===
+#   catalog() → /repo/Octave/assets/forge-catalog.json HTTP200, packs:17, 零 lane 404
+node probe-bridge-lane-base-1106.mjs   # === LANE_BASE: PASS ===
+#   init('assets/manifest.json') → /repo/Octave/lanes/wasm32-final/assets/manifest.json HTTP200
+CI=true npx vitest run tests/bridge/siteLevelAssets.test.ts   # 4/4 静态防回潮锁
+```
+
+两条探针是**同类肯定 + 反向**成对：站点级走根 200、lane 级仍走车道 200，
+互不干扰。原始输出：`/tmp/msl-verify-2026-11-06/evidence/bridge-*.log`。
+
+### 7.5 判定口径（如实写）
+
+- **11-05 的 FAIL 判定仍不改判**：真站编译链此前实测 FAIL，
+  本轮修复只在本地净化盘 + 真浏览器探针上验过，**没有**在 `https://isui.ren`
+  重新部署后再跑一次（部署不在本仓职责内，spec Out of Scope）。
+- §0 的五个 PASS 表**只成立于各自的 localhost 判据面**，
+  不是「真站全链路跑通」。Spec 轴据此判「今天一定要跑通」的目标
+  **按真站事实未达成**；本轮补上的修复与证据是朝目标推进，不是达成证明。
+- 30 条判据里，#2（重跑全链路）、#12（LLVM 运行期取用）、#15
+  （包管理器目录非空，真站插件面曾空壳）、#30（诚实列边界）
+  受这条 404 直接影响，需在真站重部署后重定性。
+- 仍未闭合：`compile-worker.mjs` 里 `assets/llvm/` 与 `octincTarUrl` 的
+  worker 相对 URL 解析、`pyodide` 的 `pBase` 双拼、CF 备线直连、
+  `dist-full`（79 字节）口径、`loadCatalogue` 结构化原因。

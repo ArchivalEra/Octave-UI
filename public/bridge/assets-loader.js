@@ -111,6 +111,19 @@
       return m;
     }
     function withBase(u) { return base + u; }
+    // ★ 站点级资产（forge-catalog / pyodide / llvm / pkg-module-table）不在
+    //   `lanes/<lane>/` 下，而在站点根 `assets/`。但宿主传给 createOctaveAssets 的
+    //   `base` 是**引擎产物 base**（WasmEmbedAdapter: `${siteBase}lanes/${laneFolder}/`），
+    //   引擎胶水 / octave.build.json / assets/manifest.*.json 需要它，站点级资产不需要。
+    //   两个语义挤一个 base ⇒ catalog() 拼出
+    //   `/repo/Octave/lanes/wasm32-final/assets/forge-catalog.json`（HTTP 404，
+    //   真站 isui.ren 2026-11-06 实测「编译失败：读不到 Forge 货架」）。
+    //   这里从 base 剥掉 `lanes/<lane>/` 段得到站点根；base 为空（文件级别名
+    //   `createOctaveAssets(null, '', …)`）时站点根也是空，行为逐字不变。
+    function siteRoot() {
+      return String(base).replace(/lanes\/[^/]+\/?$/, '');
+    }
+    function withSiteBase(u) { return siteRoot() + u; }
 
     function mkdirp(path) {
       var parts = path.split('/').filter(Boolean);
@@ -130,16 +143,18 @@
       });
     }
 
-    function fetchBinary(url) {
-      return fetch(withBase(url)).then(function (r) {
-        if (!r.ok) throw errCode('ASSET_FETCH_FAILED', '取资产失败 ' + withBase(url) + ' → HTTP ' + r.status);
+    function fetchBinary(url, siteLevel) {
+      var full = siteLevel ? withSiteBase(url) : withBase(url);
+      return fetch(full).then(function (r) {
+        if (!r.ok) throw errCode('ASSET_FETCH_FAILED', '取资产失败 ' + full + ' → HTTP ' + r.status);
         return r.arrayBuffer();
       });
     }
 
-    function fetchJSON(url) {
-      return fetch(withBase(url)).then(function (r) {
-        if (!r.ok) throw errCode('MANIFEST_FETCH_FAILED', '取清单失败 ' + withBase(url) + ' → HTTP ' + r.status);
+    function fetchJSON(url, siteLevel) {
+      var full = siteLevel ? withSiteBase(url) : withBase(url);
+      return fetch(full).then(function (r) {
+        if (!r.ok) throw errCode('MANIFEST_FETCH_FAILED', '取清单失败 ' + full + ' → HTTP ' + r.status);
         return r.json();
       });
     }
@@ -464,8 +479,8 @@
     //    不硬编码）。
     function toolchainWorker(target, log) {
       if (_tcWorkers[target]) return _tcWorkers[target];
-      _tcWorkers[target] = Promise.all([fetchJSON('assets/llvm/manifest.json'),
-                                        fetchJSON('assets/llvm/config.h.json').catch(function () { return null; })])
+      _tcWorkers[target] = Promise.all([fetchJSON('assets/llvm/manifest.json', true),
+                                        fetchJSON('assets/llvm/config.h.json', true).catch(function () { return null; })])
       .then(function (both) {
         var man = both[0], _configMacros = both[1];
         var byName = {};
@@ -511,7 +526,7 @@
 
     // ②b cfgReady()：config.h 宏数（诊断用；真正的 config.h 由 worker 写进 /src）
     function cfgReady() {
-      return fetchJSON('assets/llvm/config.h.json').then(function (c) {
+      return fetchJSON('assets/llvm/config.h.json', true).then(function (c) {
         return Object.keys(c || {}).length;
       }, function () { return 0; });
     }
@@ -523,11 +538,11 @@
     function headersInto(M, target) {
       if (_headersDone) return Promise.resolve(_headersDone);
       var inc = '/src/octinc';
-      return fetchBinary('assets/octinc/octave-headers.tar.gz').then(function (buf) {
+      return fetchBinary('assets/octinc/octave-headers.tar.gz', true).then(function (buf) {
         M.FS.writeFile('/tmp/octinc.tar.gz', new Uint8Array(buf));
         var rc = M.eval_string("__forge_src_list__('/tmp/octinc.tar.gz', '" + inc + "', true)");
         if (rc !== 0) throw errCode('UNPACK_FAILED', 'Octave 头解包失败（rc=' + rc + '）');
-        return fetchJSON('assets/llvm/config.h.json');
+        return fetchJSON('assets/llvm/config.h.json', true);
       }).then(function (cfg) {
         // config.h：25 宏逐条写（数据跟 catalog 走，不硬编码 —— §10 判据 2）
         var lines = ['#pragma once'];
@@ -543,7 +558,7 @@
     var _moduleTables = null;
     function loadModuleTables() {
       if (_moduleTables) return Promise.resolve(_moduleTables);
-      return fetchJSON('assets/pkg-module-table.json')
+      return fetchJSON('assets/pkg-module-table.json', true)
         .then(function (d) {
           _moduleTables = (d && d.module_table) || {};
           return _moduleTables;
@@ -983,7 +998,7 @@
         // ⚠️ 传**裸路径**（fetchJSON 内部会 withBase）—— 曾经这里又 withBase 一次，
         //    base 为空时无害、非空时双拼（`/base//base/assets/…` ⇒ 404）。
         //    由 accept-install-verdict 的 V3（同源子路径 base）首次暴露。
-        _catalogP = fetchJSON('assets/forge-catalog.json').then(function (c) {
+        _catalogP = fetchJSON('assets/forge-catalog.json', true).then(function (c) {
           _catalog = c || { packs: [] };
           var byName2 = {};
           (_catalog.packs || []).forEach(function (p) { byName2[p.name] = p; });
