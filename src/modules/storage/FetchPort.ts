@@ -122,6 +122,17 @@ export class MockFetchAdapter implements FetchPort {
   private files = new Map<string, { data: Uint8Array; sha256: string; status?: number }>();
   private jsonStore = new Map<string, any>();
   private injectErrorOnUrl = new Map<string, Error>();
+  /** 请求面记录（测试诊断用）：每次 fetchBytes / fetchJSON 都记一条。
+   *  为什么需要它：旧测试把「错误 URL」与「正确 URL」都塞了 fixture，
+   *  于是「请求打到了不存在的路径」这类缺陷永远测不出来（2026-11-06 真机实测教训：
+   *  w64 车道去取 lanes/master/w64/assets/manifest.json，站点上那是 404）。
+   *  断言「只请求了真实存在的路径」比断言「下载成功了」更接近真站点。 */
+  private requestLog: string[] = [];
+
+  /** 已发生的全部请求 URL（按发生顺序，含重复）。 */
+  requestedUrls(): string[] {
+    return [...this.requestLog];
+  }
 
   setFile(url: string, content: string | Uint8Array, sha256Override?: string): void {
     const data = typeof content === 'string' ? new TextEncoder().encode(content) : content;
@@ -147,6 +158,7 @@ export class MockFetchAdapter implements FetchPort {
   }
 
   async fetchBytes(url: string, options?: FetchOptions): Promise<FetchResult> {
+    this.requestLog.push(url);
     if (this.injectErrorOnUrl.has(url)) {
       throw this.injectErrorOnUrl.get(url)!;
     }
@@ -179,6 +191,7 @@ export class MockFetchAdapter implements FetchPort {
   }
 
   async fetchJSON<T = any>(url: string, options?: FetchOptions): Promise<T> {
+    this.requestLog.push(url);
     if (this.injectErrorOnUrl.has(url)) {
       throw this.injectErrorOnUrl.get(url)!;
     }

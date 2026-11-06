@@ -117,7 +117,24 @@ export class BrowserAssetsAdapter implements IAssetsPort {
             if (e) {
               if (e.description !== undefined && e.description !== '') p.description = e.description;
               if (e.links !== undefined && Array.isArray(e.links) && e.links.length > 0) p.links = e.links;
-              if (e.versions !== undefined && Array.isArray(e.versions) && e.versions.length > 0) p.versions = e.versions;
+              // ★ 2026-11-06 修复（11-05 报告 §3.5）：`p.versions = e.versions`
+              //   会用 browse() 的 versions[] 整组覆盖市场目录。browse() 的条目只有
+              //   version/stage，没有 url/sha256/size ⇒ wantedArtifactOf 推不出产物名、
+              //   做不了双确认 ⇒ 包下载报 missing url、走不到 catalogue。
+              //   现在按 version 逐条合流：市场契约的定位三键（url/sha256/size）
+              //   是权威，browse() 只补它确实带的元数据，绝不整体替换。
+              if (e.versions !== undefined && Array.isArray(e.versions) && e.versions.length > 0) {
+                const marketVersions = Array.isArray((p as any).versions) ? (p as any).versions : [];
+                const merged = e.versions.map((ev: any) => {
+                  const mv = marketVersions.find((m: any) => m && m.version === ev?.version);
+                  return mv ? { ...ev, ...mv } : ev;   // 市场侧字段优先
+                });
+                // 市场目录里 browse() 没提到的版本不能丢
+                for (const mv of marketVersions) {
+                  if (!merged.some((x: any) => x?.version === mv?.version)) merged.push(mv);
+                }
+                (p as any).versions = merged;
+              }
               (p as any).status = {
                 compatible: e.compatible,
                 fromSource: e.fromSource,

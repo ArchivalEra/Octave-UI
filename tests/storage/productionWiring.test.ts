@@ -33,7 +33,18 @@ describe('生产可达性：组合根真的注入了两条缝', () => {
 
   it('★ appContext 注入了 releaseSource（内容侧，既有）', () => {
     const src = readSource('src/modules/appContext.ts');
-    expect(src).toMatch(/releaseSource\s*:\s*createCatalogueReleaseSource\(/);
+    // 下载侧真构造 + 真注入（分片装配 → 落盘 OPFS）
+    expect(src).toMatch(/const\s+catalogueReleaseSource\s*=\s*createCatalogueReleaseSource\(/);
+    expect(src).toMatch(/releaseSource:\s*catalogueReleaseSource/);
+    // ★ 下载/装载解耦（README.md:28-29）：装载侧只读 OPFS 已下载字节，
+    //   绝不在装载时现场从 release 装配、也不自己复刻下载侧的 ref 形状。
+    //   钉住「按名字查记账 + 用记录自身 ref 做物理对账 + 读盘」+「旧现场装配模块不在」。
+    expect(src).toContain('setMslDownloadedAsset(');
+    expect(src).toContain('downloadStore.index()');
+    expect(src).toContain('downloadStore.stat(rec.ref)');
+    expect(src).toContain('workspaceStorage.store.read(f.path)');
+    expect(src).not.toContain('fetchReleaseAssetBytes');
+    expect(src).not.toContain("kind: 'src', arch: null");
   });
 
   it('★ 两条缝共享**同一个** fzstd loader 单例（否则会各拉一次，违反"只拉一次"）', () => {

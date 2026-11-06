@@ -905,8 +905,16 @@ export class DownloadStore {
         );
       }
       const filename = String(item.url).split('/').pop() || `${ref.name}-${ref.version}.zip`;
-      const url = this.resolveUrl(item.url);
       const destPath = `downloads/file/${ref.name}/${ref.version}/${filename}`;
+      // ★ 生产路径说明（2026-11-06 审查后如实记）：
+      //   `form:"file"` 的单件包（MSL）在 UI 上构造的是 `kind:'src'`
+      //   （PackageManagerModal.executeDownload），走上面的 `resolveSrcTarget`
+      //   的 releaseSource 分支 → 分片装配 → 落盘 `downloads/src/...`。
+      //   本 `resolvePreTarget` 分支只在 `kind:'pre'` 下可达，而产品上
+      //   `kind:'pre'` 零构造点（仅测试用），故**保持 086 裁定的站内单件形状**，
+      //   不在这里复制一份 releaseSource 逻辑制造「测试验 A、产品跑 B」的第二形状。
+      //   装载侧也不复刻任何 ref：按名字查 DownloadStore 记账再读盘（见 appContext）。
+      const url = this.resolveUrl(item.url);
       return {
         sha256: item.sha256,
         bytes: item.size,
@@ -1237,7 +1245,26 @@ export class DownloadStore {
       destPath: `downloads/engine/${lane}/${variant}/octave.build.json`,
       sha256: undefined,
     });
-    const assetsManifestSubPath = chosenFolder ? `${chosenFolder}/assets/manifest.json` : 'assets/manifest.json';
+    // ⚠️ 站点布局与 build.json 所在目录**不同层**（2026-11-06 真浏览器实测缺陷）：
+    // `octave.build.json` 两份都有（车道根 + w64 子目录），但 `assets/` 只有**车道根**
+    // 一份——`lanes/master/w64/assets/manifest.json` 是 404。
+    // 且 w64 档要的是 `assets/manifest.w64.json`（oct 件指向 `assets/oct-w64/`），
+    // 不是 `assets/manifest.json`（那份指向 `assets/oct/` = w32 件）。
+    // 旧实现把 assets 清单拼在 chosenFolder 下 ⇒ w64 车道 404 ⇒ 整个引擎下载在
+    // saveManifest 前抛 STORAGE_WRITE_FAILED ⇒ 记账为空 ⇒ boot 判 unchecked 拒启。
+    // 所以这里把 chosenFolder 折叠回**车道根**（`lanes/<lane>` 前缀内的子目录一律收回），
+    // 并让清单名由 variant 决定，与 boot 侧 WasmEmbedAdapter 的 lanePlan.manifest 对齐。
+    // chosenFolder === '' 是站点根部署的历史兜底形态（host-007），此时清单也在根。
+    const laneRootPrefix = `lanes/${lane}`;
+    const laneRoot = chosenFolder
+      ? chosenFolder.startsWith(laneRootPrefix)
+        ? laneRootPrefix
+        : chosenFolder
+      : '';
+    const assetsManifestName = variant === 'w64' ? 'manifest.w64.json' : 'manifest.json';
+    const assetsManifestSubPath = laneRoot
+      ? `${laneRoot}/assets/${assetsManifestName}`
+      : `assets/${assetsManifestName}`;
     items.push({
       filename: 'assets/manifest.json',
       url: this.resolveUrl(assetsManifestSubPath),

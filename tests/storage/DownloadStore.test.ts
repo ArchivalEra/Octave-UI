@@ -335,8 +335,8 @@ describe('DownloadStore Deep Module', () => {
     mockFetch.setFile('https://octave.test/lanes/master/w64/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
     mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
     mockFetch.setFile('https://octave.test/lanes/master/w64/octave.build.json', '{}', sha256OfNode('{}'));
-    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
-    mockFetch.setFile('https://octave.test/lanes/master/w64/assets/manifest.json', '{}', sha256OfNode('{}'));
+    // 真实站点布局（2026-11-06 实测）：assets 清单只在车道根，w64 档是 manifest.w64.json
+    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.w64.json', '{}', sha256OfNode('{}'));
 
     expect(store.isEngineDownloaded('master')).toBe(false);
     const recOctave = await store.downloadEngine('master');
@@ -408,6 +408,51 @@ describe('DownloadStore Deep Module', () => {
     const paths = rec.files.map((f: { path: string }) => f.path);
     expect(paths).toContain('downloads/engine/wasm32-final/w32/octave.build.json');
     expect(paths).toContain('downloads/engine/wasm32-final/w32/assets-manifest.json');
+  });
+
+  it('w64 lane downloads against the REAL site layout: assets/ lives at lane root, not under w64/ (2026-11-06 live defect)', async () => {
+    // 复跑：CI=true npx vitest run tests/storage/DownloadStore.test.ts -t 'REAL site layout'
+    // 真缺陷（2026-11-06 真浏览器实测）：dist 里
+    //   lanes/master/octave.build.json        ✅ 200
+    //   lanes/master/w64/octave.build.json    ✅ 200
+    //   lanes/master/assets/manifest.w64.json ✅ 200
+    //   lanes/master/w64/assets/manifest.json ❌ 404（`assets/` 不在 w64/ 下）
+    // 旧实现把 assets 清单拼在 chosenFolder（= lanes/master/w64）下 ⇒ 404 ⇒
+    // 整个引擎下载在 saveManifest 前抛 STORAGE_WRITE_FAILED ⇒ 记账为空 ⇒
+    // boot 判 unchecked 拒绝启动（错误文案还误导成"盘坏了"）。
+    // 旧测试两条路径都塞了 fixture，所以从未红过——这条只给真实存在的三条。
+    const realLayout = new MockFetchAdapter();
+    const buildJson = { measured: { files: {
+      'octave.js': { sha256: sha256OfNode('w64-js'), bytes: 90 },
+      'octave.wasm': { sha256: sha256OfNode('w64-wasm'), bytes: 400 },
+    } } };
+    // 只有 w64 子目录有 build.json（站点真实布局）
+    realLayout.setJSON('https://octave.test/lanes/master/w64/octave.build.json', buildJson);
+    // 同一 URL 也作为下载项走 fetchBytes（清单类文件随引擎一起落盘）
+    realLayout.setFile('https://octave.test/lanes/master/w64/octave.build.json', '{"measured":{"files":{}}}', sha256OfNode('{"measured":{"files":{}}}'));
+    realLayout.setFile('https://octave.test/lanes/master/w64/octave.js', 'w64-js', sha256OfNode('w64-js'));
+    realLayout.setFile('https://octave.test/lanes/master/w64/octave.wasm', 'w64-wasm', sha256OfNode('w64-wasm'));
+    // assets 清单只在车道根，且 w64 档要的是 manifest.w64.json
+    realLayout.setFile('https://octave.test/lanes/master/assets/manifest.w64.json', '{"assets":{}}', sha256OfNode('{"assets":{}}'));
+
+    const realStore = new DownloadStore({
+      storage: memoryStore,
+      fetchPort: realLayout,
+      baseUrl: 'https://octave.test',
+    });
+    await realStore.init();
+
+    const rec = await realStore.downloadEngine('master');
+    expect(realStore.isEngineDownloaded('master')).toBe(true);
+    const paths = rec.files.map((f: { path: string }) => f.path);
+    expect(paths).toContain('downloads/engine/master/w64/assets-manifest.json');
+
+    // 反向断言：请求面必须命中「车道根 + manifest.w64.json」，
+    // 绝不能去探 lanes/master/w64/assets/manifest.json（那是 404 路径）。
+    const requested = realLayout.requestedUrls?.() ?? [];
+    expect(requested).toContain('https://octave.test/lanes/master/assets/manifest.w64.json');
+    expect(requested).not.toContain('https://octave.test/lanes/master/w64/assets/manifest.json');
+    expect(requested).not.toContain('https://octave.test/lanes/master/assets/manifest.json');
   });
 
   it('rejects HTML responses with clear INDEX_UNREADABLE error rather than naked JSON.parse error', async () => {
@@ -543,8 +588,8 @@ describe('DownloadStore Deep Module', () => {
     mockFetch.setFile('https://octave.test/lanes/master/w64/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
     mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
     mockFetch.setFile('https://octave.test/lanes/master/w64/octave.build.json', '{}', sha256OfNode('{}'));
-    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
-    mockFetch.setFile('https://octave.test/lanes/master/w64/assets/manifest.json', '{}', sha256OfNode('{}'));
+    // 真实站点布局（2026-11-06 实测）：assets 清单只在车道根，w64 档是 manifest.w64.json
+    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.w64.json', '{}', sha256OfNode('{}'));
 
     const first = await store.downloadEngine('master');
     expect(first.files.length).toBe(4);
@@ -566,8 +611,8 @@ describe('DownloadStore Deep Module', () => {
     mockFetch.setFile('https://octave.test/lanes/master/w64/octave.wasm', 'wasm-content', sha256OfNode('wasm-content'));
     mockFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
     mockFetch.setFile('https://octave.test/lanes/master/w64/octave.build.json', '{}', sha256OfNode('{}'));
-    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
-    mockFetch.setFile('https://octave.test/lanes/master/w64/assets/manifest.json', '{}', sha256OfNode('{}'));
+    // 真实站点布局（2026-11-06 实测）：assets 清单只在车道根，w64 档是 manifest.w64.json
+    mockFetch.setFile('https://octave.test/lanes/master/assets/manifest.w64.json', '{}', sha256OfNode('{}'));
 
     await store.downloadEngine('master');
 
@@ -814,8 +859,7 @@ describe('DownloadStore Deep Module', () => {
     cleanFetch.setFile('https://octave.test/lanes/master/w64/octave.data', 'data-content', sha256OfNode('data-content'));
     cleanFetch.setFile('https://octave.test/lanes/master/octave.build.json', '{}', sha256OfNode('{}'));
     cleanFetch.setFile('https://octave.test/lanes/master/w64/octave.build.json', '{}', sha256OfNode('{}'));
-    cleanFetch.setFile('https://octave.test/lanes/master/assets/manifest.json', '{}', sha256OfNode('{}'));
-    cleanFetch.setFile('https://octave.test/lanes/master/w64/assets/manifest.json', '{}', sha256OfNode('{}'));
+    cleanFetch.setFile('https://octave.test/lanes/master/assets/manifest.w64.json', '{}', sha256OfNode('{}'));
     const engineStore = new DownloadStore({
       storage: memoryStore,
       fetchPort: cleanFetch,
@@ -1012,6 +1056,65 @@ describe('form:"file" 单件交付（内容仓 084 A2 / 086 裁定：MSL 形状�
     await expect(
       store.download({ name: 'modelica-standard-library', version: '4.1.0+maint.om', kind: 'pre', arch: null })
     ).rejects.toMatchObject({ code: 'FLAVOR_UNAVAILABLE' });
+  });
+
+  // ★ 2026-11-06：下载/装载解耦回归（README.md:28-29 / 回信 018）。
+  //   用**产品真实形状**（UI 的 `kind:'src'` → resolveSrcTarget）证明
+  //   MSL 单件包能独立下载到 OPFS（分片装配 + 逐块校验 + 记账），
+  //   装载工具之后只从 OPFS 读字节；不许在装载时现场去 release 拉字节。
+  //   不用 `kind:'pre'`（产品零构造点，那是 086 裁定的历史形状）。
+  it('★ file 包走 kind:src 注入 releaseSource ⇒ 分片装配落盘 OPFS（下载与装载解耦）', async () => {
+    const chunk = new Uint8Array([1, 2, 3, 4]);
+    const chunkSha = sha256OfNode(chunk);
+    const fetchPort = {
+      fetchBytes: async (url: string) => {
+        if (url.endsWith('msl.identity.000')) {
+          return { ok: true, status: 200, data: chunk, sha256: chunkSha, totalBytes: chunk.length };
+        }
+        return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
+      },
+      fetchJSON: async () => ({}),
+    } as any;
+
+    const releaseSource: any = {
+      resolve: async () => ({
+        entry: {
+          product: 'msl',
+          name: 'msl-4.1.0-maint.om.zip',
+          bytes: chunk.length,
+          sha256: chunkSha,
+          variants: [
+            { codec: 'identity', chunks: [{ part: 0, file: 'msl.identity.000', bytes: chunk.length, sha256: chunkSha }] },
+          ],
+        },
+        variant: { codec: 'identity', chunks: [{ part: 0, file: 'msl.identity.000', bytes: chunk.length, sha256: chunkSha }] },
+        base: 'https://static.isui.ren/ArchivalEra/OpenModelica-Full-Wasm/releases/download/msl-4.1.0-maint.om/',
+        fallbacks: [],
+      }),
+    };
+
+    const mem = new MemoryStore();
+    const store = new DownloadStore({
+      storage: mem,
+      catalogProvider: () => ({ schema: 2, packs: [mslEntry] }) as any,
+      baseUrl: '',
+      fetchPort,
+      releaseSource,
+    });
+    const rec = await store.download({
+      name: 'modelica-standard-library',
+      version: '4.1.0+maint.om',
+      kind: 'src',
+      arch: null,
+    });
+    // 下载动作独立完成：字节落进 OPFS，记账 sha 是装配后的真指纹
+    expect(rec.files.length).toBe(1);
+    expect(rec.files[0].path).toBe(
+      'downloads/src/modelica-standard-library/4.1.0+maint.om/modelica-standard-library-4.1.0+maint.om.tar.gz'
+    );
+    expect(rec.files[0].sha256).toBe(chunkSha);
+    const onDisk = await mem.read(rec.files[0].path);
+    expect(Array.from(onDisk)).toEqual([1, 2, 3, 4]);
   });
 });
 

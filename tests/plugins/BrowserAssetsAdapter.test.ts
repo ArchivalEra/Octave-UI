@@ -89,6 +89,35 @@ describe('BrowserAssetsAdapter Deep Module', () => {
     expect((llvm as any)?.status?.installed).toBe(true);
   });
 
+  it('★ 合流不冲掉市场契约的 url/sha256（11-05 报告 §3.5：browse().versions 覆盖致 missing url）', async () => {
+    const marketVersions = [
+      { version: '0.1.2', stage: 'staged', url: 'assets/forge/cgi-0.1.2.tar.gz', sha256: 'a'.repeat(64), size: 9960 },
+    ];
+    (globalThis as any).window = {
+      OctaveAssets: {
+        catalog: vi.fn().mockResolvedValue({
+          packs: [{
+            name: 'cgi', version: '0.1.2', size: 9960, form: 'pkg',
+            versions: marketVersions.map((v) => ({ ...v })),
+          }],
+        }),
+        // browse() 的 versions[] 没有 url/sha256 —— 正是「无 url」的来源
+        browse: vi.fn().mockResolvedValue([{
+          name: 'cgi', version: '0.1.2', description: 'from browse',
+          versions: [{ version: '0.1.2', stage: 'staged' }],
+          compatible: true, installed: false, state: 'available',
+        }]),
+      },
+    };
+    const result = await adapter.fetchCatalog();
+    const v = (result.packs[0] as any).versions?.[0];
+    // wantedArtifactOf 靠 url basename 推产物名、靠 sha256 做双确认；丢了就走不到 catalogue
+    expect(v?.url).toBe('assets/forge/cgi-0.1.2.tar.gz');
+    expect(v?.sha256).toBe('a'.repeat(64));
+    expect(v?.size).toBe(9960);
+    expect(result.packs[0].description).toBe('from browse'); // 描述仍合流
+  });
+
   it('falls back to fetching forge-catalog.json when OctaveAssets is absent, still merging browse() if present', async () => {
     (globalThis as any).window = {
       OctaveAssets: {

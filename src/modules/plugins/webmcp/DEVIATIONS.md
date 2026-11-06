@@ -51,7 +51,7 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
   取值按**调用面最大档**保守标注：`octave_get_system_state` / `octave_get_workspace` /
   `octave_list_packages` = `read`；`octave_eval` / `octave_run_cell`（任意代码执行，
   含 pkg shim 触发的下载装包面与 urlread 出网）/ `octave_install_package`（planOnly
-  之外的 install 分支真下载写盘）/ `omc_load_msl`（fetch zip + 写 omc 库目录）= `sandbox-escape`。
+  之外的 install 分支真下载写盘）/ `omc_load_msl`（读 OPFS 已下载 zip + 写 omc 库目录）= `sandbox-escape`。
   `mutates-workspace` 当前在册工具无人使用（保留给将来只改引擎工作区的工具）。
   **golden 零变化即证**：88 用例快照文件 sha256 在改动前后一致（`83b40b7…390e`）；
   直接判据在反向断言 8 用例（`tests/plugins/webmcp-effects-nonwire.test.ts`：
@@ -110,6 +110,17 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
 **工具实现要点**（recipes/msl.md 权威形状）：挂载 `/.openmodelica/libraries` 一次
 `omc_vfs_load_zip`；**反例在案**（`MODELICAPATH` 经 `omc_set_env` 传不进 loader）；
 装后自检三条进返回体（不静默成功）。
+
+**④ 后续 wire 变化登记（2026-11-06，下载/装载解耦回归修复）**：
+`omc_load_msl` 的 `description` 由「fetch the catalog asset」改为
+「from the already-downloaded OPFS asset … Download is a separate action」（装载不再发网络请求）；
+`listTools()` 仍 7 条、键序不变，六条 octave 工具零改动，golden 快照 2 条同批更新
+（`tests/plugins/__snapshots__/webmcp-golden-master.test.ts.snap` 的
+`listTools() full response: 7 tool schemas` 与 `ready.detail.tools ≡ listTools()` 两条）。
+反向断言新增：`tests/plugins/webmcp-omc-msl.test.ts` 装载期**任何** fetch（含 release 域名）
+都抛 + 未下载 `NOT_DOWNLOADED`；真浏览器证据
+`docs/acceptance/evidence/C-final-real-omc-2026-11-06.md`（`24 PASS / 0 FAIL`）。
+按 093 裁定 A 绑定③「名册再变仍需逐条显式登记」，此条即为本次登记。
 
 ---
 

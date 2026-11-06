@@ -217,18 +217,39 @@ describe('WasmEmbedAdapter boot with EngineAssetResolver', () => {
     // 不预置 data-lane script：OPFS 直载路线必须自己从本地读 octave.js 注入
     document.querySelectorAll('script[data-lane]').forEach((s) => s.remove());
 
+    // OPFS 直载现在是 Blob URL（w64 pthread worker 需要 currentScript.src），
+    // happy-dom 不会真加载 blob: 且会自行触发 onerror ⇒ 这里不让 script 真连到文档，
+    // 只记录节点并手动触发 onload（测的是「src 有值」这个契约，不是浏览器加载机制）。
+    const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:octave-local-glue');
+    let injectedScript: HTMLScriptElement | null = null;
+    const appendSpy = vi.spyOn(document.head, 'appendChild').mockImplementation(function (this: any, node: any) {
+      if (node?.tagName === 'SCRIPT' && node.getAttribute('data-lane')) {
+        injectedScript = node;
+        queueMicrotask(() => node.onload?.(new Event('load')));
+        return node;
+      }
+      return Node.prototype.appendChild.call(this, node);
+    } as any);
+
     const adapter = await WasmEmbedAdapter.boot({ lane: 'master' });
     expect(adapter).toBeInstanceOf(WasmEmbedAdapter);
     expect(wasmFetchedStatus).toBe(200);
     expect(dataFetchedStatus).toBe(200);
     // 零网络：dummy fetch 从未被调用（本地 script 注入 + scoped 代理全接管）
     expect(networkFetchMock).toHaveBeenCalledTimes(0);
-    // OPFS 直载证据：data-lane script 是本地注入的（无 src 属性 = 不是网络 script）
-    const injected = document.querySelector('script[data-lane]');
+    // ★ 2026-11-06 真浏览器缺陷：w64 多线程档的 Emscripten 胶水用
+    //   `document.currentScript.src` 起 pthread worker；inline textContent 没有 src
+    //   ⇒ worker 去加载文档 URL（HTML）⇒ `Unexpected token '<'` ⇒ kernel 卡 30 秒超时。
+    //   所以 OPFS 直载必须给 script 一个可加载的 blob: src，不能是纯 inline。
+    const injected = injectedScript as HTMLScriptElement | null;
     expect(injected).not.toBeNull();
     expect(injected!.getAttribute('data-lane')).toBe('master-w64');
-    expect(injected!.getAttribute('src')).toBeNull();
+    expect(injected!.getAttribute('src')).toBe('blob:octave-local-glue');
+    expect(injected!.textContent).toBe('');
+    expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
 
+    appendSpy.mockRestore();
+    createObjectUrlSpy.mockRestore();
     injected?.remove();
     EngineAssetResolver.resetInstance();
   });

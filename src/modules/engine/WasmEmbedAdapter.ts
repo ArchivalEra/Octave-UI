@@ -73,14 +73,30 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
         if (bootable) {
           // OPFS 直载：从本地资产读 octave.js 注入脚本（原 onerror 降级逻辑转正为主路线，
           // data-lane 标记保持；保留 legacy 平铺路径 .catch() 降级兼容旧布局）
+          //
+          // ⚠️ 必须用 Blob URL 而不是 textContent（2026-11-06 真浏览器实测缺陷）：
+          // w64 多线程档的 Emscripten 胶水用
+          //   `var _scriptName = globalThis.document?.currentScript?.src`
+          // 再在 `allocateUnusedWorker()` 里 `new Worker(_scriptName)` 起 pthread。
+          // inline script 没有 src ⇒ _scriptName 为 undefined ⇒ pthread worker 去加载
+          // 当前文档 URL（HTML）⇒ `Unexpected token '<'` ⇒ 四个 worker 全挂 ⇒
+          // kernel 初始化卡到 30 秒超时。给 script.src 一个 blob: URL 后
+          // currentScript.src 有值，worker 能加载同一份胶水字节。
+          // blob URL 不 revoke（见下方注释）：w64 pthread 会在 boot 期间持续用它起 worker。
           const jsPath = `downloads/engine/${octaveLane}/${variant}/octave.js`;
           const legacyJsPath = `downloads/engine/${octaveLane}/octave.js`;
           const jsBlob = await resolver.getBlob(jsPath).catch(() => resolver.getBlob(legacyJsPath));
-          const jsText = await jsBlob.text();
+          const jsObjectUrl = URL.createObjectURL(jsBlob);
           const localScript = document.createElement('script');
           localScript.setAttribute('data-lane', scriptKey);
-          localScript.textContent = jsText;
-          document.head.appendChild(localScript);
+          localScript.src = jsObjectUrl;
+          await new Promise<void>((resolve, reject) => {
+            localScript.onload = () => resolve();
+            localScript.onerror = () => reject(new Error(`Failed to load local engine runtime script for ${octaveLane}/${variant}`));
+            document.head.appendChild(localScript);
+          });
+          // 不 revoke：w64 pthread worker 会在 boot 期间继续用这个 URL 起新 worker；
+          // 生命周期跟随页面，与 textContent 方案同为一次分配。
         } else {
           // 网络路线：未下载是唯一合法走网络的理由
           await new Promise<void>((resolve, reject) => {

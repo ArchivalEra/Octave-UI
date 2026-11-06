@@ -11,9 +11,20 @@
 // 复跑：CI=true npx vitest run tests/plugins/webmcp-omc-msl.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { dispatchTool } from '../../src/modules/plugins/webmcp/dispatcher';
-import { omcLoadMslTool, MSL_PACKAGE_NAME, MSL_MOUNT_PATH } from '../../src/modules/plugins/webmcp/tools/omcLoadMsl';
+import { omcLoadMslTool, MSL_PACKAGE_NAME, MSL_MOUNT_PATH, setMslDownloadedAsset } from '../../src/modules/plugins/webmcp/tools/omcLoadMsl';
 import type { WebMcpCtxResolver } from '../../src/modules/plugins/webmcp/ctx';
 import type { WebMcpCtx } from '../../src/modules/plugins/webmcp/ctx';
+
+/** 装载侧桩：模拟「从 OPFS 读已下载资产」，不是现场装配 release 分片。 */
+const OPFS_PATH = 'downloads/src/modelica-standard-library/4.1.0+maint.om/modelica-standard-library-4.1.0+maint.om.tar.gz';
+const OPFS_SHA = 'a97d8d94ca7f7960f7f1c209613a35d65bcfa2426660e5052617e71326308535';
+function stubMslDownloadedAsset(bytes = 1024) {
+  setMslDownloadedAsset(async () => ({
+    path: OPFS_PATH,
+    sha256: OPFS_SHA,
+    bytes: new Uint8Array(bytes),
+  }));
+}
 
 function resolverWith(overrides: Partial<WebMcpCtx>): WebMcpCtxResolver {
   const merged = { supervisor: undefined, workspace: undefined, packageManager: undefined, ...overrides };
@@ -47,15 +58,18 @@ function fakePm(entry: any | null) {
 describe('omc_load_msl 能力门（内容仓 093 绑定④：不许退化成静默缺席）', () => {
   beforeEach(() => {
     delete (window as any).__omc;
-    // 桩 fetch：只有 MSL url 有内容
-    (globalThis as any).fetch = async (u: string) => ({
-      ok: true,
-      status: 200,
-      arrayBuffer: async () => new ArrayBuffer(1024),
-    });
+    // 默认注入「已从 OPFS 读到已下载字节」桩；需要测「未接线 / 未下载」的用例自己覆盖。
+    stubMslDownloadedAsset();
+    // ★ 核心反向桩：装载期**任何** fetch 都抛（不仅站内，也包括 release 域名）。
+    //   这是下载/装载解耦的可证伪判据：装载绝不发网络请求，字节只来自 OPFS。
+    //   旧版只禁了站内 fetch 却放行 release fetch，正是解耦回归没被测到的原因。
+    (globalThis as any).fetch = async (u: string) => {
+      throw new Error(`NETWORK_FETCH_FORBIDDEN_DURING_LOAD: ${u}`);
+    };
   });
   afterEach(() => {
     delete (window as any).__omc;
+    setMslDownloadedAsset(null);
   });
 
   it('★ ① packageManager 缺席 ⇒ CAPABILITY_UNAVAILABLE 信封（不是静默成功）', async () => {
@@ -136,6 +150,9 @@ describe('D12 回归锁：自检必须调产物里存在的 API（内容仓 096�
   const okEval = async (expr: string) =>
     expr === 'loadModel(Modelica)' ? 'true' : expr === 'getVersion(Modelica)' ? '"4.1.0"' : 'false';
 
+  beforeEach(() => stubMslDownloadedAsset());
+  afterEach(() => setMslDownloadedAsset(null));
+
   it('★ 完整成功路径：omc_eval 面 ⇒ isError false（此前必然报失败）', async () => {
     (window as any).__omc = { omc_vfs_load_zip: async () => '4376', omc_eval: okEval };
     const res = await dispatchTool(
@@ -189,5 +206,61 @@ describe('D12 回归锁：自检必须调产物里存在的 API（内容仓 096�
     const res = await dispatchTool([omcLoadMslTool], resolverWith({ packageManager: fakePm(noUrl) }), 'omc_load_msl', {});
     expect(res.isError).toBe(true);
     expect((res.content[0] as any).text).toContain('has no url');
+  });
+});
+
+describe('★ 2026-11-06 票 C：MSL 字节必须走分发契约（站内路径已 404）', () => {
+  const okEval = async (expr: string) =>
+    expr === 'loadModel(Modelica)' ? 'true' : expr === 'getVersion(Modelica)' ? '"4.1.0"' : 'false';
+
+  beforeEach(() => {
+    delete (window as any).__omc;
+    // 装载期任何 fetch 都抛（含 release 域名）——解耦的可证伪判据
+    (globalThis as any).fetch = async (u: string) => { throw new Error(`NETWORK_FETCH_FORBIDDEN_DURING_LOAD: ${u}`); };
+  });
+  afterEach(() => {
+    delete (window as any).__omc;
+    setMslDownloadedAsset(null);
+  });
+
+  it('⑥ 未接线（组合根没注入）⇒ CAPABILITY_UNAVAILABLE，不假装能装', async () => {
+    setMslDownloadedAsset(null);
+    (window as any).__omc = { omc_vfs_load_zip: async () => '0', omc_eval: okEval };
+    const res = await dispatchTool([omcLoadMslTool], resolverWith({ packageManager: fakePm(mslEntry) }), 'omc_load_msl', {});
+    expect(res.isError).toBe(true);
+    expect((res.content[0] as any).text).toContain('downloaded-asset reader');
+  });
+
+  it('⑦ ★ 未下载就装载 ⇒ NOT_DOWNLOADED，绝不现场拉字节（下载/装载解耦核心反向）', async () => {
+    setMslDownloadedAsset(async () => null);
+    const calls: number[] = [];
+    (window as any).__omc = {
+      omc_vfs_load_zip: async () => { calls.push(1); },
+      omc_eval: okEval,
+    };
+    const res = await dispatchTool([omcLoadMslTool], resolverWith({ packageManager: fakePm(mslEntry) }), 'omc_load_msl', {});
+    expect(res.isError).toBe(true);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain('NOT_DOWNLOADED');
+    expect(text).toContain('Download it first');
+    expect(calls.length).toBe(0);                       // 没字节就绝不调运行时
+    expect(text).not.toContain('NETWORK_FETCH_FORBIDDEN'); // 也绝不发网络请求
+  });
+
+  it('⑧ ★ 全绿路径零网络 + 证据面是 OPFS（不是 release 现场装配）', async () => {
+    stubMslDownloadedAsset(2048);
+    const calls: Array<{ path: string; bytes: number }> = [];
+    (window as any).__omc = {
+      omc_vfs_load_zip: async (path: string, bytes: Uint8Array) => { calls.push({ path, bytes: bytes.length }); },
+      omc_eval: okEval,
+    };
+    const res = await dispatchTool([omcLoadMslTool], resolverWith({ packageManager: fakePm(mslEntry) }), 'omc_load_msl', {});
+    expect(res.isError).toBeFalsy();
+    expect(calls[0].bytes).toBe(2048);   // 用的是 OPFS 读出的字节
+    const data = (res.content[0] as any).data;
+    expect(data.source).toBe('opfs-download');
+    expect(data.opfsPath).toBe(OPFS_PATH);
+    expect(data.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(data.releaseBase).toBeUndefined();  // 装载不记 release 现场信息
   });
 });
