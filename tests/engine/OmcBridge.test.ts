@@ -37,7 +37,12 @@ function makeEmbed(): any {
 
 // spec §2.3：setupOmcBridge 的 OMC 脚本 URL 走统一 deployment 产地；
 // happy-dom 没有 <meta site-base>，测试宿主用 __siteBase 显式提供。
-beforeEach(() => { (window as any).__siteBase = '/'; });
+beforeEach(() => {
+  (window as any).__siteBase = '/';
+  // getDeployment 是惰性缓存（spec §2.3）：每个用例开始先清，保证各组设置的
+  // __siteBase 真正生效（否则首个解析值被锁死，CI/本地行为分叉）。
+  resetDeploymentCache();
+});
 
 describe('OmcBridge module shape', () => {
   it('exports setupOmcBridge as a function on an independent module', () => {
