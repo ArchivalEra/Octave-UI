@@ -13,6 +13,7 @@ import type {
 } from './types';
 
 import { EngineAssetResolver, type EngineLane, type EngineVariant } from './EngineAssetResolver';
+import { getDeployment, laneBaseOf } from './deployment';
 import * as OmcBridge from './OmcBridge';
 
 declare global {
@@ -38,10 +39,12 @@ export class WasmEmbedAdapter implements OctaveEmbedPort {
     }
 
     const lane = opts.lane || 'wasm32-final';
-    const globalBase = (typeof document !== 'undefined' && (document.querySelector('meta[name="site-base"]')?.getAttribute('content') || (window as any).__siteBase)) || '/';
-    const normalizedBase = globalBase.endsWith('/') ? globalBase : `${globalBase}/`;
+    // ★ spec §2.3：base 只有一个产地（engine/deployment.ts）。这里不再自己读
+    //   <meta site-base> / __siteBase，也不再拼 `lanes/<lane>/` —— 那曾让
+    //   createOctaveAssets 拿引擎产物 base 去取站点级 forge-catalog ⇒ 真站 404。
+    //   opts.base 仍保留为显式覆盖（embed-demo 等测试宿主用），但默认走统一产地。
+    const base = opts.base || laneBaseOf(getDeployment(), lane as EngineLane);
     const laneFolder = lane === 'omc' ? 'wasm32-final' : lane;
-    const base = opts.base || `${normalizedBase}lanes/${laneFolder}/`;
 
     const isW64 = lane === 'master' || lane === 'IllegalPerformance';
     const scriptPath = isW64 ? 'w64/octave.js' : 'octave.js';

@@ -188,20 +188,23 @@ function createOctaveHost(opts) {
             },
             doc: document,
             assets: function (mod, b, isReady) {
-                // 默认实例复用 assets-loader.js 文件级那份（否则测试读的与 boot 链用的不是同一份状态）。
-                // ⚠️ 但文件级别名是 `createOctaveAssets(null, …)` —— **惰性绑 `global.Module`**。
-                //    页面宿主会设它（index.html: `window.Module = createOctaveHost(…)`），而 **embed 路径不设**
-                //    （MODULARIZE，模块只活在 `__octaveHosts[i].mod`）⇒ 别名一用就抛「Module.FS 尚未就绪」
-                //    ⇒ plotbridge/webgraphics/pkgfix 整链装不上（issue #5 第二层；实测 addpath 报
-                //    `plotbridge: No such file or directory`）。判据 = **全局 Module 是否就是本模块**
-                //    （`G.Module === mod`，与赋值时序无关）：是 ⇒ 老行为；否 ⇒ 建一份绑到本实例 mod 的，
-                //    并更新别名（保证"测试读的与 boot 链用的"仍是同一份状态）。
-                if (isDefault && G.OctaveAssets && G.Module === mod)
+                // ★ spec §2.3：不再造第二个实例、不再覆盖 window.OctaveAssets。
+                //   默认实例是 assets-loader.js 的惰性 getter（由组合根注入
+                //   __resolveOctaveDeployment 提供 siteBase），boot 链只需把它
+                //   惰性绑到本实例的 Module（MODULARIZE 下 G.Module !== mod，
+                //   旧代码在这里 new 一份 ⇒ 两份 catalog 缓存状态分叉）。
+                //   非默认实例（multi-tu / 多引擎 C6）才 create()，且必须显式带
+                //   deployment，不给「调用方自带 base」留第二产地。
+                if (isDefault && G.OctaveAssets) {
+                    if (typeof G.OctaveAssets.bindHost === 'function')
+                        G.OctaveAssets.bindHost(mod, b);   // 同时绑 Module 与 lane base
+                    else if (mod && typeof G.OctaveAssets.bindModule === 'function')
+                        G.OctaveAssets.bindModule(mod);
                     return G.OctaveAssets;
-                var loader = G.createOctaveAssets(mod, b, isReady);
-                if (isDefault)
-                    G.OctaveAssets = loader;
-                return loader;
+                }
+                var resolveDep = G.__resolveOctaveDeployment;
+                var dep = resolveDep ? resolveDep() : G.__octaveDeployment;
+                return G.createOctaveAssets(mod, b, isReady, dep);
             },
             onReady: function () { inst.ready = true; if (isDefault) {
                 G.__octaveReady = true;

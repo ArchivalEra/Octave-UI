@@ -1,155 +1,56 @@
 // src/modules/plugins/package/BrowserAssetsAdapter.ts
-// 浏览器真实环境适配器：对接 window.OctaveAssets 与同源站点资产
+// 浏览器真实环境适配器：IAssetsPort 的 prod adapter。
+// spec §2.3：forge-catalog 只有一个读者（window.OctaveAssets.catalog()）。
+// 本适配器**不自己拼 URL、不直 fetch、不合成目录、不覆盖 versions**。
 
 import type { IAssetsPort, InstallOptions } from './AssetsPort';
 import type { ForgeCatalog, PackageStatusResult, InstallResult } from './types';
 
 export class BrowserAssetsAdapter implements IAssetsPort {
-  private base: string;
-
-  constructor(base?: string) {
-    if (base !== undefined) {
-      this.base = base;
-    } else if (typeof document !== 'undefined') {
-      const meta = document.querySelector('meta[name="site-base"]');
-      this.base = meta?.getAttribute('content') || '/';
-    } else {
-      this.base = '/';
-    }
-    if (!this.base.endsWith('/')) {
-      this.base += '/';
-    }
-  }
+  /** 零参构造：不再有 `base?: string`（那是「调用方自带 base」的最后一个入口）。 */
+  constructor() {}
 
   async fetchCatalog(): Promise<ForgeCatalog> {
-    let cat: ForgeCatalog | null = null;
-
-    if (typeof window !== 'undefined') {
-      const assets = (window as any).OctaveAssets;
-      // 1. 尝试从 OctaveAssets.catalog() 获取权威货架
-      if (assets?.catalog) {
-        try {
-          const res = await assets.catalog();
-          if (res && Array.isArray(res.packs)) {
-            cat = res;
-          }
-        } catch (err) {
-          console.warn('[BrowserAssetsAdapter] OctaveAssets.catalog failed, falling back to direct fetch', err);
-        }
-      }
+    if (typeof window === 'undefined' || !(window as any).OctaveAssets?.catalog) {
+      const e = new Error('CATALOG_UNREADABLE: window.OctaveAssets is not available') as Error & { code: string };
+      e.code = 'CATALOG_UNREADABLE';
+      throw e;
+    }
+    // 唯一读者。失败即响亮上抛（CONTEXT.md 降级信号）：
+    // 不再 console.warn 后静默落到直 fetch / browse() 合成目录 —— 那会把
+    // 「读不到」洗成 total>0 的假绿（11-06 code-review Standards 轴点名的那条）。
+    const cat = await (window as any).OctaveAssets.catalog();
+    if (!cat || !Array.isArray(cat.packs)) {
+      const e = new Error('CATALOG_UNREADABLE: catalog() returned no packs') as Error & { code: string };
+      e.code = 'CATALOG_UNREADABLE';
+      throw e;
     }
 
-    // 2. 若未从 OctaveAssets.catalog() 取得，从静态文件拉取货架
-    if (!cat) {
-      const candidateUrls = [
-        `${this.base}assets/forge-catalog.json`,
-        `${this.base}bridge/assets/forge-catalog.json`,
-      ];
-
-      let lastErr: any = null;
-      for (const targetUrl of candidateUrls) {
-        try {
-          const resp = await fetch(targetUrl);
-          if (resp.ok) {
-            const ct = resp.headers.get('content-type') || '';
-            if (ct.includes('text/html')) {
-              throw new Error(`Endpoint returned HTML instead of JSON (${targetUrl})`);
-            }
-            cat = (await resp.json()) as ForgeCatalog;
-            break;
-          }
-        } catch (err) {
-          lastErr = err;
-        }
-      }
-
-      // 3. 网络拉取失败时的应急构建：若 OctaveAssets.browse() 存在，合成货架（附带必要默认字段避免过滤崩溃）
-      if (!cat && typeof window !== 'undefined' && (window as any).OctaveAssets?.browse) {
-        try {
-          const entries = await (window as any).OctaveAssets.browse();
-          if (Array.isArray(entries)) {
-            const packs = entries.map((e: any) => ({
-              name: e.name,
-              version: e.version,
-              description: e.description || '',
-              links: e.links || [],
-              versions: e.versions,
-              role: e.role || (e.detail as any)?.role || (e.name === 'llvm-wasm' ? 'toolchain' : e.name === 'pyodide' ? 'language-bridge' : 'package'),
-              consumer: e.consumer || (e.detail as any)?.consumer || ['octave'],
-              deps: e.deps || (e.detail as any)?.deps || [],
-              size: e.size || (e.detail as any)?.size || 0,
-              form: e.detail?.form || 'pkg',
-              content: e.detail?.content || [],
-              arch: e.detail?.arch,
-              status: {
-                compatible: e.compatible,
-                fromSource: e.fromSource,
-                installed: e.installed,
-                state: e.state,
-                why: e.why,
-              },
-            }));
-            cat = { packs: packs as any };
-          }
-        } catch (err) {
-          lastErr = err;
-        }
-      }
-
-      if (!cat) {
-        const error = new Error(`Failed to load forge catalog: ${lastErr?.message || 'Not found'}`);
-        (error as any).code = 'CATALOG_UNREADABLE';
-        throw error;
-      }
-    }
-
-    // 4. 此时已获取完整货架 cat，若 OctaveAssets.browse() 可用，深度合流元数据 (mail/030 出口)
-    if (typeof window !== 'undefined' && (window as any).OctaveAssets?.browse && cat && Array.isArray(cat.packs)) {
+    // 只补运行时安装态 `status`：实测 forge-catalog.json 17 包顶层已带
+    // description / links / url / sha256 / size，13 个 versions[] 也带三键，
+    // 故不再合流/覆盖任何市场契约字段（D6）。browse() 失败不影响目录本身。
+    if (typeof (window as any).OctaveAssets.browse === 'function') {
       try {
         const entries = await (window as any).OctaveAssets.browse();
         if (Array.isArray(entries)) {
-          const entryMap = new Map<string, any>();
-          for (const e of entries) {
-            if (e && e.name) entryMap.set(e.name, e);
-          }
+          const byName = new Map<string, any>();
+          for (const e of entries) if (e && e.name) byName.set(e.name, e);
           for (const p of cat.packs) {
-            const e = entryMap.get(p.name);
-            if (e) {
-              if (e.description !== undefined && e.description !== '') p.description = e.description;
-              if (e.links !== undefined && Array.isArray(e.links) && e.links.length > 0) p.links = e.links;
-              // ★ 2026-11-06 修复（11-05 报告 §3.5）：`p.versions = e.versions`
-              //   会用 browse() 的 versions[] 整组覆盖市场目录。browse() 的条目只有
-              //   version/stage，没有 url/sha256/size ⇒ wantedArtifactOf 推不出产物名、
-              //   做不了双确认 ⇒ 包下载报 missing url、走不到 catalogue。
-              //   现在按 version 逐条合流：市场契约的定位三键（url/sha256/size）
-              //   是权威，browse() 只补它确实带的元数据，绝不整体替换。
-              if (e.versions !== undefined && Array.isArray(e.versions) && e.versions.length > 0) {
-                const marketVersions = Array.isArray((p as any).versions) ? (p as any).versions : [];
-                const merged = e.versions.map((ev: any) => {
-                  const mv = marketVersions.find((m: any) => m && m.version === ev?.version);
-                  return mv ? { ...ev, ...mv } : ev;   // 市场侧字段优先
-                });
-                // 市场目录里 browse() 没提到的版本不能丢
-                for (const mv of marketVersions) {
-                  if (!merged.some((x: any) => x?.version === mv?.version)) merged.push(mv);
-                }
-                (p as any).versions = merged;
-              }
-              (p as any).status = {
-                compatible: e.compatible,
-                fromSource: e.fromSource,
-                installed: e.installed,
-                state: e.state,
-                why: e.why,
-              };
-            }
+            const e = byName.get(p.name);
+            if (e) (p as any).status = {
+              compatible: e.compatible,
+              fromSource: e.fromSource,
+              installed: e.installed,
+              state: e.state,
+              why: e.why,
+            };
           }
         }
-      } catch (browseErr) {
-        console.warn('[BrowserAssetsAdapter] OctaveAssets.browse failed to merge metadata:', browseErr);
+      } catch (err) {
+        // 状态元数据是可选的，不构成目录不可用；但不静默 —— 打一条 warn。
+        console.warn('[BrowserAssetsAdapter] browse() failed; catalog itself is intact', err);
       }
     }
-
     return cat;
   }
 

@@ -1,6 +1,12 @@
 // tests/engine/WasmEmbedAdapter.test.ts
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WasmEmbedAdapter } from '../../src/modules/engine/WasmEmbedAdapter';
+
+// spec §2.3：boot() 默认走统一 deployment 产地；happy-dom 没有 <meta site-base>，
+// 测试宿主用构建期兜底信号 __siteBase 显式提供（不是静默 '/'）。
+beforeEach(() => {
+  (window as any).__siteBase = '/';
+});
 
 describe('WasmEmbedAdapter alignDocstringsPaths', () => {
   it('safely handles null or undefined embed', () => {
@@ -109,6 +115,7 @@ describe('WasmEmbedAdapter boot with EngineAssetResolver', () => {
     };
 
     (globalThis as any).window = {
+      __siteBase: '/',   // spec §2.3：boot() 默认走统一 deployment 产地
       OctaveEmbed: {
         create: vi.fn().mockResolvedValue(mockEmbedInstance),
       },
@@ -202,6 +209,7 @@ describe('WasmEmbedAdapter boot with EngineAssetResolver', () => {
     };
 
     (globalThis as any).window = {
+      __siteBase: '/',   // spec §2.3：boot() 默认走统一 deployment 产地
       OctaveEmbed: {
         create: vi.fn().mockImplementation(async () => {
           // 模拟上游 octave-core.js 与 Emscripten 运行时发起的 fetch
@@ -322,6 +330,7 @@ describe('WasmEmbedAdapter boot with EngineAssetResolver', () => {
     globalThis.fetch = networkFetchMock;
 
     (globalThis as any).window = {
+      __siteBase: '/',   // spec §2.3：boot() 默认走统一 deployment 产地
       OctaveEmbed: {
         create: vi.fn(),
       },

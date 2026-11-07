@@ -96,6 +96,12 @@ interface DownloadStoreOptions {
   engineBuildProvider?: (lane: string) => Promise<any>;
   laneProvider?: () => string;
   baseUrl?: string;
+  /**
+   * 站点根的**惰性产地**（spec §2.3）。组合根传 `() => getDeployment().siteBase`，
+   * 顶层构造不解析 <meta>（DOM 未就绪时会误判），真正 resolveUrl 时才求值一次。
+   * 与 `baseUrl` 二选一；都给则 provider 优先。
+   */
+  baseUrlProvider?: () => string;
   maxQuotaBytes?: number;
   /** 发布契约源（可选）：不注入 ⇒ 整包路径，完全向后兼容 */
   releaseSource?: ReleaseSource;
@@ -147,6 +153,7 @@ export class DownloadStore {
   private engineBuildProvider?: (lane: string) => Promise<any>;
   private laneProvider?: () => string;
   private baseUrl: string;
+  private baseUrlProvider?: () => string;
   private maxQuotaBytes?: number;
   private releaseSource?: ReleaseSource;
   private engineReleaseSource?: EngineReleaseSource;
@@ -174,27 +181,28 @@ export class DownloadStore {
     this.laneProvider = options?.laneProvider;
     this.releaseSource = options?.releaseSource;
     this.engineReleaseSource = options?.engineReleaseSource;
+    this.baseUrlProvider = options?.baseUrlProvider;
 
     if (options?.baseUrl !== undefined && options.baseUrl !== '') {
       this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     } else {
-      let detectedBase = '';
-      if (typeof document !== 'undefined') {
-        const meta = document.querySelector('meta[name="site-base"]');
-        detectedBase = meta?.getAttribute('content') || (window as any).__siteBase || '';
-      }
-      if (!detectedBase && typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) {
-        detectedBase = import.meta.env.BASE_URL;
-      }
-      this.baseUrl = (detectedBase || '').replace(/\/+$/, '');
+      // 不再自己读 <meta> / BASE_URL（spec §2.3：base 只有一个产地）。
+      // 未注入 provider 且未给 baseUrl 时保持空串，由调用方显式负责。
+      this.baseUrl = '';
     }
 
     this.maxQuotaBytes = options?.maxQuotaBytes;
   }
 
+  private currentBaseUrl(): string {
+    if (!this.baseUrlProvider) return this.baseUrl;
+    const raw = this.baseUrlProvider();
+    return String(raw).replace(/\/+$/, '');
+  }
+
   resolveUrl(subPath: string): string {
     const cleanSub = subPath.startsWith('/') ? subPath : `/${subPath}`;
-    return `${this.baseUrl}${cleanSub}`.replace(/([^:]\/)\/+/g, '$1');
+    return `${this.currentBaseUrl()}${cleanSub}`.replace(/([^:]\/)\/+/g, '$1');
   }
 
   get isReady(): boolean {

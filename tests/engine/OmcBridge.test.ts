@@ -5,12 +5,13 @@
 // 另有成功路径锁（回归锁，见文件末尾 describe）：
 //   ① 装配成功 ⇒ window.__omc 被赋为该模块 namespace + init 调用顺序 + blobUrl 回收；
 //   ② 装配前置失败（embed 无 mod.FS）⇒ 响亮失败 FLAVOR_UNAVAILABLE，不许静默早退。
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as OmcBridge from '../../src/modules/engine/OmcBridge';
 import { setupOmcBridge, onOmcFlavorError } from '../../src/modules/engine/OmcBridge';
 import { EngineAssetResolver } from '../../src/modules/engine/EngineAssetResolver';
 import { MemoryStore } from '../../src/modules/storage/MemoryStore';
 import { WasmEmbedAdapter } from '../../src/modules/engine/WasmEmbedAdapter';
+import { resetDeploymentCache } from '../../src/modules/engine/deployment';
 import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 
@@ -33,6 +34,10 @@ function makeEmbed(): any {
     eval: vi.fn().mockResolvedValue({ ok: true, rc: 0 }),
   };
 }
+
+// spec §2.3：setupOmcBridge 的 OMC 脚本 URL 走统一 deployment 产地；
+// happy-dom 没有 <meta site-base>，测试宿主用 __siteBase 显式提供。
+beforeEach(() => { (window as any).__siteBase = '/'; });
 
 describe('OmcBridge module shape', () => {
   it('exports setupOmcBridge as a function on an independent module', () => {
@@ -134,6 +139,7 @@ describe('OmcBridge pure omc lane (main flavor)', () => {
 describe('WasmEmbedAdapter boot integration', () => {
   function installMockEmbedHost(): void {
     (globalThis as any).window = {
+      __siteBase: '/',   // spec §2.3：boot() 默认走统一 deployment 产地
       OctaveEmbed: {
         create: vi.fn().mockResolvedValue({
           id: 'dual-engine',
@@ -192,6 +198,7 @@ describe('WasmEmbedAdapter boot integration', () => {
   // 现在它必须走既有的 FLAVOR_UNAVAILABLE 降级分支：adapter 照常返回、toast 一次。
   function installMockEmbedHostWithoutFs(): void {
     (globalThis as any).window = {
+      __siteBase: '/',   // spec §2.3：boot() 默认走统一 deployment 产地
       OctaveEmbed: {
         create: vi.fn().mockResolvedValue({
           id: 'dual-engine-no-fs',
@@ -262,6 +269,9 @@ function resetOmcFixture(): void {
   // 让 __siteBase 成为唯一基址来源（离线降级用例会改用不可解析的基址）
   document.querySelectorAll('meta[name="site-base"]').forEach((m) => m.remove());
   (window as any).__siteBase = FIXTURE_BASE;
+  // spec §2.3：getDeployment() 是惰性缓存，换 __siteBase 后必须清缓存，
+  // 否则用例拿到的是上一轮（'/'）的冻结 deployment。
+  resetDeploymentCache();
   delete (window as any).__octaveHosts;
   delete (window as any).Module;
 }

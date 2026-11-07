@@ -42,7 +42,10 @@ export const octaveListPackagesTool = defineTool({
     }
 
     if (!pm.getCatalog()) {
-      await pm.loadCatalog().catch(() => {});
+      // spec §2.2 / S5：不许 `.catch(() => {})` 把 CATALOG_UNREADABLE 吞成
+      // `{total:0}` 且 isError:false 的假绿（CONTEXT.md「降级信号」）。
+      // 装载失败必须让 dispatcher 的 error 信封透出去。
+      await pm.loadCatalog();
     }
 
     const query = typeof args.query === 'string' ? args.query : '';

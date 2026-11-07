@@ -55,6 +55,8 @@ REGISTRY = {
     "REFLECT_RETRACTIONS": ("file", "retractions.json", "翻案台账"),
     "REFLECT_QUESTIONS": ("dir", "questions", "悬案目录"),
     "REFLECT_ENV_FILE": ("value", "Einfacht.env", "钩子旋钮载体的文件名"),
+    "REFLECT_HARNESS_DIR": ("dir", "/mnt/hdd/zcode-test/harness",
+                            "验收脚本无手搓 base 闸门的扫描目录"),
     "REFLECT_INVARIANTS": ("file", "", "声明式不变量规格；空 = 明说未启用"),
     "REFLECT_INSTRUMENTS": ("file", "", "量法登记位；空 = 该规则明说未启用"),
     "REFLECT_INSTRUMENT_DAYS": ("number", "", "恒常检测阈值天；空 = 该规则明说未启用"),

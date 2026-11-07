@@ -4,6 +4,7 @@
 // 失败一律 throw；附加 flavor（双引擎模式）的降级告知走 onOmcFlavorError 回调通道，由组合根订阅后呈现。
 
 import { EngineAssetResolver, type EngineLane } from './EngineAssetResolver';
+import { getDeployment } from './deployment';
 
 /** OMC flavor 失败错误：附加 flavor（双引擎模式）失败必带 code=FLAVOR_UNAVAILABLE */
 export type OmcFlavorError = Error & { code?: string };
@@ -73,10 +74,10 @@ export async function setupOmcBridge(embed: any, lane?: EngineLane): Promise<voi
 
     if (typeof window !== 'undefined' && !(window as any).__omc) {
       await EngineAssetResolver.getInstance().withLocalAssets('omc', 'w32', async () => {
-        const globalBase = (document.querySelector('meta[name="site-base"]')?.getAttribute('content') || (window as any).__siteBase) || '/';
-        const normalizedBase = globalBase.endsWith('/') ? globalBase : `${globalBase}/`;
-        const omcScriptUrl = `${normalizedBase}omc/OpenModelicaCompiler.js`;
-        const omcWasmUrl = `${normalizedBase}omc/OpenModelicaCompiler_bg.wasm`;
+        // spec §2.3：siteBase 只有 engine/deployment 一个产地，不再自己读 <meta>。
+        const siteBase = getDeployment().siteBase;
+        const omcScriptUrl = `${siteBase}omc/OpenModelicaCompiler.js`;
+        const omcWasmUrl = `${siteBase}omc/OpenModelicaCompiler_bg.wasm`;
         let omcMod: any = null;
         let blobUrl: string | null = null;
 

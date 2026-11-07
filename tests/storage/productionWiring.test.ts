@@ -49,13 +49,15 @@ describe('生产可达性：组合根真的注入了两条缝', () => {
 
   it('★ 两条缝共享**同一个** fzstd loader 单例（否则会各拉一次，违反"只拉一次"）', () => {
     const src = readSource('src/modules/appContext.ts');
-    // 单例定义一次
-    const defs = src.match(/const\s+(\w*fzstd\w*)\s*=\s*createBrowserFzstdLoader\(/g) ?? [];
+    // 惰性单例：构造点一次（getFzstdLoaderForReleases 内的 createBrowserFzstdLoader）
+    const defs = src.match(/createBrowserFzstdLoader\(/g) ?? [];
     expect(defs.length).toBe(1);
-    const name = defs[0]!.match(/const\s+(\w+)/)![1]!;
-    // 两处 hasZstd 都引用它
-    const uses = src.match(new RegExp(`hasZstd:\\s*\\(\\)\\s*=>\\s*${name}\\.isUsable\\(\\)`, 'g')) ?? [];
+    // 两处 hasZstd 都经同一个惰性 getter，不各自 new
+    const uses = src.match(/hasZstd:\s*\(\)\s*=>\s*getFzstdLoaderForReleases\(\)\.isUsable\(\)/g) ?? [];
     expect(uses.length).toBe(2);
+    // 且 base 来自统一产地，不再有独立 getSiteBase
+    expect(src).toContain('getDeployment().siteBase');
+    expect(src).not.toContain('function getSiteBase');
   });
 
   it('★ w64 车道的站点候选**先查 w64/ 子目录**（根目录那份是 wasm32 的镜像复制）', () => {

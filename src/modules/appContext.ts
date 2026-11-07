@@ -1,6 +1,7 @@
 // src/modules/appContext.ts
 // 全局领域服务单例与应用状态上下文：装配 EngineSupervisor、CapabilityPolicy 与 GraphicsSink
 import { EngineSupervisor } from './engine/EngineSupervisor';
+import { getDeployment } from './engine/deployment';
 import { onOmcFlavorError } from './engine/OmcBridge';
 import { TerminalController } from './terminal/TerminalController';
 import { HistoryStore } from './history/HistoryStore';
@@ -33,17 +34,13 @@ export const supervisor = new EngineSupervisor();
 export const dockLayoutStore = new DockLayoutStore();
 export const panelRegistry = panelRegistryInstance;
 
-function getSiteBase(): string {
-  if (typeof document !== 'undefined') {
-    const meta = document.querySelector('meta[name="site-base"]');
-    const content = meta?.getAttribute('content');
-    if (content) return content;
-    if ((window as any).__siteBase) return (window as any).__siteBase;
-  }
-  if (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) {
-    return import.meta.env.BASE_URL;
-  }
-  return '';
+// base 的唯一产地是 engine/deployment.resolveDeployment()（spec §2.3）；
+// 这里不再有独立的 getSiteBase()，避免第 7 个产地。
+// 把「解析函数」交给 public/bridge/assets-loader.js 的惰性默认实例。
+// 只挂函数、不在这里解析：模块顶层执行时 <meta> 可能尚未进入 DOM，
+// vitest 的 happy-dom 也没有 meta；真正访问 window.OctaveAssets 时才求值一次。
+if (typeof window !== 'undefined') {
+  (window as any).__resolveOctaveDeployment = () => getDeployment();
 }
 
 /**
@@ -106,7 +103,15 @@ export function deriveCatalogueUrl(_siteBase?: string): string {
 
 // fzstd 加载器**单例**：两条发布缝（包 + 引擎）共享同一个实例，
 // 才能保证「用户没退出网站之前，fzstd 只能拉一次」——两个 loader 会各拉一次。
-const fzstdLoaderForReleases = createBrowserFzstdLoader(getSiteBase());
+// 惰性构造：base 来自 getDeployment().siteBase（唯一产地），而 <meta> 只在 DOM
+// 就绪后可读；模块顶层不解析，避免 import 顺序把装配缺陷提前引爆。
+let _fzstdLoaderForReleases: ReturnType<typeof createBrowserFzstdLoader> | null = null;
+function getFzstdLoaderForReleases() {
+  if (!_fzstdLoaderForReleases) {
+    _fzstdLoaderForReleases = createBrowserFzstdLoader(getDeployment().siteBase);
+  }
+  return _fzstdLoaderForReleases;
+}
 
 /**
  * 编码偏好（生产策略，**按条目体积**）。
@@ -133,7 +138,7 @@ const catalogueReleaseSource = createCatalogueReleaseSource({
   catalogueUrl: catalogueUrlCandidates(),
   fetchPort: new BrowserFetchAdapter(),
   // zstd 可用性**活查询**（内容仓 151 级别的坑：传死值会「先白下 zstd 再回落」）
-  hasZstd: () => fzstdLoaderForReleases.isUsable(),
+  hasZstd: () => getFzstdLoaderForReleases().isUsable(),
   codecPreference: codecPreferenceBySize,
   onFallback: ({ packageName, reason }) => {
     console.warn(
@@ -145,13 +150,17 @@ const catalogueReleaseSource = createCatalogueReleaseSource({
 export const workspaceStorage = new WorkspaceStorageManager();
 export const downloadStore = new DownloadStore({
   storage: workspaceStorage.store,
-  baseUrl: getSiteBase(),
+  baseUrlProvider: () => getDeployment().siteBase,
   catalogProvider: async () => {
+    // 缓存来自 packageManagerPlugin（唯一经 IAssetsPort 的读者）。未加载过就
+    // 走**同一个 port** 加载一次，不开第二份 URL/来源（spec §2.3 S2）。
+    // 注意：这里不是「第二个读者」，而是同一 adapter 的首次填充；
+    // BrowserAssetsAdapter 内部的直 fetch / browse 合成目录才是要删的第二产地。
     const cached = packageManagerPlugin.getCatalog();
     if (cached && Array.isArray(cached.packs) && cached.packs.length > 0) {
       return cached;
     }
-    return packageManagerPlugin.getAssetsPort().fetchCatalog();
+    return packageManagerPlugin.loadCatalog();
   },
   // 发布契约源（内容仓 099 / Static-Contract schema 3）：市场重写的生产接线。
   // 有这一行，`resolveSrcTarget` 才真的会走「manifest + 分片 + 逐块解压 + 两道校验」；
@@ -168,7 +177,7 @@ export const downloadStore = new DownloadStore({
   engineReleaseSource: createCatalogueEngineReleaseSource({
     catalogueUrl: catalogueUrlCandidates(),
     fetchPort: new BrowserFetchAdapter(),
-    hasZstd: () => fzstdLoaderForReleases.isUsable(),
+    hasZstd: () => getFzstdLoaderForReleases().isUsable(),
     codecPreference: codecPreferenceBySize,
     onFallback: ({ lane, reason }) => {
       console.warn(
