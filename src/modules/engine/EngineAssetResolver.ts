@@ -337,7 +337,7 @@ export class EngineAssetResolver implements IEngineAssetResolver {
       return await (this._store as any).readBlob(path);
     }
     const data = await this._store.read(path);
-    return new Blob([data]);
+    return new Blob([new Uint8Array(data).buffer as ArrayBuffer]);
   }
 
   async checkPhysicalStatus(lane: EngineLane, variant?: EngineVariant): Promise<EngineAssetStatus> {

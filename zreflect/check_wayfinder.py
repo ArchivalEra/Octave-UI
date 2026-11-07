@@ -257,6 +257,8 @@ def _cases():
     os.makedirs(os.path.join(d, "src/modules/storage"))
     os.makedirs(os.path.join(d, "src/modules/terminal"))
     os.makedirs(os.path.join(d, "src/components"))
+    os.makedirs(os.path.join(d, "src/modules/market"))      # 2026-11-07 深模块
+    os.makedirs(os.path.join(d, "src/modules/vault"))       # 2026-11-07 深模块
     os.makedirs(os.path.join(d, "scripts"))
     SUPERVISOR = os.path.join(d, "src/modules/engine/EngineSupervisor.ts")
     PACKAGE = os.path.join(d, "src/modules/plugins/package/PackageManagerPlugin.ts")
@@ -273,6 +275,9 @@ def _cases():
 
     _w(SUPERVISOR, "export class EngineSupervisor {}\n")
     _w(PACKAGE, "export function getAssetsPort() { return 1; }\n")
+    # 2026-11-07 两个深模块的夹具源文件（供新形状断言扫到「存在」）。
+    _w(os.path.join(d, "src/modules/market/Market.ts"), "export class Market {}\n")
+    _w(os.path.join(d, "src/modules/vault/Vault.ts"), "export class Vault {}\n")
     _w(os.path.join(d, "src/modules/figure/GraphicsSink.ts"),
        "export function onFigure() {}\n")
     _w(os.path.join(d, "src/modules/engine/OmcBridge.ts"),
@@ -280,7 +285,9 @@ def _cases():
     _w(APPCTX, "import { onOmcFlavorError } from './engine/OmcBridge';\n"
                "onOmcFlavorError((err) => {});\n"
                # #23 候选 3 前置断言的夹具目标（组合根把单例绑到写路径同一个 store）
-               "EngineAssetResolver.getInstance(workspaceStorage.store);\n")
+               "EngineAssetResolver.getInstance(workspaceStorage.store);\n"
+               # 2026-11-07 重写断言：契约投影在组合根唯一绑定
+               "bindProjection(projectContract(facts, caps));\n")
     _w(DOWNLOAD, "const meta = { sha256: 'ab'.repeat(8) };\n")
     # #6 五件套断言的夹具目标（形状与真仓一致：两拦截键 + boot 前置对账 + 平铺存储名）
     RESOLVER = os.path.join(d, "src/modules/engine/EngineAssetResolver.ts")
@@ -306,6 +313,7 @@ def _cases():
     # #14 包管理器错误呈现链断言的夹具目标（形状与真仓一致：DX3 forge 复制行 +
     # DX1 toast 双呈现 + DX2 互斥/重试 + R1 终端净化接线）
     _w(SYNCLANES, "# 夹具 sync-lanes.sh\n"
+                  "# 旧的 DX3 已删：站点根是唯一产地，不再物理复制\n"
                   "cp -f forge-catalog.json lane/assets/forge-catalog.json\n"
                   "cp -rf assets/forge/ lane/assets/forge/\n"
                   "cp -rf assets/pkg/ lane/assets/pkg/\n")

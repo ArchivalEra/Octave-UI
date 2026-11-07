@@ -5,6 +5,7 @@
 
 import type { IAssetsPort, InstallOptions } from './AssetsPort';
 import type { ForgeCatalog, PackageStatusResult, InstallResult } from './types';
+import { semanticRoles, bindCompatCatalog } from '../../contract/projection';
 
 export class BrowserAssetsAdapter implements IAssetsPort {
   /** 零参构造：不再有 `base?: string`（那是「调用方自带 base」的最后一个入口）。 */
@@ -20,6 +21,8 @@ export class BrowserAssetsAdapter implements IAssetsPort {
     // 不再 console.warn 后静默落到直 fetch / browse() 合成目录 —— 那会把
     // 「读不到」洗成 total>0 的假绿（11-06 code-review Standards 轴点名的那条）。
     const cat = await (window as any).OctaveAssets.catalog();
+    // 旧兼容层：从同一份装配态目录投影语义（工具链身份），零手写名字。
+    bindCompatCatalog(cat);
     if (!cat || !Array.isArray(cat.packs)) {
       const e = new Error('CATALOG_UNREADABLE: catalog() returned no packs') as Error & { code: string };
       e.code = 'CATALOG_UNREADABLE';
@@ -74,7 +77,9 @@ export class BrowserAssetsAdapter implements IAssetsPort {
   }
 
   async install(name: string, options?: InstallOptions): Promise<InstallResult> {
-    if (name === 'llvm-wasm' || name.includes('llvm')) {
+    // 工具链身份由契约 role 投影，零手写名字 / includes。
+    const sem = semanticRoles();
+    if (sem.toolchainName && name === sem.toolchainName) {
       return {
         state: 'failed',
         cause: 'NOT_INSTALLABLE',

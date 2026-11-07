@@ -47,6 +47,9 @@ import type { EngineSupervisor } from '../../src/modules/engine/EngineSupervisor
 import type { ProjectWorkspace } from '../../src/modules/workspace/ProjectWorkspace';
 import type { PackageManagerPlugin } from '../../src/modules/plugins/package/PackageManagerPlugin';
 import type { WebMcpToolCallResult } from '../../src/modules/plugins/webmcp/types';
+// ★ step-1 投影 golden：MCP enum 由契约投影给，测试先绑定一份装配态契约。
+import { bindProjection, resetProjectionCache, projectContract } from '../../src/modules/contract/projection';
+import { LANE_PRODUCT } from '../../src/modules/engine/laneProducts';
 
 // ---------------------------------------------------------------------------
 // 归一化 helper：所有快照统一入口。
@@ -157,6 +160,11 @@ function makeMocks() {
       state: 'ok',
       cause: null,
     }),
+    // ★ 三路同轴：非 planOnly 分支走 Market.ensure 的同一条缝。
+    ensurePackage: vi.fn().mockResolvedValue({
+      state: 'ok', name: 'signal', cause: 'ok', installed: ['signal'],
+      evidence: { downloaded: ['signal'], loadedFromOpfs: true, booted: true, compiled: [], shaChecked: ['signal'] },
+    }),
   };
 
   return { mockSupervisor, mockWorkspace, mockPackageManager };
@@ -265,6 +273,21 @@ describe('WebMCP golden master (step 0, recorded against old implementation)', (
 
   beforeEach(() => {
     mocks = makeMocks();
+    // 与真契约同形的装配态：consumer/form/stage 值由这里投影，零手写 enum。
+    resetProjectionCache();
+    bindProjection(projectContract({
+      content: {
+        schema: 2, packs: [
+          { name: 'signal', version: '1.4.5', form: 'pkg', content: ['m'], consumer: ['octave'],
+            role: 'package', stage: 'staged', deps: [], url: 'assets/forge/signal.tar.gz',
+            sha256: 'a'.repeat(64), size: 1048576 },
+          { name: 'pyodide', version: '0.26.2', form: 'tree', content: [], consumer: ['omc'],
+            role: 'language-bridge', stage: 'withheld', deps: [], url: 'assets/pyodide/pyodide.asm.wasm',
+            sha256: 'b'.repeat(64), size: 22013349, recipe: 'pyodide' },
+        ],
+      },
+      distribution: {}, manifests: {}, engine: LANE_PRODUCT, optionalKeys: ['role', 'stage'],
+    }, { decodableCodecs: new Set(['identity']), activeLane: 'wasm32-final' }));
     plugin = new WebMcpPlugin({
       supervisor: mocks.mockSupervisor as unknown as EngineSupervisor,
       projectWorkspace: mocks.mockWorkspace as unknown as ProjectWorkspace,
@@ -426,22 +449,24 @@ describe('WebMCP golden master (step 0, recorded against old implementation)', (
     it('boundary | octave_list_packages | installedOnly passed as "yes" (illegal type) → Boolean("yes") = true', async () => {
       const res = await plugin.callTool('octave_list_packages', { installedOnly: 'yes' });
       expect(golden(res)).toMatchSnapshot();
-      // 顺带录 filterPackages 实际收到的入参（旧实现的类型收敛行为）
+      // step-1 投影 golden：不过滤哨兵 = 空串（不再是手写 'all'）。
       expect(mocks.mockPackageManager.filterPackages).toHaveBeenCalledWith({
         query: '',
-        consumer: 'all',
-        form: 'all',
+        consumer: '',
+        form: '',
         installedOnly: true,
       });
     });
 
-    it('boundary | octave_list_packages | consumer passed as number 5 (illegal type) → passed through verbatim', async () => {
+    it('boundary | octave_list_packages | consumer passed as number 5 (illegal type) → type guard drops it', async () => {
       const res = await plugin.callTool('octave_list_packages', { consumer: 5 });
       expect(golden(res)).toMatchSnapshot();
+      // ★ 新接口：非法类型不进 filter（零手写选项要求只传契约值），
+      //   旧实现「原样透传 5」的病理形状已翻案。
       expect(mocks.mockPackageManager.filterPackages).toHaveBeenCalledWith({
         query: '',
-        consumer: 5,
-        form: 'all',
+        consumer: '',
+        form: '',
         installedOnly: false,
       });
     });

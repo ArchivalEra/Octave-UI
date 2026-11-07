@@ -41,6 +41,11 @@ export interface WorkspaceVariable {
   size: string | number[];
   bytes: number;
   complex?: boolean;
+  // ★ 2026-11-07：WebMCP / VariableInspector 消费面已在用的字段，
+  //   补进类型（消除 TS2339，与契约脱节债同族）。
+  type?: string;
+  dimensions?: string;
+  valuePreview?: string;
 }
 
 export interface FsEntry {
@@ -52,6 +57,10 @@ export interface FsEntry {
 export interface EvalResult {
   ok: boolean;
   rc: number;
+  // ★ 2026-11-07：octaveEval / runCell / ProjectWorkspace 消费面已在用，
+  //   补进类型（消除 TS2339/TS2353）。
+  output?: string;
+  error?: string;
 }
 
 export interface EvalJSONResult<T = any> {

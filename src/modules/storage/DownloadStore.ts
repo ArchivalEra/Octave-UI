@@ -113,16 +113,11 @@ interface DownloadStoreOptions {
   engineReleaseSource?: EngineReleaseSource;
 }
 
-const KNOWN_RUNTIME_METADATA: Record<string, { bytes: number; sha256: string }> = {
-  'llvm-wasm@6.0.12': {
-    bytes: 34693729,
-    sha256: 'cd6450fe7944875cb39f8e4a0790d5a08e032044f1db89054dadcabb749b20ce',
-  },
-  'pyodide@314.0.7': {
-    bytes: 13742761,
-    sha256: '6a4976babd0cb34c8906e4847405614db92c70588b42f27d7612898c3debbd76',
-  },
-};
+// ★ 2026-11-07 修「包装不上」断点④：LLVM 三套互斥 sha 的根因之一。
+//   旧手抄元数据表写了 llvm-wasm@6.0.12 的 sha/bytes，与
+//   forge-catalog.json 的 198e84…/122980779 及 dist 产物三方互斥 ⇒ LLVM 门恒关。
+//   删表：catalog 真源不可达 ⇒ 响亮 FLAVOR_UNAVAILABLE，绝不拿陈旧 sha 假绿。
+//   （引擎侧的 KNOWN_ENGINE_METADATA 另有 DEVIATIONS ⑤ 离线兜底口径，阶段 5 处理。）
 
 // #12 Q12.2 手抄表瘦身：顶层 bytes/sha256 删除（bytes 从 files 累加即得，
 // 顶层聚合 sha 是「装饰」不是对账真源——128hex 拼接串曾在此产地出现）；
@@ -841,15 +836,15 @@ export class DownloadStore {
     items: DownloadItem[];
   }> {
     let filename = `${ref.name}-${ref.version}.tar.gz`;
-    const known = KNOWN_RUNTIME_METADATA[`${ref.name}@${ref.version}`];
 
     if (this.catalogProvider) {
       try {
         const cat = await this.catalogProvider();
         const pkg = (cat.packs || []).find((p) => p.name === ref.name);
         if (pkg) {
-          const sha256 = (pkg as any).sha256 || known?.sha256;
-          const bytes = (pkg as any).size || known?.bytes;
+          // sha/bytes 只认内容契约（forge-catalog.json）单一产地，零手抄兜底。
+          const sha256 = (pkg as any).sha256;
+          const bytes = (pkg as any).size;
           if (!sha256 || !bytes) {
             throw new DownloadError(
               'FLAVOR_UNAVAILABLE',
@@ -880,22 +875,12 @@ export class DownloadStore {
       }
     }
 
-    // 默认工具链/已知运行时（如 llvm-wasm、pyodide）
-    if (!known) {
-      throw new DownloadError(
-        'FLAVOR_UNAVAILABLE',
-        `Unknown runtime target or missing checksum: ${ref.name}@${ref.version}`
-      );
-    }
-
-    const url = this.resolveUrl(`assets/runtimes/${filename}`);
-    const destPath = `downloads/runtime/${ref.name}/${ref.version}/${filename}`;
-    return {
-      sha256: known.sha256,
-      bytes: known.bytes,
-      provenanceUrl: url,
-      items: [{ filename, url, destPath, sha256: known.sha256 }],
-    };
+    // ★ 2026-11-07：catalog 真源不可达 ⇒ 响亮失败，绝不拿陈旧手抄 sha 假绿。
+    //   LLVM 三套互斥 sha 的病根就是「兜底表升格成第二真源」。
+    throw new DownloadError(
+      'FLAVOR_UNAVAILABLE',
+      `Content contract unreadable for runtime ${ref.name}@${ref.version} — no verified checksum/size available`
+    );
   }
 
   private async resolveSrcTarget(ref: DownloadRef): Promise<{
@@ -936,13 +921,21 @@ export class DownloadStore {
 
     const sha256 = (targetVersion as any).sha256 || '';
     const bytes = targetVersion.size || 0;
-    const filename = `${ref.name}-${ref.version}.tar.gz`;
-    const url = this.resolveUrl(`/assets/packages/${filename}`);
+    // ★ 2026-11-07 修「包装不上」断点②：回落整包 URL 过去自己拼
+    //   `/assets/packages/${name}-${version}.tar.gz`，而 dist 里**没有这个目录**
+    //   （真实产物在 assets/forge/）⇒ 只要 release 未命中就必然 404。
+    //   优先逐字取内容契约的 `url`（货架 = 唯一产地）；旧夹具/极简目录没带
+    //   url 时回落到**真实产物目录** assets/forge/，绝不回死链。
+    const contractUrl = String((targetVersion as any).url || (pkg as any)?.url || '');
+    const filename = contractUrl
+      ? (contractUrl.split('/').pop() || `${ref.name}-${ref.version}.tar.gz`)
+      : `${ref.name}-${ref.version}.tar.gz`;
+    const url = this.resolveUrl(contractUrl || `assets/forge/${filename}`);
     const destPath = `downloads/src/${ref.name}/${ref.version}/${filename}`;
 
     // 发布契约优先（内容仓 099）：注入 releaseSource 且该包在 release 里 ⇒ 走分片装配。
     // 解析不出（上游没发 schema 3 / catalogue dead / 该包不在 catalogue）⇒ 回落到
-    // 老的整包路径——**降级不是失败**，是派生窗口期的正常形态（099 §6.5）。
+    // 内容契约自己的 url——**降级不是失败**，是派生窗口期的正常形态（099 §6.5）。
     if (this.releaseSource) {
       let released: ResolvedReleaseTarget | null = null;
       try {

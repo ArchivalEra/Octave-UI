@@ -146,7 +146,7 @@ describe('DownloadStore Deep Module', () => {
       fetchPort: mockFetch,
       baseUrl: 'https://octave.test',
       catalogProvider: () => sampleCatalog,
-      engineBuildProvider: () => sampleEngineBuild,
+      engineBuildProvider: async () => sampleEngineBuild,
       laneProvider: () => 'master',
       maxQuotaBytes: 100 * 1024 * 1024, // 100MB
     });
@@ -160,7 +160,7 @@ describe('DownloadStore Deep Module', () => {
 
   it('I1: resolves SHA256 and target authoritatively from catalog', async () => {
     const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
-    const url = 'https://octave.test/assets/packages/cgi-0.1.2.tar.gz';
+    const url = 'https://octave.test/assets/forge/cgi-0.1.2.tar.gz';
     mockFetch.setFile(url, 'fake-tarball-cgi', CGI_SHA);
 
     const rec = await store.download(ref);
@@ -175,7 +175,7 @@ describe('DownloadStore Deep Module', () => {
 
   it('I2: atomic rollback when SHA256 mismatch or write fails', async () => {
     const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
-    const url = 'https://octave.test/assets/packages/cgi-0.1.2.tar.gz';
+    const url = 'https://octave.test/assets/forge/cgi-0.1.2.tar.gz';
     // 伪造错误哈希（仍是合法 64hex 形状——intake 断言放行，校验环拦截）
     mockFetch.setFile(url, 'tampered-data', sha256OfNode('tampered-data'));
     // catalog 声称的指纹与盘上字节不符 ⇒ 校验红
@@ -197,7 +197,7 @@ describe('DownloadStore Deep Module', () => {
 
   it('I3: idempotency on unchanged SHA and drift detection when SHA changes', async () => {
     const ref: DownloadRef = { name: 'symbolic', version: '3.2.2', kind: 'src' } as any;
-    const url = 'https://octave.test/assets/packages/symbolic-3.2.2.tar.gz';
+    const url = 'https://octave.test/assets/forge/symbolic-3.2.2.tar.gz';
     mockFetch.setFile(url, 'symbolic-v1', SYMBOLIC_V1_SHA);
 
     const fetchSpy = vi.spyOn(mockFetch, 'fetchBytes');
@@ -264,7 +264,7 @@ describe('DownloadStore Deep Module', () => {
 
   it('reconciles stat with disk deletion and cleans up missing records', async () => {
     const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
-    const url = 'https://octave.test/assets/packages/cgi-0.1.2.tar.gz';
+    const url = 'https://octave.test/assets/forge/cgi-0.1.2.tar.gz';
     mockFetch.setFile(url, 'fake-tarball-cgi', CGI_SHA);
 
     await store.download(ref);
@@ -285,7 +285,7 @@ describe('DownloadStore Deep Module', () => {
   });
 
   it('★ B3 并发去重：同 ref 双发只拉一次（第二发复用第一发的 promise）', async () => {
-    const url = 'https://octave.test/assets/packages/dedup-0.1.0.tar.gz';
+    const url = 'https://octave.test/assets/forge/dedup-0.1.0.tar.gz';
     mockFetch.setFile(url, 'dedup-bytes', sha256OfNode('dedup-bytes'));
     mockFetch.setJSON('https://octave.test/assets/catalog-dedup.json', {
       schema: 2, packs: [{ name: 'dedup', version: '0.1.0', size: 11, form: 'pkg',
@@ -296,7 +296,7 @@ describe('DownloadStore Deep Module', () => {
       storage: memoryStore, fetchPort: mockFetch, baseUrl: 'https://octave.test',
       catalogProvider: () => ({ schema: 2, packs: [{ name: 'dedup', version: '0.1.0',
         size: 11, form: 'pkg', content: ['m'], sha256: sha256OfNode('dedup-bytes'),
-        url: 'assets/packages/dedup-0.1.0.tar.gz' } as any] }) as any,
+        url: 'assets/forge/dedup-0.1.0.tar.gz' } as any] }) as any,
     });
     await dedupStore.init();
     const ref = { name: 'dedup', version: '0.1.0', kind: 'src', arch: null } as any;
@@ -326,7 +326,7 @@ describe('DownloadStore Deep Module', () => {
 
     // 4. STORAGE_WRITE_FAILED（catalog 指纹与盘上字节不符——校验环拦截）
     const refBad: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
-    mockFetch.setFile('https://octave.test/assets/packages/cgi-0.1.2.tar.gz', 'bad', sha256OfNode('bad'));
+    mockFetch.setFile('https://octave.test/assets/forge/cgi-0.1.2.tar.gz', 'bad', sha256OfNode('bad'));
     (sampleCatalog.packs[0].versions![0] as any).sha256 = sha256OfNode('other-bytes');
     await expect(store.download(refBad)).rejects.toMatchObject({ code: 'STORAGE_WRITE_FAILED' });
     (sampleCatalog.packs[0].versions![0] as any).sha256 = CGI_SHA;
@@ -334,7 +334,7 @@ describe('DownloadStore Deep Module', () => {
     // 5. DOWNLOAD_ABORTED
     const controller = new AbortController();
     controller.abort();
-    mockFetch.setFile('https://octave.test/assets/packages/cgi-0.1.2.tar.gz', 'data', sha256OfNode('data'));
+    mockFetch.setFile('https://octave.test/assets/forge/cgi-0.1.2.tar.gz', 'data', sha256OfNode('data'));
     await expect(store.download(refBad, { signal: controller.signal })).rejects.toMatchObject({
       code: 'DOWNLOAD_ABORTED',
     });
@@ -828,7 +828,7 @@ describe('DownloadStore Deep Module', () => {
 
   it('#15 Q15.1: 一次完整 download ⇒ octave:download-changed 事件数 === 2（start null + 终态 record）', async () => {
     const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
-    const url = 'https://octave.test/assets/packages/cgi-0.1.2.tar.gz';
+    const url = 'https://octave.test/assets/forge/cgi-0.1.2.tar.gz';
     mockFetch.setFile(url, 'fake-tarball-cgi', CGI_SHA);
 
     const counter = countDownloadEvents();
@@ -846,7 +846,7 @@ describe('DownloadStore Deep Module', () => {
   it('#15 Q15.1: 失败路径 ⇒ 事件数 === 2（start null + null 终态声——失败也是终态）', async () => {
     const ref: DownloadRef = { name: 'cgi', version: '0.1.2', kind: 'src' } as any;
     // catalog 指纹与盘上字节不符 ⇒ 校验环拦 ⇒ throw（复用 I2 用例的手法）
-    mockFetch.setFile('https://octave.test/assets/packages/cgi-0.1.2.tar.gz', 'tampered', sha256OfNode('tampered'));
+    mockFetch.setFile('https://octave.test/assets/forge/cgi-0.1.2.tar.gz', 'tampered', sha256OfNode('tampered'));
     (sampleCatalog.packs[0].versions![0] as any).sha256 = sha256OfNode('other');
 
     const counter = countDownloadEvents();
@@ -967,7 +967,7 @@ describe('DownloadStore Deep Module', () => {
         fetchPort: new MockFetchAdapter(),
         baseUrl: 'https://octave.test',
         catalogProvider: () => sampleCatalog,
-        engineBuildProvider: () => sampleEngineBuild,
+        engineBuildProvider: async () => sampleEngineBuild,
         laneProvider: () => 'master',
         maxQuotaBytes: 100 * 1024 * 1024,
       });
@@ -1138,8 +1138,10 @@ describe('form:"file" 单件交付（内容仓 084 A2 / 086 裁定：MSL 形状�
     });
     // 下载动作独立完成：字节落进 OPFS，记账 sha 是装配后的真指纹
     expect(rec.files.length).toBe(1);
+    // ★ 2026-11-07：文件名逐字来自内容契约 url 的 basename
+    //   （≡ 分发契约 entry.name，零手写拼名），不再是手拼的 <name>-<version>.tar.gz。
     expect(rec.files[0].path).toBe(
-      'downloads/src/modelica-standard-library/4.1.0+maint.om/modelica-standard-library-4.1.0+maint.om.tar.gz'
+      'downloads/src/modelica-standard-library/4.1.0+maint.om/msl-4.1.0-maint.om.zip'
     );
     expect(rec.files[0].sha256).toBe(chunkSha);
     const onDisk = await mem.read(rec.files[0].path);
@@ -1482,13 +1484,13 @@ describe('发布契约集成：注入 releaseSource ⇒ 分片装配；不注入
     expect(Array.from(onDisk)).toEqual(Array.from(PAYLOAD));
   });
 
-  it('★ 不注入 releaseSource ⇒ 老整包路径（请求 assets/packages/...，不经装配）', async () => {
+  it('★ 不注入 releaseSource ⇒ 整包路径（请求内容契约的 assets/forge/...，不经装配）', async () => {
     const memory = new MemoryStore();
     await memory.init();
     const tar = new TextEncoder().encode('tarball-bytes');
     const sha = sha256OfNode(tar);
     const wholeFetch = new MockFetchAdapter();
-    wholeFetch.setFile('https://octave.test/assets/packages/statistics-1.7.7.tar.gz', tar, sha);
+    wholeFetch.setFile('https://octave.test/assets/forge/statistics-1.7.7.tar.gz', tar, sha);
 
     const store = new DownloadStore({
       storage: memory,
@@ -1515,7 +1517,7 @@ describe('发布契约集成：注入 releaseSource ⇒ 分片装配；不注入
     const tar = new TextEncoder().encode('tb');
     const sha = sha256OfNode(tar);
     const wholeFetch = new MockFetchAdapter();
-    wholeFetch.setFile('https://octave.test/assets/packages/statistics-1.7.7.tar.gz', tar, sha);
+    wholeFetch.setFile('https://octave.test/assets/forge/statistics-1.7.7.tar.gz', tar, sha);
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const store = new DownloadStore({

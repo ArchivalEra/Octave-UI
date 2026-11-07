@@ -12,9 +12,9 @@
       "name": "octave-master",
       "kind": "version",
       "worktree": "/mnt/hdd/zcode-projects/Octave-Full-Wasm",
-      "_comment": "master 仍是活分支（上游唯一的产物线），按分支读；pin 跟进到 0d79117（HISTORY 编号修正，产物面零变更已核）。",
+      "_comment": "master 仍是活分支（上游唯一的产物线），按分支读；2026-11-07 上游活分支实测前进到 20ab8fc（STATE / check-content-port / release workflow 三提交，均为上游仓自身演进，产物面零变更）。按纪律逐键跟进实测值，不手抄旧 pin。",
       "version_read": "git -C /mnt/hdd/zcode-projects/Octave-Full-Wasm rev-parse --short master",
-      "expect_version": "0d79117"
+      "expect_version": "20ab8fc"
     },
     {
       "name": "octave-illegalperformance",

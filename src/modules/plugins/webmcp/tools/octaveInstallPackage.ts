@@ -64,14 +64,23 @@ export const octaveInstallPackageTool = defineTool({
       };
     }
 
-    const installResult = await pm.installPackage(name, { version });
+    // ★ 三路同轴：非 planOnly 走 Market.ensure 的同一条缝（一次直达：
+    //   自动下载→boot→装载→编译），不再与 UI 的多步路径正交。
+    const verdict = await pm.ensurePackage(name);
     return {
-      isError: installResult.state !== 'ok',
+      isError: verdict.state !== 'ok',
       content: [
         {
           type: 'resource',
           mimeType: 'application/json',
-          data: installResult,
+          data: {
+            state: verdict.state,
+            name: verdict.name,
+            cause: verdict.cause,
+            installed: verdict.installed,
+            why: verdict.cause,
+            evidence: verdict.evidence,
+          },
         },
       ],
     };

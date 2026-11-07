@@ -75,6 +75,12 @@ describe('WebMcpPlugin Deep Module', () => {
         state: 'ok',
         cause: null,
       }),
+      // ★ 三路同轴：非 planOnly 分支走 Market.ensure 的同一条缝。
+      ensurePackage: vi.fn().mockResolvedValue({
+        state: 'ok', name: 'signal', cause: 'ok',
+        installed: ['signal'],
+        evidence: { downloaded: ['signal'], loadedFromOpfs: true, booted: true, compiled: [], shaChecked: ['signal'] },
+      }),
     };
 
     plugin = new WebMcpPlugin({
@@ -193,7 +199,7 @@ describe('WebMcpPlugin Deep Module', () => {
       expect(mockPackageManager.filterPackages).toHaveBeenCalledWith({
         query: 'signal',
         consumer: 'octave',
-        form: 'all',
+        form: '',
         installedOnly: false,
       });
     });
@@ -218,7 +224,9 @@ describe('WebMcpPlugin Deep Module', () => {
         version: '1.4.5',
       });
       expect(res.isError).toBeFalsy();
-      expect(mockPackageManager.installPackage).toHaveBeenCalledWith('signal', { version: '1.4.5' });
+      // 同一条缝：UI / MCP / 测试都经 ensurePackage，不再有第二条 install 实现。
+      expect(mockPackageManager.ensurePackage).toHaveBeenCalledWith('signal');
+      expect(mockPackageManager.installPackage).not.toHaveBeenCalled();
     });
 
     it('octave_install_package: errors on missing package name', async () => {

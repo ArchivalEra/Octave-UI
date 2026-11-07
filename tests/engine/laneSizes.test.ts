@@ -67,7 +67,7 @@ describe('readLaneSizes（发现式扫描 public/lanes/ 下各车道）', () => 
       writeFileSync(path.join(good, 'octave.build.json'), JSON.stringify(REAL_SHAPE_BUILD));
       writeFileSync(path.join(bad, 'octave.build.json'), '{ "measured": { "files": {} } }');
 
-      const sizes = readLaneSizes(root);
+      const sizes = readLaneSizes(root) as Record<string, number | null>;
       expect(sizes['wasm32-final']).toBe(39807224);
       expect(sizes['master']).toBeNull();
       expect(Object.keys(sizes).sort()).toEqual(['master', 'wasm32-final']);
@@ -122,7 +122,7 @@ describe('readOmcSize（public/omc/ 下载闭包两件真实字节和，fix/omc-
     for (const partial of [
       { 'OpenModelicaCompiler_bg.wasm': 100 },
       { 'OpenModelicaCompiler.js': 23 },
-    ] as const) {
+    ] as Record<string, number | null>[]) {
       const root = makeOmcRoot(partial);
       try {
         expect(readOmcSize(root)).toBeNull();

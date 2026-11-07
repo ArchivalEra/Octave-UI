@@ -34,7 +34,7 @@ export function downloadFile(
     throw new Error('downloadFile requires a browser DOM environment');
   }
 
-  const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType });
+  const blob = data instanceof Blob ? data : new Blob([new Uint8Array(data).buffer as ArrayBuffer], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

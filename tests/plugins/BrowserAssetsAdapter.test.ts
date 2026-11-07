@@ -76,12 +76,30 @@ describe('BrowserAssetsAdapter Deep Module', () => {
     await expect(adapter.fetchCatalog()).rejects.toMatchObject({ code: 'CATALOG_UNREADABLE' });
   });
 
-  it('blocks toolchain installation with NOT_INSTALLABLE verdict (mail/024 & Q1)', async () => {
-    const res = await adapter.install('llvm-wasm');
-    expect(res.state).toBe('failed');
-    expect(res.why).toBe('NOT_INSTALLABLE');
-    expect(res.cause).toBe('NOT_INSTALLABLE');
-    expect(res.message).toContain('编译工具链');
+  it('★ 零手写：工具链身份由契约 role 投影，拦截 NOT_INSTALLABLE (mail/024 & Q1)', async () => {
+    // 同类肯定：先让探针能从契约测到「工具链条目存在」
+    (globalThis as any).window = {
+      OctaveAssets: {
+        catalog: vi.fn().mockResolvedValue({
+          schema: 2,
+          packs: [
+            { name: 'zig-wasm', version: '0.11.0', form: 'tree', role: 'toolchain',
+              content: [], consumer: ['octave'], recipe: 'zig', url: 'assets/llvm/zig.wasm' },
+            { name: 'signal', version: '1.4.3', form: 'pkg', role: 'package',
+              content: ['m'], consumer: ['octave'], url: 'assets/forge/signal.tar.gz' },
+          ],
+        }),
+      },
+    };
+    await adapter.fetchCatalog();
+    const blocked = await adapter.install('zig-wasm');
+    expect(blocked.state).toBe('failed');
+    expect(blocked.why).toBe('NOT_INSTALLABLE');
+    expect(blocked.cause).toBe('NOT_INSTALLABLE');
+    expect(blocked.message).toContain('编译工具链');
+    // 反向：普通包不因名字含 wasm 之类形状被误拦
+    const normal = await adapter.install('signal');
+    expect(normal.state).not.toBe('failed');
   });
 
   it('maps upstream error codes such as LAYER_NOT_IMPLEMENTED into verdict (mail/024 §5)', async () => {

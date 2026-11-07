@@ -303,6 +303,39 @@
       "desc": "清洗 C6+spec#19：页面级总线红线仍在（wireFigureBusToSink 不许被收窄/删除）",
       "file": "src/modules/figure/GraphicsSink.ts",
       "must_contain": "wireFigureBusToSink"
+    },
+    {
+      "ticket": 27,
+      "desc": "★ 2026-11-07 重写：契约投影层在组合根只绑定一次（唯一真源，禁第二产地）",
+      "file": "src/modules/appContext.ts",
+      "must_contain": "bindProjection(projectContract("
+    },
+    {
+      "ticket": 27,
+      "desc": "★ 旧同步 peek 断点不许回潮：__octaveDownloadedBytes 全仓零出现（代码行）",
+      "dir": "src",
+      "ext": ".ts",
+      "must_not_contain": "__octaveDownloadedBytes"
+    },
+    {
+      "ticket": 27,
+      "desc": "★ LLVM 三套互斥 sha 断点不许回潮：陈旧手抄表已删",
+      "file": "src/modules/storage/DownloadStore.ts",
+      "must_not_contain": "KNOWN_RUNTIME_METADATA"
+    },
+    {
+      "ticket": 27,
+      "desc": "★ 两个深模块零类型耦合：市场不 import Vault / OPFS 类型",
+      "dir": "src/modules/market",
+      "ext": ".ts",
+      "must_not_contain": "from '../vault/"
+    },
+    {
+      "ticket": 27,
+      "desc": "★ OPFS 不认识市场类型：Vault 不 import ForgePackageItem",
+      "dir": "src/modules/vault",
+      "ext": ".ts",
+      "must_not_contain": "ForgePackageItem"
     }
   ]
 }

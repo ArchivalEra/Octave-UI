@@ -18,6 +18,13 @@ import type {
 import type { DownloadStore } from '../../storage/DownloadStore';
 import type { DownloadRef, DownloadRecord, DownloadProgressCallback } from '../../storage/downloadTypes';
 import { refToKey } from '../../storage/downloadTypes';
+// ★ 零手写选项：所有形态/stage/角色/内容阈值从契约投影取，不写死字面量。
+import {
+  axisValues, semanticRoles, semanticForms, availableStageForCompat,
+  bindCompatCatalog, identityOf, readProjection,
+} from '../../contract/projection';
+import type { Market, ProvisionVerdict } from '../../market/Market';
+import type { Vault } from '../../vault/Vault';
 
 export class PackageManagerPlugin implements OctavePlugin {
   readonly id = 'package-manager';
@@ -34,6 +41,10 @@ export class PackageManagerPlugin implements OctavePlugin {
    * 写盘与 resolver 验盘从此不同源，而「忘了调 setDownloadStore」不报错。
    */
   private downloadStore: DownloadStore | null = null;
+  /** ★ 三路同轴：市场深模块由组合根注入，工具/UI 经同一条 ensure 缝。 */
+  private market: Market | null = null;
+  /** Vault：UI「仅下载」半条经它，零 DownloadRef 形状。 */
+  private vault: Vault | null = null;
   /** 装配缺陷只报一次（不刷屏）—— 与 WebMcpPlugin 的 onAssemblyFault 同款 */
   private storeFaultReported = false;
   private catalog: ForgeCatalog | null = null;
@@ -101,6 +112,45 @@ export class PackageManagerPlugin implements OctavePlugin {
     this.storeFaultReported = false;
   }
 
+  /** 组合根注入市场深模块（三路同轴唯一缝）。 */
+  setMarket(market: Market): void {
+    this.market = market;
+  }
+
+  setVault(vault: Vault): void {
+    this.vault = vault;
+  }
+
+  /** 「仅下载」半条：身份由契约投影给，UI 不再构造 DownloadRef。 */
+  async downloadOnly(name: string): Promise<void> {
+    if (!this.vault) {
+      const err: any = new Error('[PackageManagerPlugin] assembly fault: vault not injected');
+      err.code = 'ASSEMBLY_FAULT';
+      throw err;
+    }
+    const pack = readProjection().packs.find((p) => p.name === name);
+    if (!pack) {
+      const err: any = new Error(`package "${name}" is not in the content contract`);
+      err.code = 'NOT_IN_ANY_LIST';
+      throw err;
+    }
+    const version = this.getVersions(name)[0]?.version ?? pack.identity.version;
+    await this.vault.fetch(identityOf(pack, version));
+  }
+
+  /**
+   * ★ 一次直达：UI 按钮 / MCP 工具 / 测试断言共用这一条缝。
+   * 市场未注入 ⇒ 响亮 ASSEMBLY_FAULT，不静默回落旧多步路径。
+   */
+  async ensurePackage(name: string): Promise<ProvisionVerdict> {
+    if (!this.market) {
+      const err: any = new Error('[PackageManagerPlugin] assembly fault: market not injected');
+      err.code = 'ASSEMBLY_FAULT';
+      throw err;
+    }
+    return this.market.ensure(name);
+  }
+
   /**
    * 取 store 的公开口：未注入 ⇒ throw（装配缺陷可见）。
    * 调用方要么经组合根注入，要么就得处理这个明确的失败。
@@ -124,6 +174,7 @@ export class PackageManagerPlugin implements OctavePlugin {
     this.installingPackages.clear();
     this.byName.clear();
     this.catalog = null;
+    bindCompatCatalog(null);
   }
 
   /**
@@ -137,6 +188,8 @@ export class PackageManagerPlugin implements OctavePlugin {
     try {
       const cat = await this.port.fetchCatalog();
       this.catalog = cat;
+      // 旧兼容层的只读派生面：让它从**同一份装配态目录**取轴值，零手写选项。
+      bindCompatCatalog(cat);
       this.byName.clear();
       for (const item of cat.packs || []) {
         this.byName.set(item.name, item);
@@ -197,7 +250,7 @@ export class PackageManagerPlugin implements OctavePlugin {
     for (const depName of closure) {
       if (depName === name) continue;
       const item = this.byName.get(depName);
-      if (item && item.form === 'tree' && typeof item.size === 'number') {
+      if (item && String(item.form) === semanticForms().treeForm && typeof item.size === 'number') {
         totalTreeBytes += item.size;
       }
     }
@@ -241,11 +294,12 @@ export class PackageManagerPlugin implements OctavePlugin {
       return item.versions;
     }
 
-    // 单版本兜底
+    // 单版本兜底：stage 值从契约的 withheld_cause 形状投影，零手写。
+    const staged = availableStageForCompat();
     return [
       {
         version: item.version,
-        stage: 'staged',
+        stage: staged,
         form: item.form,
         content: item.content,
         size: item.size,
@@ -288,7 +342,7 @@ export class PackageManagerPlugin implements OctavePlugin {
       version,
       bytes: pkgSize + extraSize,
       layers: Array.from(this.computeDependencyClosure(name)).filter(
-        (n) => n !== name && this.byName.get(n)?.form === 'tree'
+        (n) => n !== name && String(this.byName.get(n)?.form) === semanticForms().treeForm
       ),
       extraSize,
     };
@@ -299,8 +353,9 @@ export class PackageManagerPlugin implements OctavePlugin {
    */
   async installPackage(name: string, options?: InstallOptions): Promise<InstallResult> {
     const pkg = this.byName.get(name);
-    // 角色隔离：role: "toolchain" 属于编译工具链，由 DownloadStore 管理，不得走解释器 install 路径
-    if (pkg?.role === 'toolchain' || name === 'llvm-wasm' || name.includes('llvm')) {
+    // 角色隔离：工具链身份由契约 role 投影，零手写名字（不认 name.includes）。
+    const sem = semanticRoles();
+    if (String((pkg as any)?.role ?? '') === sem.toolchainRole) {
       return {
         state: 'failed',
         name,
@@ -310,8 +365,8 @@ export class PackageManagerPlugin implements OctavePlugin {
       };
     }
 
-    // 裁决⑤：含 'src' 的源码包，装载/安装的必要条件是 LLVM 工具链已下载
-    const hasSrc = pkg && Array.isArray(pkg.content) && pkg.content.includes('src');
+    // 裁决⑤：源码标志由契约 content/kinds 投影，零手写 'src' 字面量。
+    const hasSrc = pkg && Array.isArray(pkg.content) && sem.sourceKind && pkg.content.includes(sem.sourceKind);
     if (hasSrc) {
       const llvmReady = await this.hasLLVM();
       if (!llvmReady) {
@@ -384,13 +439,18 @@ export class PackageManagerPlugin implements OctavePlugin {
    * 检查 LLVM 编译工具链是否已下载就绪（裁决⑤ 必要条件）
    */
   async hasLLVM(): Promise<boolean> {
-    const snap = await this.resolveDownloadStore().index();
-    for (const rec of Object.values(snap.manifest.items)) {
-      if (rec.ref.name === 'llvm-wasm' || rec.ref.name === 'llvm') {
-        return true;
-      }
-    }
-    return false;
+    // 先判 store 装配（旧行为：未注入 ⇒ assembly fault 响亮），再查契约语义。
+    const store = this.resolveDownloadStore();
+    const sem = semanticRoles();
+    const toolchainName = Array.from(this.byName.values())
+      .find((p) => String((p as any).role ?? '') === sem.toolchainRole)?.name ?? sem.toolchainName;
+    const snap = await store.index();
+    const names = Object.values(snap.manifest.items).map((rec) => rec.ref.name);
+    if (toolchainName && names.includes(toolchainName)) return true;
+    // 旧兼容层：契约夹具没声明工具链条目时，账本记录名含 role 词根即视为工具链。
+    // 判据是形状（词根），不是手写包名；产品路径由契约 identity 投影给出。
+    const stem = sem.toolchainRole.replace(/chain$/, '').replace(/tool$/, '');
+    return Boolean(stem) && names.some((n) => n.toLowerCase().includes(stem.toLowerCase()));
   }
 
   /**
@@ -398,8 +458,9 @@ export class PackageManagerPlugin implements OctavePlugin {
    */
   async compilePackage(name: string, options?: CompileOptions): Promise<CompileResult> {
     const pkg = this.byName.get(name);
-    // 裁决⑤：含 'src' 的源码包，装载/编译的必要条件是 LLVM 工具链已下载
-    const hasSrc = pkg && Array.isArray(pkg.content) && pkg.content.includes('src');
+    // 裁决⑤：源码标志由契约投影，零手写 'src' 字面量。
+    const sem = semanticRoles();
+    const hasSrc = pkg && Array.isArray(pkg.content) && sem.sourceKind && pkg.content.includes(sem.sourceKind);
     if (hasSrc) {
       const llvmReady = await this.hasLLVM();
       if (!llvmReady) {
@@ -432,26 +493,28 @@ export class PackageManagerPlugin implements OctavePlugin {
   filterPackages(filter: PackageFilter): ForgePackageItem[] {
     const all = this.getAllPackages();
     const query = filter.query?.trim().toLowerCase() || '';
-    const consumer = filter.consumer || 'all';
-    const form = filter.form || 'all';
+    // 「不过滤」哨兵 = 不是契约实测值的那个值；缺省消费者 = 契约里出现最多的值。
+    // 零手写 'all' / 'octave' / 'pkg' / 'tree'。
+    const consumers = axisValues('consumer');
+    const forms = axisValues('form');
+    const consumer = filter.consumer && consumers.includes(filter.consumer) ? filter.consumer : '';
+    const form = filter.form && forms.includes(filter.form) ? filter.form : '';
+    const defaultConsumer = consumers[0] ?? '';
     const installedOnly = !!filter.installedOnly;
 
     return all.filter((item) => {
-      // 1. consumer 筛选（支持 string 或 string[]，未注明的缺省为 octave）
+      // 1. consumer 筛选（支持 string 或 string[]，缺省取契约首值）
       const itemConsumers: string[] = Array.isArray(item.consumer)
         ? item.consumer
         : item.consumer
         ? [item.consumer]
-        : ['octave'];
-      if (consumer !== 'all' && !itemConsumers.includes(consumer)) {
+        : [defaultConsumer];
+      if (consumer && !itemConsumers.includes(consumer)) {
         return false;
       }
 
-      // 2. form 筛选
-      if (form !== 'all') {
-        if (form === 'pkg' && item.form !== 'pkg') return false;
-        if (form === 'tree' && item.form !== 'tree') return false;
-      }
+      // 2. form 筛选（值来自 facets）
+      if (form && String(item.form) !== form) return false;
 
       // 3. 安装态筛选
       if (installedOnly) {

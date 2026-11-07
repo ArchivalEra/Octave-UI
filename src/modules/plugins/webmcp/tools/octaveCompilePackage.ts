@@ -39,14 +39,21 @@ export const octaveCompilePackageTool = defineTool({
       };
     }
 
-    const result = await pm.compilePackage(name);
+    // ★ 三路同轴：编译走同一条 ensure 缝（Market 内部按契约 needsCompile
+    //   标志自动决定编译），不再有第二条 compile 实现。
+    const verdict = await pm.ensurePackage(name);
     return {
-      isError: result.state !== 'compiled',
+      isError: verdict.state !== 'ok',
       content: [
         {
           type: 'resource',
           mimeType: 'application/json',
-          data: result,
+          data: {
+            state: verdict.state === 'ok' ? 'compiled' : verdict.state,
+            name,
+            diagnostics: verdict.evidence.compiled,
+            why: verdict.cause,
+          },
         },
       ],
     };

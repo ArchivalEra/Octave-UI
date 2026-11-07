@@ -1,5 +1,7 @@
 # Octave-UI
 
+**Languages / 语言 / Sprachen**: [English](README.md) · [中文](README.zh.md) · [Deutsch](README.de.md)
+
 GNU Octave 11.3.0 WebAssembly (memory64 + pthreads) 网页端用户界面与交互前端。
 
 > 💡 **开发者 / AI 开工指引**：请先阅读 [maintaince.md](maintaince.md) 了解项目地图与开发方向。

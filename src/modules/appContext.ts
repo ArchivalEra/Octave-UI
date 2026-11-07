@@ -25,6 +25,15 @@ import { EngineAssetResolver } from './engine/EngineAssetResolver';
 import { DockLayoutStore } from './dock/DockLayoutStore';
 import { PanelRegistry, panelRegistryInstance } from './dock/PanelRegistry';
 import { toastService } from './ui/ToastService.svelte';
+// ★ 2026-11-07 彻底重写：契约投影层 + 两个互不影响深模块的组合根装配。
+import {
+  projectContract, bindProjection, identityOf, semanticRoles,
+  axisValues, type ContractFacts, type ProjectionCaps,
+} from './contract/projection';
+import { Vault } from './vault/Vault';
+import { Market, type RuntimeInstaller } from './market/Market';
+import { LANE_PRODUCT } from './engine/laneProducts';
+import { bindContractEnums } from './plugins/webmcp/tools/octaveListPackages';
 
 export { toastService };
 
@@ -34,6 +43,11 @@ export const supervisor = new EngineSupervisor();
 export const dockLayoutStore = new DockLayoutStore();
 export const panelRegistry = panelRegistryInstance;
 
+// ★ 组合根装配的 Market / Vault：两个深模块互不影响，只在组合根被串联。
+// 惰性引用（模块顶层只声明、装配后赋值），供下面 window 谓词闭包安全引用。
+let market: Market | null = null;
+let vault: Vault | null = null;
+
 // base 的唯一产地是 engine/deployment.resolveDeployment()（spec §2.3）；
 // 这里不再有独立的 getSiteBase()，避免第 7 个产地。
 // 把「解析函数」交给 public/bridge/assets-loader.js 的惰性默认实例。
@@ -41,33 +55,30 @@ export const panelRegistry = panelRegistryInstance;
 // vitest 的 happy-dom 也没有 meta；真正访问 window.OctaveAssets 时才求值一次。
 if (typeof window !== 'undefined') {
   (window as any).__resolveOctaveDeployment = () => getDeployment();
-  // ★ B5（裁决⑤ LLVM 门覆盖 eval shim 路）：bridge 的 install() 对带 src 的包
-  //   查这个谓词。「LLVM 是否已下载」真源 = DownloadStore OPFS 记账（hasLLVM
-  //   唯一产地），bridge 够不着 ⇒ 注入谓词而不是再造第二份真源。
-  (window as any).__octaveLlvmReady = () => packageManagerPlugin.hasLLVM();
-  // ★ 后续票①（下载/装载解耦贯穿 Octave 车道）：bridge install() 按货架条目
-  //   查 OPFS 已下载字节。条目身份 = 市场三键（url basename 产物名 + sha256）；
-  //   记账真源 = DownloadStore index()，这里只读不写。无记账 ⇒ 返回 null，
-  //   bridge 照旧走站点路径（派生窗口常态，不冒充成功）。
-  (window as any).__octaveDownloadedBytes = (item: { url?: string; sha256?: string; version?: string }) => {
-    const wantBase = item?.url ? String(item.url).split('/').pop() : '';
-    const wantSha = item?.sha256 || '';
-    return downloadStore.index().then((snap) => {
-      const recs = Object.values(snap.manifest.items || {}).filter(
-        (rec: any) => Array.isArray(rec.files) && rec.files.length === 1,
-      );
-      const hit = recs.find((rec: any) => {
-        const f = rec.files[0];
-        const base = f.path.split('/').pop() || '';
-        return (wantSha ? f.sha256 === wantSha : base === wantBase);
-      });
-      if (!hit) return null;
-      const f = (hit as any).files[0];
-      return workspaceStorage.store
-        .read(f.path)
-        .then((bytes) => ({ bytes, path: f.path, sha256: f.sha256 }))
-        .catch(() => null);
-    });
+  // ★ 2026-11-07 彻底重写：三个旧 `window.__octave*` 谓词全部退役。
+  //   · 旧同步 peek 谓词返回 Promise 却被 bridge 当同步值读 `.bytes`
+  //     ⇒ OPFS 零网络分支恒不可达（「包装不上」的断点之一）。
+  //   · __octaveLlvmReady 走旧 OPFS 记账扫描，LLVM 三套互斥 sha 使门恒关。
+  //   现在统一为两个 **async** 组合根谓词，由 Vault / 契约投影提供真源；
+  //   bridge 侧已改 `await`，类型/时序上不可能再同步 peek。
+  (window as any).__octaveLoadBytes = async (item: { name?: string; url?: string; sha256?: string }) => {
+    const name = String(item?.name || '').trim();
+    if (!name || !market || !vault) return null;
+    const id = market.select(name);
+    const v = await vault.read(id);
+    return v.state === 'ok' && v.bytes ? { bytes: v.bytes, path: v.path, sha256: v.sha256 } : null;
+  };
+  (window as any).__octaveLlvmReady = async () => {
+    const sem = semanticRoles();
+    if (!sem.toolchainName || !market || !vault) return false;
+    const id = market.select(sem.toolchainName);
+    const facts = await vault.reconcile(id);
+    return facts.integrity === 'verified';
+  };
+  // 源码包判定由 ContractIdentity.needsCompile 投影给（零手写 'src'）。
+  (window as any).__octaveNeedsCompile = (item: { name?: string }) => {
+    if (!market || !item?.name) return false;
+    try { return market.select(String(item.name)).needsCompile; } catch { return false; }
   };
 }
 
@@ -175,6 +186,20 @@ const catalogueReleaseSource = createCatalogueReleaseSource({
   },
 });
 
+// ★ 引擎发布缝提成具名单例：downloadStore（旧兼容层）与 Vault（新深模块）
+//   共用同一份，避免第二份 catalogue 缓存 / 第二份 fallback 真源。
+const engineReleaseSource = createCatalogueEngineReleaseSource({
+  catalogueUrl: catalogueUrlCandidates(),
+  fetchPort: new BrowserFetchAdapter(),
+  hasZstd: () => getFzstdLoaderForReleases().isUsable(),
+  codecPreference: codecPreferenceBySize,
+  onFallback: ({ lane, reason }) => {
+    console.warn(
+      `[downloads] engine release unavailable for lane "${lane}": ${reason} — falling back to site lanes path`
+    );
+  },
+});
+
 export const workspaceStorage = new WorkspaceStorageManager();
 export const downloadStore = new DownloadStore({
   storage: workspaceStorage.store,
@@ -202,18 +227,75 @@ export const downloadStore = new DownloadStore({
   // ★ 引擎发布缝（**另一条缝**，用户 2026-11-03：「引擎契约另立缝我支持」）。
   //   没有这一行，`resolveEngineTarget` 的 release 分支在产物里永远走不到
   //   —— Standards/Spec 两轴审查独立抓到的同一条：写了缝、写了测试、但生产不可达。
-  engineReleaseSource: createCatalogueEngineReleaseSource({
-    catalogueUrl: catalogueUrlCandidates(),
-    fetchPort: new BrowserFetchAdapter(),
-    hasZstd: () => getFzstdLoaderForReleases().isUsable(),
-    codecPreference: codecPreferenceBySize,
-    onFallback: ({ lane, reason }) => {
-      console.warn(
-        `[downloads] engine release unavailable for lane "${lane}": ${reason} — falling back to site lanes path`
-      );
-    },
-  }),
+  engineReleaseSource,
 });
+// ★ 组合根：契约投影 + 两个深模块的**唯一串联点**。
+// 惰性异步装配（appContext 模块顶层同步，catalog 要等首次 fetch）：
+// ① 经唯一 IAssetsPort 读装配态目录 → 投影层冻结；
+// ② Vault（OPFS）与 Market（市场）互不 import，只经 ContractIdentity 值串联；
+// ③ 注入 packageManagerPlugin（UI / MCP 的转发缝）+ MCP enum；
+// ④ bridge 的两个 async 谓词从 Vault / 投影层取真源。
+async function wireContractPlane(): Promise<void> {
+  const content = await packageManagerPlugin.loadCatalog();
+  const facts: ContractFacts = {
+    content,
+    distribution: {},
+    manifests: {},
+    engine: LANE_PRODUCT,
+    optionalKeys: ['role', 'stage', 'kinds', 'arch', 'artifacts'],
+  };
+  const caps: ProjectionCaps = {
+    decodableCodecs: new Set(['identity', 'gzip', 'zstd']),
+    activeLane: 'wasm32-final',
+  };
+  bindProjection(projectContract(facts, caps));
+  bindContractEnums(axisValues('consumer'), axisValues('form'));
+
+  const v = new Vault({
+    store: workspaceStorage.store,
+    fetchPort: new BrowserFetchAdapter(),
+    downloadOptions: {
+      baseUrlProvider: () => getDeployment().siteBase,
+      catalogProvider: () => packageManagerPlugin.getCatalog() ?? content,
+      releaseSource: catalogueReleaseSource,
+      engineReleaseSource,
+    },
+  });
+
+  // prod RuntimeInstaller：lazy-boot 走 supervisor.ensureBooted（唯一产地），
+  // 装载进引擎走 window.OctaveAssets.install —— bridge 内部经 __octaveLoadBytes
+  // 从 Vault 读已下载字节（零网络），__forge_install__ 逐字不变。
+  const runtime: RuntimeInstaller = {
+    ensureBooted: () => supervisor.ensureBooted(),
+    install: async (id) => {
+      const api = typeof window !== 'undefined' ? (window as any).OctaveAssets : null;
+      if (!api || typeof api.install !== 'function') {
+        const e: any = new Error('ENGINE_NOT_READY: OctaveAssets.install is not available');
+        e.code = 'ENGINE_NOT_READY';
+        throw e;
+      }
+      await api.install(id.name);
+    },
+  };
+
+  const m = new Market({ vault: v, runtime });
+  market = m;
+  vault = v;
+  packageManagerPlugin.setMarket(m);
+  packageManagerPlugin.setVault(v);
+}
+
+// 启动即装配：**只在浏览器**执行（SSR/构建期没有 window.OctaveAssets，
+// 强行 loadCatalog 会抛 CATALOG_UNREADABLE 污染构建日志）。延后一拍给 bridge
+// 的惰性 getter 挂上的机会；失败仍响亮，不静默留半个站。
+if (typeof window !== 'undefined') {
+  queueMicrotask(() => {
+    wireContractPlane().catch((err) => {
+      console.error('[appContext] contract plane assembly failed:', err);
+    });
+  });
+}
+
 export const projectWorkspace = new ProjectWorkspace(supervisor, undefined, workspaceStorage, downloadStore);
 
 // 单例 resolver 必须与写路径同盘（候选 3 的前置条件；grilling Q6 点名「落地时要验的第一件事」）：
@@ -251,32 +333,19 @@ webMcpPlugin.injectServices({
   packageManagerPlugin,
 });
 
-// ★ MSL 装载 = 从 OPFS 读已下载字节（2026-11-06 下载/装载解耦回归修复）：
-//   站侧 CORS 修好后票 C 一度用「装载时现场从 release 装分片」蒙混过判据，
-//   但那把两个动作重新耦合了（README.md:28-29 / 回信 018 明写站点特色）。
-//   现在下载侧由 DownloadStore 经 releaseSource 分片装配 + 落盘 + 记账，
-//   本闭包**不自己造 ref**（PackageManagerModal.executeDownload 的 ref 形状里有
-//   selectedVersions / isTreeForm 等 UI 态，装载侧复刻必然漂）：直接按市场条目的
-//   name 在 DownloadStore 的记账里找已下载记录，再 stat 物理对账 + read 读字节。
-//   零网络；没下载 / 物理缺件 ⇒ 工具显式 NOT_DOWNLOADED。
+// ★ MSL 装载 = 从 OPFS 读已下载字节（README.md:28-29 下载/装载解耦）。
+//   2026-11-07 重写：走 Vault.read（按名查账 + 物理对账 + 读盘，零网络），
+//   不再自己解析 downloads/manifest.json、不造 ref、不现场从 release 装配。
+//   Vault 未装配（启动早期）⇒ 明说 NOT_DOWNLOADED，不假绿。
 setMslDownloadedAsset(async (pkg) => {
-  const snap = await downloadStore.index();
-  const candidates = Object.values(snap.manifest.items || {}).filter(
-    (rec: any) => rec?.ref?.name === pkg.name && Array.isArray(rec.files) && rec.files.length > 0,
-  ) as any[];
-  if (candidates.length === 0) return null;
-  // 版本优先取市场条目当前版本；没有精确匹配就取该包最新一条（单件包只有一条）
-  const rec =
-    candidates.find((r) => r.ref?.version === pkg.version) ?? candidates[candidates.length - 1];
-  // stat 用记录自身的 ref（与下载时逐字同一个对象），顺带做物理缺件对账
-  const verified = await downloadStore.stat(rec.ref);
-  if (!verified || verified.files.length === 0) return null;
-  const f = verified.files[0];
+  if (!vault || !market) return null;
   try {
-    const bytes = await workspaceStorage.store.read(f.path);
-    return { bytes, path: f.path, sha256: f.sha256 };
+    const id = market.select(pkg.name);
+    const v = await vault.read(id);
+    if (v.state !== 'ok' || !v.bytes) return null;
+    return { bytes: v.bytes, path: v.path || '', sha256: v.sha256 || id.sha256 };
   } catch (err) {
-    console.error(`[msl] failed to read downloaded asset ${f.path}:`, err);
+    console.error(`[msl] failed to read downloaded asset ${pkg.name}:`, err);
     return null;
   }
 });

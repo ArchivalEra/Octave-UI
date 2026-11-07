@@ -415,6 +415,54 @@ describe('EngineSupervisor Deep Module', () => {
     await expect(sup.switchLane('wasm32-final')).rejects.toThrow(/Cannot switch engine lane after computation has started/);
   });
 
+  it('★ ensureBooted: idle 是空操作、并发双发复用同一个 boot（绝不启第二个引擎）', async () => {
+    const bootSpy = vi.spyOn(supervisor, 'boot');
+    await supervisor.ensureBooted();
+    await supervisor.ensureBooted();
+    expect(bootSpy).toHaveBeenCalledTimes(0);
+
+    let releases: (() => void)[] = [];
+    const factory = vi.fn(() => new Promise<MockEmbedAdapter>((resolve) => {
+      releases.push(() => resolve(new MockEmbedAdapter()));
+    }));
+    const sup = new EngineSupervisor({ adapterFactory: factory, skipPreflight: true });
+    const p1 = sup.ensureBooted();
+    const p2 = sup.ensureBooted();
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(sup.state).toBe('booting');
+    releases[0]();
+    await Promise.all([p1, p2]);
+    expect(sup.state).toBe('idle');
+    expect(sup.isReady).toBe(true);
+  });
+
+  it('★ ensureBooted: crashed/failed 终端态响亮拒绝，不静默重启', async () => {
+    supervisor.onEngineDeath(supervisor.epoch, 'trap');
+    expect(supervisor.state).toBe('crashed');
+    await expect(supervisor.ensureBooted()).rejects.toThrow(/explicit restart required/);
+  });
+
+  it('★ eval 在入队前等 boot：booting 期间入队的任务不会被 epoch 静默丢弃', async () => {
+    let releaseBoot: (a: MockEmbedAdapter) => void = () => {};
+    const sup = new EngineSupervisor({
+      adapterFactory: () => new Promise<MockEmbedAdapter>((r) => { releaseBoot = r; }),
+      skipPreflight: true,
+    });
+    // 先点火 boot，让 state 进入 booting
+    const bootP = sup.boot();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sup.state).toBe('booting');
+
+    // 此刻 eval 若把「等 boot」放进队列任务体，attachAdapter 的 epoch++ 会丢弃它
+    const evalP = sup.eval('40 + 2');
+    releaseBoot(new MockEmbedAdapter());
+    await bootP;
+    const res = await evalP;
+    expect(res.ok).toBe(true);
+    expect(sup.pendingCount).toBe(0);
+    expect(sup.state).toBe('idle');
+  });
+
   it('rejects recover() with BOOT_UNAVAILABLE when window.OctaveEmbed is absent (no Mock fallback on recovery)', async () => {
     // 反向断言：恢复路径与启动路径同一纪律——无 factory + 无桥 ⇒ 拒绝恢复并记录失败
     const sup = new EngineSupervisor({ skipPreflight: true });

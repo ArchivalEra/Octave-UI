@@ -45,6 +45,10 @@ export class EngineSupervisor {
   private _inFlightId: string | null = null;
   private _skipPreflight = false;
 
+  // ★ 2026-11-07 三路同轴：lazy-boot 唯一产地。并发双发复用同一个 promise，
+  //   boot 完成即清空；crashed/failed 终端态不自动重启（必须显式 recover）。
+  private _bootPromise: Promise<void> | null = null;
+
   private _pending: Map<string, PendingTask> = new Map();
   private _queue: Promise<any> = Promise.resolve();
 
@@ -208,7 +212,43 @@ export class EngineSupervisor {
     });
   }
 
+  /**
+   * ★ 2026-11-07 三路同轴：lazy-boot 唯一产地。
+   *
+   * 幂等契约：idle/busy ⇒ 立刻返回；booting（或任何并发双发）⇒ 复用同一个
+   * `_bootPromise`，绝不启第二个 boot；crashed/failed ⇒ 响亮拒绝，要求显式
+   * `recover()`，绝不静默重启（那是把终端态洗成假绿）。
+   *
+   * 关键顺序：`eval()` / `evalJSON()` 必须**在入队前** await 它。旧形态把
+   * 「等 boot」塞进入队后的任务体里，`attachAdapter()` 的 `this._epoch++`
+   * 会让 booting 期间入队的任务被 `_enqueueTask` 的代际防护静默丢弃
+   * （pending 恒 1、promise 永不 settle）——2026-11-07 实测抓到的死锁。
+   */
+  async ensureBooted(opts: BootOptions & { skipPreflight?: boolean } = {}): Promise<void> {
+    if (this._state === 'crashed' || this._state === 'failed') {
+      throw new EngineCrashedError({
+        cause: this._state === 'failed' ? 'boot-failed' : 'trap',
+        started: false,
+        epoch: this._epoch,
+        message: `Cannot auto-boot: engine is '${this._state}'; explicit restart required.`,
+      });
+    }
+    if (this.isReady) return;
+    await this.boot(opts);
+  }
+
+  /** 显式 boot 门；并发复用同一个 boot promise，避免双实例。 */
   async boot(opts: BootOptions & { skipPreflight?: boolean } = {}): Promise<void> {
+    if (this._bootPromise) return this._bootPromise;
+    this._bootPromise = this._bootBody(opts);
+    try {
+      return await this._bootPromise;
+    } finally {
+      this._bootPromise = null;
+    }
+  }
+
+  private async _bootBody(opts: BootOptions & { skipPreflight?: boolean }): Promise<void> {
     const effectiveLane = opts.lane || this._currentLane;
     this._currentLane = effectiveLane;
 
@@ -535,9 +575,9 @@ export class EngineSupervisor {
         message: `Cannot eval: Engine is in '${this._state}' state.`,
       });
     }
-    if (!this._adapter && this._state !== 'booting') {
-      throw new Error('EngineSupervisor: Engine is not booted or adapter is missing.');
-    }
+    // ★ 等待必须发生在入队之前：boot 期间 attachAdapter 的 _epoch++ 会让
+    //   此刻入队的任务被代际防护静默丢弃（永久 pending）。见 ensureBooted 注释。
+    await this.ensureBooted();
 
     const taskId = `eval_${++this._taskSeq}`;
     return this._enqueueTask(taskId, async () => {
@@ -564,9 +604,8 @@ export class EngineSupervisor {
         message: `Cannot evalJSON: Engine is in '${this._state}' state.`,
       });
     }
-    if (!this._adapter && this._state !== 'booting') {
-      throw new Error('EngineSupervisor: Engine is not booted or adapter is missing.');
-    }
+    // ★ 同 eval：boot 等待在入队前，杜绝 epoch 死锁。
+    await this.ensureBooted();
 
     const taskId = `json_${++this._taskSeq}`;
     return this._enqueueTask(taskId, async () => {
