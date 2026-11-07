@@ -73,10 +73,9 @@ jobs:
           git -C .engine fetch -q origin master 'refs/tags/archive/wasm32-final-168ef49:refs/tags/archive/wasm32-final-168ef49' 'refs/tags/archive/master-a1e2409:refs/tags/archive/master-a1e2409'
           ex() { git -C .engine archive "$1" site; }
           mkdir -p public/bridge public/lanes
+          mkdir -p "public/lanes/wasm32-final" "public/lanes/master" "public/lanes/IllegalPerformance"
           ex "archive/wasm32-final-168ef49" | tar -x --strip-components=1 -C "public/lanes/wasm32-final"
-          mkdir -p "public/lanes/master"
           ex "origin/master" | tar -x --strip-components=1 -C "public/lanes/master"
-          mkdir -p "public/lanes/IllegalPerformance"
           ex "archive/master-a1e2409" | tar -x --strip-components=1 -C "public/lanes/IllegalPerformance"
           rm -rf /tmp/site && mkdir -p /tmp/site
           ex "archive/master-a1e2409" | tar -x --strip-components=1 -C /tmp/site
