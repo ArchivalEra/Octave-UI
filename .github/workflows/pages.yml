@@ -85,6 +85,12 @@ jobs:
           rm -rf public/w64 && cp -rf /tmp/site/w64 public/w64
           mkdir -p public/assets && cp -rf /tmp/site/assets/. public/assets/ 2>/dev/null || true
           test -f public/w64/octave.wasm
+          # ★ 2026-11-07：引擎 archive 的 site/ 里带着**引擎侧旧副本**（assets-loader.js 等，
+          #   本仓 public/lanes/*/ 下曾因 DX3 铺开的同族），`cp -rf /tmp/site/. public/bridge/`
+          #   会把本仓修复版 bridge 前端盖回旧版（本地不复现——本地不跑这段）。
+          #   引擎树只应贡献 lanes/*/ 引擎字节与 w64/ 大字节；bridge/*.js 的唯一产地是本仓。
+          git checkout -- public/bridge/ public/assets-loader.js public/compile-worker.mjs 2>/dev/null || true
+          test -f public/bridge/assets-loader.js
           echo "ENGINE_SHAS=$(git -C .engine rev-parse --short archive/wasm32-final-168ef49) $(git -C .engine rev-parse --short origin/master) $(git -C .engine rev-parse --short archive/master-a1e2409)" >> "$GITHUB_ENV"
 
       # ── OMC 引擎资产同步（同源托管契约 mail/053）──
