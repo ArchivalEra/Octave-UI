@@ -1,0 +1,13 @@
+Pyodide 314.0.7 is licensed under the Mozilla Public License 2.0 (MPL-2.0).
+
+The full license text is available at:
+  https://github.com/pyodide/pyodide/blob/main/LICENSE
+  https://mozilla.org/MPL/2.0/
+
+Source: https://github.com/pyodide/pyodide
+Upstream package metadata (package.json in this directory) records: "license": "MPL-2.0".
+
+This distribution also bundles Python wheels whose licenses are per-package
+(mpmath: BSD-3-Clause; sympy: MIT; others as recorded in pyodide-lock.json
+upstream). The per-wheel license obligations are satisfied by their
+respective upstream notices included in the wheels themselves.

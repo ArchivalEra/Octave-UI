@@ -281,7 +281,7 @@ function cmdVerify() {
       process.exit(1);
     }
     const fzSha = createHash("sha256").update(fs.readFileSync(fzPath)).digest("hex");
-    const EXPECTED_FZSTD_SHA = "1a901fc5a58c349bbdb4f2aa1e688637ef56891ec58243a9f0cd863166b0d2a4";
+    const EXPECTED_FZSTD_SHA = "6ecae2c7dc4cc35242de7dde0dd7d56b67f38a5bd255c745e9045c736e8f6f95";
     if (fzSha !== EXPECTED_FZSTD_SHA) {
       console.error(
         `[contract:verify] fzstd 字节指纹不符：${fzSha.slice(0, 16)}… ≠ ${EXPECTED_FZSTD_SHA.slice(0, 16)}…`

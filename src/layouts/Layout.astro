@@ -62,6 +62,13 @@ const base = import.meta.env.BASE_URL;
     </div>
 
     <slot />
+
+    <!-- License notice (AGPL-3.0-or-later) + third-party notices shipped with the deliverable -->
+    <footer class="site-license-footer">
+      <a href={`${base}LICENSE`} target="_blank" rel="noopener">AGPL-3.0-or-later</a>
+      ·
+      <a href={`${base}THIRD-PARTY-NOTICES.md`} target="_blank" rel="noopener">Third-party notices</a>
+    </footer>
   </body>
 </html>
 
@@ -72,4 +79,14 @@ const base = import.meta.env.BASE_URL;
     width: 100vw;
     height: 100vh;
   }
+</style>
+
+<style>
+  .site-license-footer {
+    text-align: center;
+    font-size: 0.75rem;
+    opacity: 0.55;
+    padding: 0.5rem 0 1rem;
+  }
+  .site-license-footer a { color: inherit; text-decoration: underline; }
 </style>
