@@ -113,3 +113,12 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# 2026-11-07 额叶切除：新版 Einfacht 机制层与领域闸门落位
+!/gates/
+!/gates/**
+!/measure_octave_ui.py
+!/facts.py
+!/zreflect/lang/
+!/zreflect/lang/**/*.json
+!/zreflect/*.json.example

@@ -51,4 +51,15 @@ müssen falsifizierbar sein und eine Gegenassertion haben; lebende Dokumente nur
 jede README-Änderung muss alle drei Fassungen im selben Push enthalten (Pre-Push und CI
 mit identischem Kriterium).
 
+**2026-11-07 «Frontallappen-Entfernung»**: Die Mechanismusschicht wurde vollständig auf
+Einfacht `b580052` umgestellt (`zreflect/` 33 py + `lang/`-Pakete + Hook-Einstieg
+`gate.py` / `install.py` + `harness.py`). Die 22 domänenspezifischen Gatter liegen wegen
+der neuen `check_i18n`-Regel (keine natürliche Sprache im Mechanismus) nun in `gates/`
+und werden von der gemischten `pre-commit`-Shell einzeln ausgeführt; die Datenschicht
+liegt als `measure_octave_ui.py` im Repo-Wurzel (`FACTS.json` 22 Fakten / 14 witness
+unverändert), die `facts.py`-Shell übernimmt Dispatch und PYTHONPATH. Die dreisprachige
+README-Synchronisation, `[[Schlüssel]]` und die `AUTO:`-Blöcke bleiben vollständig
+erhalten. Vor dem Commit: `python3 zreflect/registry.py --run commit`, danach
+`./reflect-hooks/pre-commit`. Siehe `questions/03-einfacht-b580052-lobotomy.md`.
+
 Vollständiger englischer Text (Standard): [README.md](README.md); chinesisch: [README.zh.md](README.zh.md).

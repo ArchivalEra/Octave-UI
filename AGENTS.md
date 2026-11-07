@@ -46,14 +46,26 @@
 
 ## 提交前
 
+2026-11-07「额叶切除」后机制层已整层换成 Einfacht `b580052`：上游闸门在
+`zreflect/`（发现式名录由 `registry.py` 管），本仓 22 道领域判据在 `gates/`
+（由混合 `pre-commit` 壳逐道跑自证 + 执行，避开新版 `check_i18n` 本体零语言制度）。
+
 ```bash
-sh gates-selftest.sh                       # 每个闸门先证明自己会红
-python3 zreflect/facts.py --render-doc STATE.md
-for g in zreflect/check_*.py; do python3 "$g" || exit 1; done
-# ↑ 发现式名录，与 hooks / gates-selftest 同款 —— 手写闸门清单本身会漂（issue #2 ②），
-#   所以这里也不许列名单：新增 check_*.py 自动被三道地方（hooks / 自证 / 手动）吃到。
+# ① 机制层：上游 registry 发现式名录（11 ran / 5 off / 0 failed）
+set -a; . reflect-hooks/Einfacht.env; set +a
+python3 zreflect/registry.py --run commit
+# ② 平台闸门自证（harness 四段；上游夹具在 vendored 仓 rc=1 为已知上游问题，
+#    生产判据以 ① 为准，不造假占位文件）
+env -u REFLECT_NAKED_MIN sh gates-selftest.sh
+# ③ 机器块新鲜（走仓根 facts.py 壳：数据层在仓根，裸跑 zreflect/facts.py 会 FATAL）
+python3 facts.py --render-doc STATE.md --check
+# ④ 22 道领域闸门（混合 pre-commit 壳已含，可整壳直接跑）
+./reflect-hooks/pre-commit
 ```
-（装了 `sh reflect-hooks/install.sh` 的话，pre-commit / pre-push 会自动做这些。）
+（装 `python3 reflect-hooks/install.py --chain` 后，git 的 pre-commit / pre-push 会自动做 ①③④。）
+
+⚠️ 旧口径 `source Einfacht.env && for g in zreflect/check_*.py ...` 已失效：
+根 `Einfacht.env` 已删（钩子目录那份是唯一产地），领域闸门已移出 `zreflect/`。
 
 ## 硬坑
 

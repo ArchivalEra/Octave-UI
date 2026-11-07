@@ -35,4 +35,6 @@
 数字只认实测、只生产一次；断言必须可证伪并配反向断言；活状态文档只写实测；
 改任何一份 README 必须三份同批（pre-push 与 CI 同判据）。
 
+**2026-11-07「额叶切除」**：机制层整层换成上游 Einfacht `b580052`（`zreflect/` 33 个 py + `lang/` 语言包 + 钩子入口 `gate.py` / `install.py` + `harness.py`）。本仓 22 道领域判据因新版 `check_i18n` 本体零语言制度移到 `gates/`，由混合 `pre-commit` 壳逐道执行；事实数据层移到仓根 `measure_octave_ui.py`（`FACTS.json` 22 条事实 / 14 条 witness 零改动），`facts.py` 壳负责分派与 PYTHONPATH。三语 README 同步判据、`[[键名]]`、`AUTO:` 机器块全部保留。提交前先跑 `python3 zreflect/registry.py --run commit`，再跑 `./reflect-hooks/pre-commit`。详见 `questions/03-einfacht-b580052-lobotomy.md`。
+
 完整英文正文（默认）见 [README.md](README.md)，德文见 [README.de.md](README.de.md)。
