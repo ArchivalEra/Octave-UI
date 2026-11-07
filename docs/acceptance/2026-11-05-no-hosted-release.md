@@ -16,7 +16,7 @@
 |---|---|---|
 | 供给服务端（curl 层双线 catalogue / 18 份 manifest / 契约定位） | **能** | EO 主线 18/18、CF 备线 18/18，`manifest_sha256` 逐字一致；16/17 包按「产物名+sha」命中 release |
 | 契约定位 / 插件 WebMCP / fzstd 产品代码 | **能** | 17 包双确认、7 工具+3 条 callTool、fzstd 只拉一次/不持久/编解码/并发 2 全 PASS |
-| **浏览器里从 release 真 boot 三引擎** | **不能** | **站侧响应头缺口 + 本仓三处待修缺陷**，见 §3 |
+| **浏览器里从 release 真 boot 三引擎** | **不能**（2026-11-07 已翻案→真站 PASS，见下方改判注） | **站侧响应头缺口 + 本仓三处待修缺陷**，见 §3；§7.5 编译链 404 与本节判定均已被 S9 真站复验消除（`docs/acceptance/evidence/S9-live-site-1106.md`：三档 boot+42、catalog 站点根 200、用户路径 7-0） |
 | 站上不托管 release 后功能是否仍成立 | **FAIL** | 净化 dist 上 Octave 三档零档 boot、OMC 未就绪、release 大字节零条 200 |
 
 **最值钱的一句话**：产品代码是**对的**——票 B 的同类肯定用例只补两个 HTTP 头
