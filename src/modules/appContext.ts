@@ -45,6 +45,30 @@ if (typeof window !== 'undefined') {
   //   查这个谓词。「LLVM 是否已下载」真源 = DownloadStore OPFS 记账（hasLLVM
   //   唯一产地），bridge 够不着 ⇒ 注入谓词而不是再造第二份真源。
   (window as any).__octaveLlvmReady = () => packageManagerPlugin.hasLLVM();
+  // ★ 后续票①（下载/装载解耦贯穿 Octave 车道）：bridge install() 按货架条目
+  //   查 OPFS 已下载字节。条目身份 = 市场三键（url basename 产物名 + sha256）；
+  //   记账真源 = DownloadStore index()，这里只读不写。无记账 ⇒ 返回 null，
+  //   bridge 照旧走站点路径（派生窗口常态，不冒充成功）。
+  (window as any).__octaveDownloadedBytes = (item: { url?: string; sha256?: string; version?: string }) => {
+    const wantBase = item?.url ? String(item.url).split('/').pop() : '';
+    const wantSha = item?.sha256 || '';
+    return downloadStore.index().then((snap) => {
+      const recs = Object.values(snap.manifest.items || {}).filter(
+        (rec: any) => Array.isArray(rec.files) && rec.files.length === 1,
+      );
+      const hit = recs.find((rec: any) => {
+        const f = rec.files[0];
+        const base = f.path.split('/').pop() || '';
+        return (wantSha ? f.sha256 === wantSha : base === wantBase);
+      });
+      if (!hit) return null;
+      const f = (hit as any).files[0];
+      return workspaceStorage.store
+        .read(f.path)
+        .then((bytes) => ({ bytes, path: f.path, sha256: f.sha256 }))
+        .catch(() => null);
+    });
+  };
 }
 
 /**

@@ -1197,6 +1197,39 @@
                   });
                 }
                 onProgress({ phase: 'fetch', name: p.name, size: p.size });
+                // ★ 下载/装载解耦贯穿 Octave 车道（2026-11-07 后续票①）：
+                //   先问组合根注入的「已下载 OPFS 字节」谓词（与 omc_load_msl 同款缝）——
+                //   有记账就装 OPFS 字节（零网络），没有才现场从站点取。
+                //   sha 仍用货架 p.sha256 核（记账 sha 与货架同源双确认）。
+                var downloadedSrc = null;
+                if (typeof global.__octaveDownloadedBytes === 'function') {
+                  try { downloadedSrc = global.__octaveDownloadedBytes(p); } catch (e) { downloadedSrc = null; }
+                }
+                if (downloadedSrc && downloadedSrc.bytes && downloadedSrc.bytes.length) {
+                  // OPFS 命中：后续与站点路径**逐字同流程**（sha 核 → 落 tmp →
+                  // __forge_install__ 解包 → sync_db → publish），只有字节来源不同。
+                  onProgress({ phase: 'fetch', name: p.name, size: downloadedSrc.bytes.length, source: 'opfs-download' });
+                  var bufD = downloadedSrc.bytes;
+                  return sha256Hex(bufD).then(function (hex) {
+                    if (p.sha256 && hex && hex !== p.sha256) {
+                      throw errCode('SHA_MISMATCH', '包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
+                                      + '… 实得 ' + hex.slice(0, 12) + '…）—— 拒绝安装');
+                    }
+                    var tarD = '/tmp/forge-' + p.name + '-' + p.version + '.tar.gz';
+                    fs().writeFile(tarD, new Uint8Array(bufD));
+                    onProgress({ phase: 'unpack', name: p.name });
+                    var MD = Msafe();
+                    if (!MD || !MD.eval_string) throw errCode('ENGINE_NOT_READY', '引擎还没就绪，不能安装包');
+                    var rcD = MD.eval_string(
+                      "n = __forge_install__ ('" + tarD + "', '" + p.name + "', '/usr/src/octave/m/forge');");
+                    if (rcD !== 0) throw errCode('UNPACK_FAILED', '__forge_install__ 失败（rc=' + rcD + '）：'
+                                                 + 'OPFS 字节解包失败');
+                    MD.eval_string("if (exist('__pkgfix_sync_db__')) try; __pkgfix_sync_db__ (); catch; end; end;");
+                    publish();
+                    acc.push(p.name);
+                    return acc;
+                  });
+                }
                 return fetchBinary(resolveSiteAsset(p.url)).then(function (buf) {
                   return sha256Hex(buf).then(function (hex) {
                     if (p.sha256 && hex && hex !== p.sha256) {

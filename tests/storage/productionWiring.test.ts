@@ -73,6 +73,18 @@ describe('生产可达性：组合根真的注入了两条缝', () => {
     expect(masterBlock).toMatch(/siteFolders:\s*\[\s*'lanes\/master\/w64'/);
   });
 
+  it('★ 后续票①：解耦贯穿 Octave 车道（OPFS 字节谓词注入 bridge install）', () => {
+    const src = readSource('src/modules/appContext.ts');
+    // 谓词注入存在，身份键 = 货架三键（url basename + sha），真源 = downloadStore.index()
+    expect(src).toContain('__octaveDownloadedBytes');
+    expect(src).toMatch(/downloadStore\.index\(\)/);
+    expect(src).toMatch(/workspaceStorage\.store\.read\(f\.path\)/);
+    // bridge 侧：install 先问谓词，命中走零网络流程（source: opfs-download）
+    const bridge = readSource('public/bridge/assets-loader.js');
+    expect(bridge).toContain('__octaveDownloadedBytes');
+    expect(bridge).toMatch(/source: 'opfs-download'/);
+  });
+
   it('★ B5：LLVM 门经组合根谓词注入 bridge（裁决⑤覆盖 eval shim 路）', () => {
     const src = readSource('src/modules/appContext.ts');
     // 谓词注入存在，且真源是插件的 hasLLVM（不是第二份 OPFS 扫描）

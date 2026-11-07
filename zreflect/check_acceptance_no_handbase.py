@@ -23,13 +23,20 @@ from gate import finish, main_selftest_or, meta, selftest  # noqa: E402
 NAME = "验收脚本无手搓 base / 自造实例闸门"
 
 # 禁止形状（只扫代码行；注释里的解释文字不算）
+# spec §2.4：验收只能 page.click（用户序列）或 modelContext.callTool。
+# 合法见证（CONTEXT.md 便宜旁证）不在禁列：等 __octaveReady、读 hasResolver 类型。
 BANNED = [
     (re.compile(r"\bcreateOctaveAssets\s*\("), "手工构造 createOctaveAssets 实例"),
     (re.compile(r"__catalogSource"), "使用已移除的内部注入面 __catalogSource"),
     (re.compile(r"__siteBase\s*=(?!=)"), "写 __siteBase 覆盖部署产地"),
     (re.compile(r"__resolveOctaveDeployment\s*=(?!=)"), "写组合根注入函数 __resolveOctaveDeployment"),
     (re.compile(r"\.OctaveAssets\.resolve\s*\("), "调只读对账面 OctaveAssets.resolve（验收只能点按钮/调 callTool）"),
+    (re.compile(r"\.OctaveAssets\.catalog\s*\("), "直调内部 catalog()（走 callTool('octave_list_packages') 或纯网络观察）"),
+    (re.compile(r"\.OctaveAssets\.list\s*\("), "直调内部 list()（同上）"),
+    (re.compile(r"\.OctaveAssets\.init\s*\("), "直调内部 init() 驱动装配（同上）"),
     (re.compile(r"['\"]/repo/Octave/lanes/"), "硬编码 /repo/Octave/lanes/ 字面量"),
+    # 转义绕过形（\/.repo\/Octave\/lanes\/ 出现在正则里=同一段硬编码）
+    (re.compile(r"\\/repo\\/Octave\\/lanes\\/"), "硬编码 /repo/Octave/lanes/（正则转义形）"),
 ]
 RETIRED_RE = re.compile(r"^\s*//\s*⚠️\s*退役")
 
@@ -97,6 +104,11 @@ def selftest_cases():
         ("显式退役脚本豁免", lambda: problems_of(collect(retired)) == []),
         ("该报的必须报：调只读对账面 / 写组合根注入函数", lambda: len(problems_of(collect(
             make({"x.mjs": "window.OctaveAssets.resolve('forge-catalog');\nwindow.__resolveOctaveDeployment = () => 1;\n"})))) >= 2),
+        ("该报的必须报：直调 catalog/list/init（spec §2.4 禁 OctaveAssets 面）", lambda: len(problems_of(collect(
+            make({"x.mjs": "await window.OctaveAssets.catalog();\nwindow.OctaveAssets.list();\nawait window.OctaveAssets.init('assets/manifest.json');\n"})))) >= 3),
+        ("该报的必须报：正则转义形 lanes 硬编码", lambda: any(
+            "正则转义形" in x for x in problems_of(collect(
+                make({"x.mjs": "const re = /\\/repo\\/Octave\\/lanes\\//;\n"}))))),
         ("空输入必须报：无 mjs 目录 ⇒ 不绿", lambda: run_quiet(empty) is False),
         ("空输入必须报：目录不存在 ⇒ 不绿", lambda: run_quiet("/nonexistent/harness/xyz") is False),
     ]
