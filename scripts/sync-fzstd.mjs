@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 /** 期望指纹：来自 `node_modules/fzstd/esm/index.mjs` 的实测值（2026-11-03） */
-const EXPECTED_SHA = '1a901fc5a58c349bbdb4f2aa1e688637ef56891ec58243a9f0cd863166b0d2a4';
+const EXPECTED_SHA = '6ecae2c7dc4cc35242de7dde0dd7d56b67f38a5bd255c745e9045c736e8f6f95';
 const SRC = join(ROOT, 'node_modules', 'fzstd', 'esm', 'index.mjs');
 const OUT_DIR = join(ROOT, 'public', 'lib');
 const OUT = join(OUT_DIR, 'fzstd-0.1.1.mjs');

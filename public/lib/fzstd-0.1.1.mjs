@@ -1,3 +1,13 @@
+/*!
+ * fzstd 0.1.1 — https://github.com/101arrowz/fzstd
+ * MIT License — Copyright (c) 2020 Arjun Barrett
+ * Full license text: THIRD-PARTY-NOTICES.md (shipped alongside) and
+ * https://github.com/101arrowz/fzstd/blob/master/LICENSE
+ * SPDX-License-Identifier: MIT
+ *
+ * Vendored for the release-chunk zstd decoder (chunkAssembler). Do not
+ * re-minify this file: the license header must survive into dist/.
+ */
 // Some numerical data is initialized as -1 even when it doesn't need initialization to help the JIT infer types
 // aliases for shorter compressed code (most minifers don't do this)
 var ab = ArrayBuffer, u8 = Uint8Array, u16 = Uint16Array, i16 = Int16Array, u32 = Uint32Array, i32 = Int32Array;
