@@ -20,6 +20,10 @@ import fs from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 
+// ★ 构建期信号，不是运行时 base 推导（docs/spec/unified-assets-seam.md D13）：
+//   这个字面量只用于往 <meta name="site-base"> 注入/校验，与 Layout.astro:25
+//   是同一个唯一 DOM 输入点。运行时 base 只有 engine/deployment.resolveDeployment()
+//   一个产地；本文件不参与路径拼接，别把它当「第 7 个产地」再删一遍。
 const BASE = "/repo/Octave/";
 const DIST = "dist";
 const LANES = ["wasm32-final", "master", "IllegalPerformance"];

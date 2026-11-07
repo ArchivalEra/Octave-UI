@@ -113,17 +113,34 @@ export async function loadCatalogue(
   // 静态分发域名会变，写死单个地址某天就 404，而拿不到 catalogue 是**静默降级**
   // ——所有 release 收益全丢，用户看不出区别）。全挂才返回 null。
   const candidates = typeof url === 'string' ? [url] : [...url];
+  const failures: string[] = [];
   for (const candidate of candidates) {
     if (signal?.aborted) return null;
     try {
       const raw = await fetchPort.fetchJSON<unknown>(candidate, { signal });
       const parsed = parseCatalogue(raw);
       if (parsed) return parsed;
-      // 拿到了但不是合法 catalogue（例如 HTML 落地页）⇒ 换下一个候选
-    } catch {
-      // 这个候选不可用 ⇒ 换下一个
+      // 200 但不是合法 catalogue（典型：SPA 落地页兜底）⇒ 记下、换下一个
+      failures.push(`${candidate}: response is not a valid catalogue`);
+    } catch (err: any) {
+      failures.push(`${candidate}: ${err?.message || String(err)}`);
     }
   }
+
+  // ★ 全失败必须**响亮**（回信 103 §2：「失败要让人看见；『拿不到 catalogue』
+  //   不该等价于『没有 release』」）。
+  //
+  //   之前这里静默返回 null，上层回落整包路径 ⇒ 所有 release 收益全丢，
+  //   而用户/维护者看不出任何区别（这正是静默失败比报错坏的实例）。
+  //   回落整包的能力**保留**（离线可用是真需求），但原因必须可观测。
+  //
+  //   注意与「catalogue 可达但该包不在任何 release 里」区分：后者由
+  //   releaseSource 的 onFallback 报，原因是 'no release carried artifact …'；
+  //   这里是**连目录都没拿到**，两种原因不合并。
+  console.error(
+    `[catalogue] ALL ${candidates.length} candidate(s) failed — falling back to whole-file path ` +
+      `(release benefits are LOST). Failures: ${failures.join(' | ')}`
+  );
   return null;
 }
 

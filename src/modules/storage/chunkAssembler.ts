@@ -353,12 +353,10 @@ export function createBrowserDecoders(loadFzstd?: () => Promise<{ decompress(d: 
       // 没注入 loader 时懒建一个生产版（保持既有调用点零改动）。
       if (!loadFzstd) {
         const { createBrowserFzstdLoader } = await import('./fzstdLoader');
-        const base =
-          (typeof import.meta !== 'undefined' && (import.meta as any).env?.BASE_URL) ||
-          (typeof document !== 'undefined'
-            ? document.querySelector('meta[name="site-base"]')?.getAttribute('content') || ''
-            : '');
-        const loader = createBrowserFzstdLoader(String(base ?? ''));
+        // spec §2.3：siteBase 只有 engine/deployment 一个产地，不再自己读
+        // BASE_URL / <meta>。fzstd 是站点级静态资产，跟 forge-catalog 同源。
+        const { getDeployment } = await import('../engine/deployment');
+        const loader = createBrowserFzstdLoader(getDeployment().siteBase);
         loadFzstd = () => loader.load();
       }
       const mod = await loadFzstd();

@@ -33,18 +33,31 @@ describe('生产可达性：组合根真的注入了两条缝', () => {
 
   it('★ appContext 注入了 releaseSource（内容侧，既有）', () => {
     const src = readSource('src/modules/appContext.ts');
-    expect(src).toMatch(/releaseSource\s*:\s*createCatalogueReleaseSource\(/);
+    // 下载侧真构造 + 真注入（分片装配 → 落盘 OPFS）
+    expect(src).toMatch(/const\s+catalogueReleaseSource\s*=\s*createCatalogueReleaseSource\(/);
+    expect(src).toMatch(/releaseSource:\s*catalogueReleaseSource/);
+    // ★ 下载/装载解耦（README.md:28-29）：装载侧只读 OPFS 已下载字节，
+    //   绝不在装载时现场从 release 装配、也不自己复刻下载侧的 ref 形状。
+    //   钉住「按名字查记账 + 用记录自身 ref 做物理对账 + 读盘」+「旧现场装配模块不在」。
+    expect(src).toContain('setMslDownloadedAsset(');
+    expect(src).toContain('downloadStore.index()');
+    expect(src).toContain('downloadStore.stat(rec.ref)');
+    expect(src).toContain('workspaceStorage.store.read(f.path)');
+    expect(src).not.toContain('fetchReleaseAssetBytes');
+    expect(src).not.toContain("kind: 'src', arch: null");
   });
 
   it('★ 两条缝共享**同一个** fzstd loader 单例（否则会各拉一次，违反"只拉一次"）', () => {
     const src = readSource('src/modules/appContext.ts');
-    // 单例定义一次
-    const defs = src.match(/const\s+(\w*fzstd\w*)\s*=\s*createBrowserFzstdLoader\(/g) ?? [];
+    // 惰性单例：构造点一次（getFzstdLoaderForReleases 内的 createBrowserFzstdLoader）
+    const defs = src.match(/createBrowserFzstdLoader\(/g) ?? [];
     expect(defs.length).toBe(1);
-    const name = defs[0]!.match(/const\s+(\w+)/)![1]!;
-    // 两处 hasZstd 都引用它
-    const uses = src.match(new RegExp(`hasZstd:\\s*\\(\\)\\s*=>\\s*${name}\\.isUsable\\(\\)`, 'g')) ?? [];
+    // 两处 hasZstd 都经同一个惰性 getter，不各自 new
+    const uses = src.match(/hasZstd:\s*\(\)\s*=>\s*getFzstdLoaderForReleases\(\)\.isUsable\(\)/g) ?? [];
     expect(uses.length).toBe(2);
+    // 且 base 来自统一产地，不再有独立 getSiteBase
+    expect(src).toContain('getDeployment().siteBase');
+    expect(src).not.toContain('function getSiteBase');
   });
 
   it('★ w64 车道的站点候选**先查 w64/ 子目录**（根目录那份是 wasm32 的镜像复制）', () => {
@@ -58,6 +71,30 @@ describe('生产可达性：组合根真的注入了两条缝', () => {
     // master / IllegalPerformance 的第一候选必须含 /w64
     const masterBlock = lp.slice(lp.indexOf('master:'), lp.indexOf('IllegalPerformance:'));
     expect(masterBlock).toMatch(/siteFolders:\s*\[\s*'lanes\/master\/w64'/);
+  });
+
+  it('★ 后续票①：解耦贯穿 Octave 车道（OPFS 字节谓词注入 bridge install）', () => {
+    const src = readSource('src/modules/appContext.ts');
+    // 谓词注入存在，身份键 = 货架三键（url basename + sha），真源 = downloadStore.index()
+    expect(src).toContain('__octaveDownloadedBytes');
+    expect(src).toMatch(/downloadStore\.index\(\)/);
+    expect(src).toMatch(/workspaceStorage\.store\.read\(f\.path\)/);
+    // bridge 侧：install 先问谓词，命中走零网络流程（source: opfs-download）
+    const bridge = readSource('public/bridge/assets-loader.js');
+    expect(bridge).toContain('__octaveDownloadedBytes');
+    expect(bridge).toMatch(/source: 'opfs-download'/);
+  });
+
+  it('★ B5：LLVM 门经组合根谓词注入 bridge（裁决⑤覆盖 eval shim 路）', () => {
+    const src = readSource('src/modules/appContext.ts');
+    // 谓词注入存在，且真源是插件的 hasLLVM（不是第二份 OPFS 扫描）
+    expect(src).toContain('__octaveLlvmReady');
+    expect(src).toMatch(/__octaveLlvmReady\s*=\s*\(\)\s*=>\s*packageManagerPlugin\.hasLLVM\(\)/);
+    // bridge 侧：install 的 plan 闭包里查注入谓词、带 src 才拦
+    const bridge = readSource('public/bridge/assets-loader.js');
+    expect(bridge).toContain('__octaveLlvmReady');
+    expect(bridge).toMatch(/LLVM_REQUIRED/);
+    expect(bridge).toMatch(/content\.indexOf\('src'\) >= 0/);
   });
 
   it('★ OMC 走引擎缝（"两个引擎都上 catalogue"）—— 不许在缝之前提前 return', () => {

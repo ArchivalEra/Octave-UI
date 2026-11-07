@@ -174,21 +174,21 @@
     },
     {
       "ticket": 14,
-      "desc": "DX3 forge 族复制行：sync-lanes.sh 铺 lane 时物理复制根 assets 的 forge-catalog.json",
+      "desc": "★ 2026-11-06 翻案：旧 DX3「forge 族复制进 lane」已被统一 seam 取代。sync-lanes.sh 必须明说 DX3 已删、站点根是唯一产地（不再物理复制 forge-catalog.json）",
       "file": "scripts/sync-lanes.sh",
-      "must_contain": "forge-catalog.json"
+      "must_contain": "旧的 DX3"
     },
     {
       "ticket": 14,
-      "desc": "DX3 forge 族复制行：sync-lanes.sh 复制 assets/forge/ 目录进 lane",
+      "desc": "★ 翻案后反向锁：sync-lanes.sh 不许再出现往 lane 物理复制 assets/forge/ 的 DX3 行（双源 = 真站 404 的结构成因）",
       "file": "scripts/sync-lanes.sh",
-      "must_contain": "assets/forge/"
+      "must_not_contain": "cp -rf \"${REPO_ROOT}/public/assets/forge/\""
     },
     {
       "ticket": 14,
-      "desc": "DX3 forge 族复制行：sync-lanes.sh 复制 assets/pkg/ 目录进 lane",
+      "desc": "★ 翻案后反向锁：不许再往 lane 复制 assets/pkg/（同上）",
       "file": "scripts/sync-lanes.sh",
-      "must_contain": "assets/pkg/"
+      "must_not_contain": "cp -rf \"${REPO_ROOT}/public/assets/pkg/\""
     },
     {
       "ticket": 14,

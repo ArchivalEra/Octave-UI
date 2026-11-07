@@ -1,6 +1,7 @@
 // src/modules/appContext.ts
 // 全局领域服务单例与应用状态上下文：装配 EngineSupervisor、CapabilityPolicy 与 GraphicsSink
 import { EngineSupervisor } from './engine/EngineSupervisor';
+import { getDeployment } from './engine/deployment';
 import { onOmcFlavorError } from './engine/OmcBridge';
 import { TerminalController } from './terminal/TerminalController';
 import { HistoryStore } from './history/HistoryStore';
@@ -16,6 +17,7 @@ import { SafePlotSinkPolyfill } from './semantic/SafePlotSinkPolyfill';
 import { WorkspaceStorageManager } from './storage/WorkspaceStorageManager';
 import { DownloadStore } from './storage/DownloadStore';
 import { createCatalogueReleaseSource } from './storage/catalogueReleaseSource';
+import { setMslDownloadedAsset } from './plugins/webmcp/tools/omcLoadMsl';
 import { createCatalogueEngineReleaseSource } from './engine/engineReleaseSource';
 import { createBrowserFzstdLoader } from './storage/fzstdLoader';
 import { BrowserFetchAdapter } from './storage/FetchPort';
@@ -32,17 +34,41 @@ export const supervisor = new EngineSupervisor();
 export const dockLayoutStore = new DockLayoutStore();
 export const panelRegistry = panelRegistryInstance;
 
-function getSiteBase(): string {
-  if (typeof document !== 'undefined') {
-    const meta = document.querySelector('meta[name="site-base"]');
-    const content = meta?.getAttribute('content');
-    if (content) return content;
-    if ((window as any).__siteBase) return (window as any).__siteBase;
-  }
-  if (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) {
-    return import.meta.env.BASE_URL;
-  }
-  return '';
+// base 的唯一产地是 engine/deployment.resolveDeployment()（spec §2.3）；
+// 这里不再有独立的 getSiteBase()，避免第 7 个产地。
+// 把「解析函数」交给 public/bridge/assets-loader.js 的惰性默认实例。
+// 只挂函数、不在这里解析：模块顶层执行时 <meta> 可能尚未进入 DOM，
+// vitest 的 happy-dom 也没有 meta；真正访问 window.OctaveAssets 时才求值一次。
+if (typeof window !== 'undefined') {
+  (window as any).__resolveOctaveDeployment = () => getDeployment();
+  // ★ B5（裁决⑤ LLVM 门覆盖 eval shim 路）：bridge 的 install() 对带 src 的包
+  //   查这个谓词。「LLVM 是否已下载」真源 = DownloadStore OPFS 记账（hasLLVM
+  //   唯一产地），bridge 够不着 ⇒ 注入谓词而不是再造第二份真源。
+  (window as any).__octaveLlvmReady = () => packageManagerPlugin.hasLLVM();
+  // ★ 后续票①（下载/装载解耦贯穿 Octave 车道）：bridge install() 按货架条目
+  //   查 OPFS 已下载字节。条目身份 = 市场三键（url basename 产物名 + sha256）；
+  //   记账真源 = DownloadStore index()，这里只读不写。无记账 ⇒ 返回 null，
+  //   bridge 照旧走站点路径（派生窗口常态，不冒充成功）。
+  (window as any).__octaveDownloadedBytes = (item: { url?: string; sha256?: string; version?: string }) => {
+    const wantBase = item?.url ? String(item.url).split('/').pop() : '';
+    const wantSha = item?.sha256 || '';
+    return downloadStore.index().then((snap) => {
+      const recs = Object.values(snap.manifest.items || {}).filter(
+        (rec: any) => Array.isArray(rec.files) && rec.files.length === 1,
+      );
+      const hit = recs.find((rec: any) => {
+        const f = rec.files[0];
+        const base = f.path.split('/').pop() || '';
+        return (wantSha ? f.sha256 === wantSha : base === wantBase);
+      });
+      if (!hit) return null;
+      const f = (hit as any).files[0];
+      return workspaceStorage.store
+        .read(f.path)
+        .then((bytes) => ({ bytes, path: f.path, sha256: f.sha256 }))
+        .catch(() => null);
+    });
+  };
 }
 
 /**
@@ -105,7 +131,15 @@ export function deriveCatalogueUrl(_siteBase?: string): string {
 
 // fzstd 加载器**单例**：两条发布缝（包 + 引擎）共享同一个实例，
 // 才能保证「用户没退出网站之前，fzstd 只能拉一次」——两个 loader 会各拉一次。
-const fzstdLoaderForReleases = createBrowserFzstdLoader(getSiteBase());
+// 惰性构造：base 来自 getDeployment().siteBase（唯一产地），而 <meta> 只在 DOM
+// 就绪后可读；模块顶层不解析，避免 import 顺序把装配缺陷提前引爆。
+let _fzstdLoaderForReleases: ReturnType<typeof createBrowserFzstdLoader> | null = null;
+function getFzstdLoaderForReleases() {
+  if (!_fzstdLoaderForReleases) {
+    _fzstdLoaderForReleases = createBrowserFzstdLoader(getDeployment().siteBase);
+  }
+  return _fzstdLoaderForReleases;
+}
 
 /**
  * 编码偏好（生产策略，**按条目体积**）。
@@ -119,16 +153,42 @@ const fzstdLoaderForReleases = createBrowserFzstdLoader(getSiteBase());
 const codecPreferenceBySize = (entry: { bytes: number }) =>
   entry.bytes >= 1024 * 1024 ? (['zstd', 'gzip', 'identity'] as const) : (['gzip', 'zstd', 'identity'] as const);
 
+// 发布契约源（内容仓 099 / Static-Contract schema 3）：市场重写的生产接线。
+// ★ 提成具名单例：内容侧（包 / MSL 等单件）只有这一个消费者，
+//   让 productionWiring 能静态钉住「缝真接线」，也避免每次引用都新建一份缓存。
+//   注意 `engineReleaseSource` 是**另一条独立缝**（另一个实例、自己的 catalogue 缓存），
+//   两者不共享缓存；各自只拉一次由各自模块内的 TTL 缓存保证。
+// 解析不出（catalogue 死链窗口 / 该包未发 schema 3 / 本端解不了任何编码）
+// ⇒ resolve 返回 null ⇒ 回落整包路径。回落不是错误，是派生窗口的常态；
+// 但原因走 onFallback 出去，不静默吞。
+const catalogueReleaseSource = createCatalogueReleaseSource({
+  // 注意：catalogue 在**域名根**，不在 siteBase 下（见 deriveCatalogueUrl 的实测注释）
+  catalogueUrl: catalogueUrlCandidates(),
+  fetchPort: new BrowserFetchAdapter(),
+  // zstd 可用性**活查询**（内容仓 151 级别的坑：传死值会「先白下 zstd 再回落」）
+  hasZstd: () => getFzstdLoaderForReleases().isUsable(),
+  codecPreference: codecPreferenceBySize,
+  onFallback: ({ packageName, reason }) => {
+    console.warn(
+      `[downloads] release contract unavailable for "${packageName}": ${reason} — falling back to whole-file path`
+    );
+  },
+});
+
 export const workspaceStorage = new WorkspaceStorageManager();
 export const downloadStore = new DownloadStore({
   storage: workspaceStorage.store,
-  baseUrl: getSiteBase(),
+  baseUrlProvider: () => getDeployment().siteBase,
   catalogProvider: async () => {
+    // 缓存来自 packageManagerPlugin（唯一经 IAssetsPort 的读者）。未加载过就
+    // 走**同一个 port** 加载一次，不开第二份 URL/来源（spec §2.3 S2）。
+    // 注意：这里不是「第二个读者」，而是同一 adapter 的首次填充；
+    // BrowserAssetsAdapter 内部的直 fetch / browse 合成目录才是要删的第二产地。
     const cached = packageManagerPlugin.getCatalog();
     if (cached && Array.isArray(cached.packs) && cached.packs.length > 0) {
       return cached;
     }
-    return packageManagerPlugin.getAssetsPort().fetchCatalog();
+    return packageManagerPlugin.loadCatalog();
   },
   // 发布契约源（内容仓 099 / Static-Contract schema 3）：市场重写的生产接线。
   // 有这一行，`resolveSrcTarget` 才真的会走「manifest + 分片 + 逐块解压 + 两道校验」；
@@ -137,19 +197,7 @@ export const downloadStore = new DownloadStore({
   // 解析不出（catalogue 死链窗口 / 该包未发 schema 3 / 本端解不了任何编码）
   // ⇒ resolve 返回 null ⇒ 回落整包路径。回落不是错误，是派生窗口的常态；
   // 但原因走 onFallback 出去，不静默吞。
-  releaseSource: createCatalogueReleaseSource({
-    // 注意：catalogue 在**域名根**，不在 siteBase 下（见 deriveCatalogueUrl 的实测注释）
-    catalogueUrl: catalogueUrlCandidates(),
-    fetchPort: new BrowserFetchAdapter(),
-    // zstd 可用性**活查询**（内容仓 151 级别的坑：传死值会「先白下 zstd 再回落」）
-    hasZstd: () => fzstdLoaderForReleases.isUsable(),
-    codecPreference: codecPreferenceBySize,
-    onFallback: ({ packageName, reason }) => {
-      console.warn(
-        `[downloads] release contract unavailable for "${packageName}": ${reason} — falling back to whole-file path`
-      );
-    },
-  }),
+  releaseSource: catalogueReleaseSource,
 
   // ★ 引擎发布缝（**另一条缝**，用户 2026-11-03：「引擎契约另立缝我支持」）。
   //   没有这一行，`resolveEngineTarget` 的 release 分支在产物里永远走不到
@@ -157,7 +205,7 @@ export const downloadStore = new DownloadStore({
   engineReleaseSource: createCatalogueEngineReleaseSource({
     catalogueUrl: catalogueUrlCandidates(),
     fetchPort: new BrowserFetchAdapter(),
-    hasZstd: () => fzstdLoaderForReleases.isUsable(),
+    hasZstd: () => getFzstdLoaderForReleases().isUsable(),
     codecPreference: codecPreferenceBySize,
     onFallback: ({ lane, reason }) => {
       console.warn(
@@ -201,6 +249,36 @@ webMcpPlugin.injectServices({
   supervisor,
   projectWorkspace,
   packageManagerPlugin,
+});
+
+// ★ MSL 装载 = 从 OPFS 读已下载字节（2026-11-06 下载/装载解耦回归修复）：
+//   站侧 CORS 修好后票 C 一度用「装载时现场从 release 装分片」蒙混过判据，
+//   但那把两个动作重新耦合了（README.md:28-29 / 回信 018 明写站点特色）。
+//   现在下载侧由 DownloadStore 经 releaseSource 分片装配 + 落盘 + 记账，
+//   本闭包**不自己造 ref**（PackageManagerModal.executeDownload 的 ref 形状里有
+//   selectedVersions / isTreeForm 等 UI 态，装载侧复刻必然漂）：直接按市场条目的
+//   name 在 DownloadStore 的记账里找已下载记录，再 stat 物理对账 + read 读字节。
+//   零网络；没下载 / 物理缺件 ⇒ 工具显式 NOT_DOWNLOADED。
+setMslDownloadedAsset(async (pkg) => {
+  const snap = await downloadStore.index();
+  const candidates = Object.values(snap.manifest.items || {}).filter(
+    (rec: any) => rec?.ref?.name === pkg.name && Array.isArray(rec.files) && rec.files.length > 0,
+  ) as any[];
+  if (candidates.length === 0) return null;
+  // 版本优先取市场条目当前版本；没有精确匹配就取该包最新一条（单件包只有一条）
+  const rec =
+    candidates.find((r) => r.ref?.version === pkg.version) ?? candidates[candidates.length - 1];
+  // stat 用记录自身的 ref（与下载时逐字同一个对象），顺带做物理缺件对账
+  const verified = await downloadStore.stat(rec.ref);
+  if (!verified || verified.files.length === 0) return null;
+  const f = verified.files[0];
+  try {
+    const bytes = await workspaceStorage.store.read(f.path);
+    return { bytes, path: f.path, sha256: f.sha256 };
+  } catch (err) {
+    console.error(`[msl] failed to read downloaded asset ${f.path}:`, err);
+    return null;
+  }
 });
 
 // 转发 P5 图表事件到 GraphicsSink 的 onFigure 面：面板订阅 sink 即可拿到

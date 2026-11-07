@@ -42,10 +42,20 @@
   var MANIFEST_URL = 'assets/manifest.json';
   var OCTAVE_M = '/usr/src/octave/m';
 
-  // module：实例的 Module 对象；传 **null** = 惰性绑 `global.Module`（默认实例语义，
-  // 与旧版逐字节一致）。base：全部 fetch/script URL 的前缀。isReady：实例就绪谓词。
-  function createOctaveAssets (module, base, isReady) {
+  // module：实例的 Module 对象；传 **null** = 惰性绑 `global.Module`（默认实例语义）。
+  // base：lane 级资产的**唯一**前缀（引擎产物：octave.build.json / assets/manifest*.json）。
+  // deployment：{ siteBase, laneBase? } —— 站点级资产的唯一产地（spec §2.3）。
+  //   不传 siteBase ⇒ DEPLOYMENT_UNRESOLVED（绝不静默 '/'）。
+  //   旧的第 2 参 `base` 仍收，但只用于 lane 级；站点级不再从它正则反剥。
+  // isReady：实例就绪谓词。
+  function createOctaveAssets (module, base, isReady, deployment, opts) {
     base = base || '';
+    var dep = deployment || (typeof global !== 'undefined' && global.__octaveDeployment) || null;
+    if (!dep || !dep.siteBase) {
+      throw errCode('DEPLOYMENT_UNRESOLVED',
+        '站点资产运行时缺 siteBase —— 拒绝静默回落根路径（docs/spec/unified-assets-seam.md §2.2）');
+    }
+    var siteBase = String(dep.siteBase);
     var readyFn = isReady || function () { return global.__octaveReady === true; };
 
     var manifest = null;
@@ -53,7 +63,10 @@
     var _catalog = null;        // 已读到的货架目录（缓存）
     var _catalogP = null;       // 读取中的 promise（去重）
     var _catalogByName = {};    // name → pack 条目
-    var _catalogSourceOverride = null;   // ★ 测试注入面（见 catalog() 上方注释）
+    // 内部缝（spec §2.3 D11）：由 create(..., opts.catalogSource) 注入，
+    // 不再是 API 上的公开方法。验收脚本不能从页面改它，测试靠 create() 显式传。
+    var _catalogSourceOverride = (opts && typeof opts.catalogSource === 'function')
+      ? opts.catalogSource : null;
     var installSeen = {};       // 安装去重（同实例内）
     // ── 给 `.m` 侧观察的**安装结果账**（T4，2026-10-12）──────────────────────────
     //   为什么需要：`pkg load <货架上的包>` 在 `.m` 侧只能"点火"（`__web_run_js__` 即返），
@@ -111,6 +124,35 @@
       return m;
     }
     function withBase(u) { return base + u; }
+    // ★ 逻辑键注册表（docs/spec/unified-assets-seam.md §2.3）：全模块**唯一拼接点**。
+    //   调用方只说逻辑键，不说 tier / 不传 siteLevel 布尔 / 不拼 URL。
+    //   'site' → siteBase（站点根 assets/），'lane' → base（lanes/<lane>/）。
+    //   未注册键 ⇒ UNCLASSIFIED_ASSET 响亮拒绝，绝不猜 tier。
+    //   这条替代了 2026-11-06 的 siteRoot() 正则反剥 + 6 处 `siteLevel=true` 标记：
+    //   漏标一个就 404 的打地鼠形状在此**不可表达**。
+    var TIERS = Object.freeze({
+      'forge-catalog':    { tier: 'site', path: 'assets/forge-catalog.json' },
+      'llvm-manifest':    { tier: 'site', path: 'assets/llvm/manifest.json' },
+      'llvm-config':      { tier: 'site', path: 'assets/llvm/config.h.json' },
+      'pkg-module-table': { tier: 'site', path: 'assets/pkg-module-table.json' },
+      'octinc':           { tier: 'site', path: 'assets/octinc/octave-headers.tar.gz' },
+      'pyodide-dir':      { tier: 'site', path: 'assets/pyodide/pyodide/' },
+      // 货架里的包字节：catalog 的 p.url / srcTar 是完整站点相对路径
+      // （assets/forge/x.tar.gz），故 path 为空、由 suffix 提供。
+      'forge-pack':       { tier: 'site', path: '' },
+      'engine-manifest':  { tier: 'lane', path: 'assets/manifest.json' },
+      'engine-build':     { tier: 'lane', path: 'octave.build.json' }
+    });
+    function resolve(key, suffix) {
+      var e = TIERS[key];
+      if (!e) throw errCode('UNCLASSIFIED_ASSET', '未注册的逻辑键：' + key);
+      return (e.tier === 'site' ? siteBase : base) + e.path + (suffix || '');
+    }
+    // 站点级包字节统一经 resolve('forge-pack', relPath)：不再是 TIERS 之外的
+    // 第二拼接点（2026-11-06 第二发 404 的潜伏点，code-review 两轴点名）。
+    function resolveSiteAsset(relPath) {
+      return resolve('forge-pack', String(relPath).replace(/^\/+/, ''));
+    }
 
     function mkdirp(path) {
       var parts = path.split('/').filter(Boolean);
@@ -130,16 +172,18 @@
       });
     }
 
-    function fetchBinary(url) {
-      return fetch(withBase(url)).then(function (r) {
-        if (!r.ok) throw errCode('ASSET_FETCH_FAILED', '取资产失败 ' + withBase(url) + ' → HTTP ' + r.status);
+    // 只接**已 resolve 的绝对 URL**。站点级走 resolve(key) / resolveSiteAsset(rel)，
+    // lane 级走 withBase(rel)。调用方不再传 siteLevel 布尔（spec §2.3 S3）。
+    function fetchBinary(full) {
+      return fetch(full).then(function (r) {
+        if (!r.ok) throw errCode('ASSET_FETCH_FAILED', '取资产失败 ' + full + ' → HTTP ' + r.status);
         return r.arrayBuffer();
       });
     }
 
-    function fetchJSON(url) {
-      return fetch(withBase(url)).then(function (r) {
-        if (!r.ok) throw errCode('MANIFEST_FETCH_FAILED', '取清单失败 ' + withBase(url) + ' → HTTP ' + r.status);
+    function fetchJSON(full) {
+      return fetch(full).then(function (r) {
+        if (!r.ok) throw errCode('MANIFEST_FETCH_FAILED', '取清单失败 ' + full + ' → HTTP ' + r.status);
         return r.json();
       });
     }
@@ -232,14 +276,14 @@
         // 站点上资产在 <base>/assets/pyodide/pyodide/（provision-pyodide.sh 装配）
         // ⚠️ **别写 `var base = base + …`**：`var` 提升会让右边那个 `base` 也是本地的 ⇒
         //    `undefinedassets/pyodide/`（实测抓到）。用局部名 `pBase`。
-        var pBase = withBase('assets/pyodide/pyodide/');
+        var pBase = resolve('pyodide-dir');
         if (layers.pyodide && layers.pyodide.ready) return Promise.resolve(layers.pyodide);
         // ★ 真起运行时（2026-10-15，IPC 缝的前提）：symbolic 的 `.m` 经 `__web_run_js__`
         //   → `__octaveRunPython`（octave-core.js）**同步**调 Pyodide ⇒ 运行时必须
         //   **已经**起好并挂在 `global.pyodide`（同步调用点等不了 Promise）。
         //   起实例是异步的 ⇒ 在本函数里 await 掉（install 本来就是 Promise 语义）。
         //   ⚠️ 失败必须响亮（不静默降级成"层就位"）。
-        return fetchJSON(pBase + 'pyodide-lock.json').then(function () {
+        return fetchJSON(resolve('pyodide-dir', 'pyodide-lock.json')).then(function () {
           if (global.pyodide && typeof global.pyodide.runPython === 'function') {
             layers.pyodide = { ready: true, kind: 'python', base: pBase,
                                version: p.version, bytes: p.size };
@@ -292,7 +336,7 @@
       var p = deps.then(function () {
         log('加载 ' + name + ' …');
         if (a.kind === 'oct') {
-          return fetchBinary(a.url).then(function (buf) {
+          return fetchBinary(withBase(a.url)).then(function (buf) {
             return sha256Hex(buf).then(function (hex) {
               if (a.sha256 && hex && hex !== a.sha256) {
                 throw errCode('SHA_MISMATCH', '资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
@@ -324,7 +368,7 @@
           mkdirp(dir);
           var b = a.base_url || a.url;
           return Promise.all((a.files || []).map(function (f) {
-            return fetchBinary(b + '/' + f).then(function (buf) {
+            return fetchBinary(withBase(b + '/' + f)).then(function (buf) {
               fs().writeFile(dir + '/' + f, new Uint8Array(buf));
               return f;
             });
@@ -357,7 +401,7 @@
         // （最典型的是 doc-cache：没有它，disp(函数对象)/help 会去调
         // makeinfo 子进程，而本构建无 shell，于是清晰报错）。
         if (a.kind === 'file') {
-          return fetchBinary(a.url).then(function (buf) {
+          return fetchBinary(withBase(a.url)).then(function (buf) {
             return sha256Hex(buf).then(function (hex) {
               if (a.sha256 && hex && hex !== a.sha256) {
                 throw errCode('SHA_MISMATCH', '资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
@@ -464,8 +508,8 @@
     //    不硬编码）。
     function toolchainWorker(target, log) {
       if (_tcWorkers[target]) return _tcWorkers[target];
-      _tcWorkers[target] = Promise.all([fetchJSON('assets/llvm/manifest.json'),
-                                        fetchJSON('assets/llvm/config.h.json').catch(function () { return null; })])
+      _tcWorkers[target] = Promise.all([fetchJSON(resolve('llvm-manifest')),
+                                        fetchJSON(resolve('llvm-config')).catch(function () { return null; })])
       .then(function (both) {
         var man = both[0], _configMacros = both[1];
         var byName = {};
@@ -511,7 +555,7 @@
 
     // ②b cfgReady()：config.h 宏数（诊断用；真正的 config.h 由 worker 写进 /src）
     function cfgReady() {
-      return fetchJSON('assets/llvm/config.h.json').then(function (c) {
+      return fetchJSON(resolve('llvm-config')).then(function (c) {
         return Object.keys(c || {}).length;
       }, function () { return 0; });
     }
@@ -523,11 +567,11 @@
     function headersInto(M, target) {
       if (_headersDone) return Promise.resolve(_headersDone);
       var inc = '/src/octinc';
-      return fetchBinary('assets/octinc/octave-headers.tar.gz').then(function (buf) {
+      return fetchBinary(resolve('octinc')).then(function (buf) {
         M.FS.writeFile('/tmp/octinc.tar.gz', new Uint8Array(buf));
         var rc = M.eval_string("__forge_src_list__('/tmp/octinc.tar.gz', '" + inc + "', true)");
         if (rc !== 0) throw errCode('UNPACK_FAILED', 'Octave 头解包失败（rc=' + rc + '）');
-        return fetchJSON('assets/llvm/config.h.json');
+        return fetchJSON(resolve('llvm-config'));
       }).then(function (cfg) {
         // config.h：25 宏逐条写（数据跟 catalog 走，不硬编码 —— §10 判据 2）
         var lines = ['#pragma once'];
@@ -543,7 +587,7 @@
     var _moduleTables = null;
     function loadModuleTables() {
       if (_moduleTables) return Promise.resolve(_moduleTables);
-      return fetchJSON('assets/pkg-module-table.json')
+      return fetchJSON(resolve('pkg-module-table'))
         .then(function (d) {
           _moduleTables = (d && d.module_table) || {};
           return _moduleTables;
@@ -705,6 +749,19 @@
 
     var API = {
       OCTAVE_M: OCTAVE_M,
+      // 只读诊断面：逻辑键 → 绝对 URL。三条路不靠它拼 URL，只靠它对账
+      // （CONTEXT.md「对账器」）；未注册键 ⇒ UNCLASSIFIED_ASSET 响亮拒绝。
+      resolve: resolve,
+      // 组合根/boot 链把本实例惰性绑到某个 Module + lane base
+      // （MODULARIZE 别名修复 + B6 选档：base 必须跟着 lane 走）。
+      // 不新造实例 —— 三条路共用一个默认实例（spec §2.3）。
+      bindHost: function (mod, laneBase) {
+        if (mod) module = mod;
+        if (laneBase) base = laneBase;
+        return API;
+      },
+      // 兼容旧调用点（只绑 Module）
+      bindModule: function (mod) { return API.bindHost(mod, null); },
       init: function (url) {
         // ★ B6：**没显式给清单时按档取**（w64 = `assets/manifest.w64.json`）。
         //   为什么必要（实测踩到）：`window.OctaveAssets` 是**全局默认实例**（A2 之前的别名，
@@ -713,7 +770,7 @@
         //   （accept-113-assets 12/4、accept-113-oct 3/5 的现场）。这里让默认值也跟着档走。
         url = url || (global.octaveLanePlan && global.octaveLanePlan.manifest) || url;
         if (manifest) return Promise.resolve(manifest);
-        return fetchJSON(url || MANIFEST_URL).then(function (m) {
+        return fetchJSON(withBase(url || MANIFEST_URL)).then(function (m) {
           manifest = m;
           (m.assets || []).forEach(function (a) { byName[a.name] = a; });
           log('清单就绪：' + Object.keys(byName).length + ' 个资产');
@@ -835,7 +892,7 @@
           return API.load(['webio', 'webshell', 'webfile', 'forge']).catch(function () { return null; })
           .then(function () {
           onProgress({ phase: 'src', name: name });
-          return fetchBinary(srcTar).then(function (buf) {
+          return fetchBinary(resolveSiteAsset(srcTar)).then(function (buf) {
             return sha256Hex(buf).then(function (hex) {
               if (p.sha256 && hex && hex !== p.sha256) {
                 throw errCode('SHA_MISMATCH', '源码包校验失败 ' + name + '（期望 ' + p.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
@@ -955,12 +1012,10 @@
       // 「货架」= 站点上的 `assets/forge-catalog.json`（构建期由 build/forge-catalog.py
       // 从货架仓 `shelf/` 生成；版本按 **fork 的 Octave 版本**过滤、字节 sha 逐条核过）。
       // 客户端**读它但不下载任何包字节** —— 谁 install 谁才拉。
-      // ★ **测试注入面**（2026-10-16，架构界套件要它）：让测试**在不碰站点**的前提下
-      //   把一份合成目录喂进来（`accept-arch-boundary` 的 A3/A4 靠它验"arch 不符 ⇒ 响亮拒绝"）。
-      //   为什么是公开方法而不是"内部钩子"：判据做在客户端，而客户端的输入就是目录 ⇒
-      //   "能换目录来源"是这个模块**本就该有的缝**（accept-install-verdict 的 V3/V4 也只差它）。
-      //   ⚠️ 只影响**本实例**（与 manifest/loaded 同款：全部状态收进工厂闭包）。
-      __catalogSource: function (src) { _catalogSourceOverride = src || null; },
+      // ★ 注入目录来源只能靠 create(..., { catalogSource })，**不是 API 方法**
+      //   （spec §2.3 D11）：旧 `API.__catalogSource()` 是验收脚本的公开作弊口，
+      //   5 个 fish-g-catcheck 用它喂合成货架 ⇒ 验的是工厂函数，不是产品路径。
+      //   注入目录与真目录在「填缓存 + 记账」两步上同权，不是旁路。
       catalog: function () {
         if (_catalog) return Promise.resolve(_catalog);
         if (_catalogP) return _catalogP;
@@ -983,7 +1038,7 @@
         // ⚠️ 传**裸路径**（fetchJSON 内部会 withBase）—— 曾经这里又 withBase 一次，
         //    base 为空时无害、非空时双拼（`/base//base/assets/…` ⇒ 404）。
         //    由 accept-install-verdict 的 V3（同源子路径 base）首次暴露。
-        _catalogP = fetchJSON('assets/forge-catalog.json').then(function (c) {
+        _catalogP = fetchJSON(resolve('forge-catalog')).then(function (c) {
           _catalog = c || { packs: [] };
           var byName2 = {};
           (_catalog.packs || []).forEach(function (p) { byName2[p.name] = p; });
@@ -1047,17 +1102,73 @@
               }
             }
           }
+          // ★ B5（2026-11-07 三路同轴）：裁决⑤ LLVM 前置门覆盖 **eval shim 路**。
+          //   旧形态：PackageManagerPlugin.installPackage 有 llvm_required 门，但 eval 内
+          //   `pkg install` shim 直接走 OctaveAssets.install ⇒ 绕过它。
+          //   「LLVM 是否已下载」的真源在 DownloadStore 的 OPFS 记账（bridge 够不着）——
+          //   硬造第二份真源就是排查②警告的「两个产地」。所以用**组合根注入的谓词**
+          //   （与 setMslDownloadedAsset 同款缝）：未注入 = 门不生效（老宿主/测试零回归）。
+          var llvmReadyFn = (typeof global.__octaveLlvmReady === 'function') ? global.__octaveLlvmReady : null;
+          var srcPkgs = plan.filter(function (p) {
+            return Array.isArray(p.content) && p.content.indexOf('src') >= 0;
+          });
+          var llvmGate = (srcPkgs.length === 0 || !llvmReadyFn)
+            ? Promise.resolve(null)
+            : Promise.resolve().then(llvmReadyFn).then(function (ready) {
+                if (ready) return null;
+                var m = '[ruling-5] ' + srcPkgs.map(function (p) { return p.name; }).join(', ')
+                      + ' 包含 C++ 加速件 (src)，需要现场编译——请先下载 LLVM 工具链 (约 35 MB)';
+                var er = errCode('LLVM_REQUIRED', m);
+                er.__verdict__ = { state: 'failed', name: srcPkgs[0].name,
+                                   cause: 'llvm_required', why: 'llvm_required', retriable: false };
+                throw er;
+              });
+
+          // ★ B4（2026-11-07 三路同轴）：配额预检覆盖 install 路（A5 不再被绕）。
+          //   旧形态 quota 门只在 DownloadStore（UI 下载路），MCP/eval shim 走 install
+          //   全程零配额检查 ⇒ 直写满磁盘才炸。现在 plan 闭包算出总字节后、**任何
+          //   fetch 之前**查 navigator.storage.estimate()，不足即响亮拒绝。
+          //   planOnly 也带 quota 字段（MCP 的"知情面"= UI confirm 弹窗的等价物）。
+          var planBytes = plan.reduce(function (a, p) { return a + (p.size || 0); }, 0);
+          var quotaCheck = function () {
+            if (typeof navigator === 'undefined' || !navigator.storage || !navigator.storage.estimate) {
+              return Promise.resolve({ ok: true, remaining: null });  // 无 estimate 面 ⇒ 不拦（老宿主）
+            }
+            return navigator.storage.estimate().then(function (e) {
+              var remaining = (e.quota || 0) - (e.usage || 0);
+              // 余量不足且又不是 planOnly ⇒ 响亮拒绝（错误码对齐 DownloadStore A5）
+              if (planBytes > remaining) {
+                var m = '存储配额不足：本次需约 ' + (planBytes / 1048576).toFixed(1)
+                      + ' MB，OPFS 余量约 ' + (remaining / 1048576).toFixed(1)
+                      + ' MB —— 请先移除已装引擎/包或清理空间（STORAGE_QUOTA_EXHAUSTED）';
+                var er = errCode('STORAGE_QUOTA_EXHAUSTED', m);
+                er.__verdict__ = { state: 'failed', name: name,
+                                   cause: 'storage-quota-exhausted', why: m, retriable: false };
+                throw er;
+              }
+              return { ok: true, remaining: remaining };
+            }).catch(function (e) {
+              if (e && e.code === 'STORAGE_QUOTA_EXHAUSTED') throw e;
+              return { ok: true, remaining: null };   // estimate 失败 ⇒ 不拦（不假装查过）
+            });
+          };
+
           // ★ planOnly（©5 第③步）：**只算账不下载**（UI 预演"要拉多少"）。零网络字节。
           //   判据：page.on('response') 在该调用期间**没有任何**对 assets/pkg|assets/forge 的响应。
           if (opts.planOnly) {
+            return quotaCheck().then(function (q) {
             var layers = plan.filter(function (p) { return p.form === 'tree'; })
                              .map(function (p) { return { name: p.name, form: p.form, bytes: p.size }; });
             var done = { state: 'ok', name: name, planOnly: true,
                      installed: [], layers: layers,
-                     bytes: plan.reduce(function (a, p) { return a + (p.size || 0); }, 0) };
+                     bytes: planBytes,
+                     quota: q };
             onProgress({ phase: 'done', plan: plan.map(function (p) { return p.name; }), planOnly: true });
             return done;
+            });
           }
+          // 非 planOnly：先过 LLVM 门（裁决⑤）+ 配额门，再进 fetch
+          return llvmGate.then(function () {
           // Forge 的 .m 包只依赖引擎内建的 gunzip/untar ⇒ 先确保它们在
           // 先确保四样在（缺一不可，全部是**既有资产**，不新增机制）：
           //   webio    —— 引擎内建 gunzip/untar（zlib/ustar，解包用）
@@ -1086,7 +1197,40 @@
                   });
                 }
                 onProgress({ phase: 'fetch', name: p.name, size: p.size });
-                return fetchBinary(p.url).then(function (buf) {
+                // ★ 下载/装载解耦贯穿 Octave 车道（2026-11-07 后续票①）：
+                //   先问组合根注入的「已下载 OPFS 字节」谓词（与 omc_load_msl 同款缝）——
+                //   有记账就装 OPFS 字节（零网络），没有才现场从站点取。
+                //   sha 仍用货架 p.sha256 核（记账 sha 与货架同源双确认）。
+                var downloadedSrc = null;
+                if (typeof global.__octaveDownloadedBytes === 'function') {
+                  try { downloadedSrc = global.__octaveDownloadedBytes(p); } catch (e) { downloadedSrc = null; }
+                }
+                if (downloadedSrc && downloadedSrc.bytes && downloadedSrc.bytes.length) {
+                  // OPFS 命中：后续与站点路径**逐字同流程**（sha 核 → 落 tmp →
+                  // __forge_install__ 解包 → sync_db → publish），只有字节来源不同。
+                  onProgress({ phase: 'fetch', name: p.name, size: downloadedSrc.bytes.length, source: 'opfs-download' });
+                  var bufD = downloadedSrc.bytes;
+                  return sha256Hex(bufD).then(function (hex) {
+                    if (p.sha256 && hex && hex !== p.sha256) {
+                      throw errCode('SHA_MISMATCH', '包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
+                                      + '… 实得 ' + hex.slice(0, 12) + '…）—— 拒绝安装');
+                    }
+                    var tarD = '/tmp/forge-' + p.name + '-' + p.version + '.tar.gz';
+                    fs().writeFile(tarD, new Uint8Array(bufD));
+                    onProgress({ phase: 'unpack', name: p.name });
+                    var MD = Msafe();
+                    if (!MD || !MD.eval_string) throw errCode('ENGINE_NOT_READY', '引擎还没就绪，不能安装包');
+                    var rcD = MD.eval_string(
+                      "n = __forge_install__ ('" + tarD + "', '" + p.name + "', '/usr/src/octave/m/forge');");
+                    if (rcD !== 0) throw errCode('UNPACK_FAILED', '__forge_install__ 失败（rc=' + rcD + '）：'
+                                                 + 'OPFS 字节解包失败');
+                    MD.eval_string("if (exist('__pkgfix_sync_db__')) try; __pkgfix_sync_db__ (); catch; end; end;");
+                    publish();
+                    acc.push(p.name);
+                    return acc;
+                  });
+                }
+                return fetchBinary(resolveSiteAsset(p.url)).then(function (buf) {
                   return sha256Hex(buf).then(function (hex) {
                     if (p.sha256 && hex && hex !== p.sha256) {
                       throw errCode('SHA_MISMATCH', '包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
@@ -1184,13 +1328,31 @@
           e.__verdict__ = { state: st, name: name, cause: cause, why: why,
                             retriable: st === 'cannot-know' };
           throw e;
-        });
+        });   // verdict 映射
+        });   // B4 quotaCheck().then —— 多出的一层 then 闭包
       }
     };
     return API;
   }
 
   global.createOctaveAssets = createOctaveAssets;
-  // 默认实例别名：module=null ⇒ 惰性绑 global.Module（与旧版行为逐字节一致）
-  global.OctaveAssets = createOctaveAssets(null, '', function () { return global.__octaveReady === true; });
+  // ★ 默认实例别名**不再在模块顶层构造**（docs/spec/unified-assets-seam.md §2.3）：
+  //   顶层构造时 <meta site-base> 可能还没被读、__octaveDeployment 还没注入，
+  //   曾导致「文件级别名 base=''」与「boot 时 lane-base 实例」两个实例状态分叉。
+  //   改为惰性：第一次访问 window.OctaveAssets 才用唯一的 deployment 构造一次，
+  //   之后所有读取者（UI / MCP / .m 裸名 / 验收）拿到同一个句柄。
+  var _defaultAssets = null;
+  Object.defineProperty(global, 'OctaveAssets', {
+    configurable: true,
+    get: function () {
+      if (!_defaultAssets) {
+        var resolveDep = global.__resolveOctaveDeployment;
+        var dep = resolveDep ? resolveDep() : global.__octaveDeployment;
+        _defaultAssets = createOctaveAssets(null, dep && dep.laneBase ? dep.laneBase : '', function () {
+          return global.__octaveReady === true;
+        }, dep);
+      }
+      return _defaultAssets;
+    }
+  });
 })(typeof window !== 'undefined' ? window : globalThis);

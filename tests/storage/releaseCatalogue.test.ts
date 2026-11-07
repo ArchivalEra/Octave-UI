@@ -8,9 +8,10 @@
 //
 // 复跑：CI=true npx vitest run tests/storage/releaseCatalogue.test.ts
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   parseCatalogue,
+  loadCatalogue,
   fetchReleaseManifest,
   resolveFirstLiveRelease,
   type Catalogue,
@@ -34,11 +35,20 @@ function manifest(schema = 3): Record<string, unknown> {
   };
 }
 
+/** 共用的 fetchBytes 桩：一律 404 —— 这些判据只走 fetchJSON，字节面不参与。
+ *  全文件 FetchPort 复用这一份，避免每条用例各内联一份会漂移的假实现
+ *  （code-review Standards 轴：消除重复 stub）。 */
+const fetchBytes404: FetchPort['fetchBytes'] = async () => ({
+  ok: false,
+  status: 404,
+  data: new Uint8Array(0),
+  sha256: '',
+  totalBytes: null,
+});
+
 function portWith(manifests: Record<string, unknown | { fail: number } | { throw: true }>): FetchPort {
   return {
-    async fetchBytes() {
-      return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
-    },
+    fetchBytes: fetchBytes404,
     async fetchJSON<T>(url: string): Promise<T> {
       if (!(url in manifests)) throw Object.assign(new Error('404'), { status: 404 });
       const v = manifests[url];
@@ -104,9 +114,7 @@ describe('fetchReleaseManifest：失败要分得清「网络坏」与「manifest
   it('URL 拼接：base 有尾斜杠 / 无尾斜杠都得到 base/manifest.json', async () => {
     const calls: string[] = [];
     const port: FetchPort = {
-      async fetchBytes() {
-        return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
-      },
+      fetchBytes: fetchBytes404,
       async fetchJSON<T>(url: string): Promise<T> {
         calls.push(url);
         return manifest() as T;
@@ -190,9 +198,7 @@ describe('resolveFirstLiveRelease：死链容忍（本期最重要的一条）',
   it('maxAttempts 限制试探数量（派生窗口大时不许无限打空请求）', async () => {
     let tries = 0;
     const port: FetchPort = {
-      async fetchBytes() {
-        return { ok: false, status: 404, data: new Uint8Array(0), sha256: '', totalBytes: null };
-      },
+      fetchBytes: fetchBytes404,
       async fetchJSON<T>(): Promise<T> {
         tries++;
         throw Object.assign(new Error('404'), { status: 404 });
@@ -200,5 +206,68 @@ describe('resolveFirstLiveRelease：死链容忍（本期最重要的一条）',
     };
     await resolveFirstLiveRelease(port, catalogue, { maxAttempts: 2 });
     expect(tries).toBe(2);
+  });
+});
+describe('回信 103：catalogue 全探测失败必须响亮（不许静默回落整包）', () => {
+  it('★ 全部候选都失败 ⇒ console.error 一次，原因里列出每个候选', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const urls = ['https://a.test/catalogue.json', 'https://b.test/catalogue.json'];
+    const port: FetchPort = {
+      fetchBytes: fetchBytes404,
+      async fetchJSON<T>(url: string): Promise<T> {
+        throw new Error(`HTTP 404 fetching ${url}`);
+      },
+    };
+    try {
+      const r = await loadCatalogue(port, urls);
+      expect(r).toBeNull();
+      expect(errSpy).toHaveBeenCalledTimes(1);
+      const msg = String(errSpy.mock.calls[0][0]);
+      expect(msg).toContain('ALL 2 candidate(s) failed');
+      expect(msg).toContain('release benefits are LOST');
+      expect(msg).toContain('https://a.test/catalogue.json');
+      expect(msg).toContain('https://b.test/catalogue.json');
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('★ 200 但返回 SPA 落地页（不是合法 catalogue）⇒ 也算失败、要响亮', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const port: FetchPort = {
+      fetchBytes: fetchBytes404,
+      async fetchJSON<T>(): Promise<T> {
+        return '<!doctype html><html>SPA fallback</html>' as T;
+      },
+    };
+    try {
+      expect(await loadCatalogue(port, ['https://x.test/catalogue.json'])).toBeNull();
+      const msg = String(errSpy.mock.calls[0]?.[0] ?? '');
+      expect(msg).toContain('not a valid catalogue');
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('★ 第一个候选成功 ⇒ 不报错（零误报）', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const port: FetchPort = {
+      fetchBytes: fetchBytes404,
+      async fetchJSON<T>(url: string): Promise<T> {
+        if (url === 'https://a.test/catalogue.json') {
+          // 标识来自真实产物（与 releaseCatalogue.ts 的 id 形状锚点一致），不许编：
+          // 内容仓 100 §4.2 点名 'X/r1' 这类编造 id 为假 fixture 反例。
+          return { schema: 1, releases: [{ id: 'Octave-Extra-Content/supply-msl-4.1.0', base: 'https://r/' }] } as T;
+        }
+        throw new Error('should not be reached');
+      },
+    };
+    try {
+      const r = await loadCatalogue(port, ['https://a.test/catalogue.json', 'https://b.test/catalogue.json']);
+      expect(r).not.toBeNull();
+      expect(errSpy).not.toHaveBeenCalled();
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 });

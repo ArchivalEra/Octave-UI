@@ -43,22 +43,12 @@ for LANE in "${LANES[@]}"; do
     cp -f "${UPSTREAM_REPO}/site/assets/m/plotbridge.js" "${LANE_DIR}/assets/m/plotbridge.js"
   fi
 
-  # DX3（wayfinder #14）：forge 族三缺补齐——根 assets 的 forge 族物理复制进 lane 目录。
-  # 引擎侧 assets-loader 的 withBase 机制读 lane 相对路径（assets/forge-catalog.json、
-  # assets/forge/、assets/pkg/），lane 目录里没有这三件 ⇒ dev 形态装任何包必 404。
-  # 双源收敛 = 根 assets 单源：副本与根同源由本处复制保证（不软链——静态交付物无软链语义）。
-  if [ -f "${REPO_ROOT}/public/assets/forge-catalog.json" ]; then
-    echo "    --> [DX3] 铺 forge 族进 lane: forge-catalog.json + forge/ + pkg/"
-    cp -f "${REPO_ROOT}/public/assets/forge-catalog.json" "${LANE_DIR}/assets/forge-catalog.json"
-    if [ -d "${REPO_ROOT}/public/assets/forge" ]; then
-      mkdir -p "${LANE_DIR}/assets/forge"
-      cp -rf "${REPO_ROOT}/public/assets/forge/"* "${LANE_DIR}/assets/forge/"
-    fi
-  fi
-  if [ -d "${REPO_ROOT}/public/assets/pkg" ]; then
-    mkdir -p "${LANE_DIR}/assets/pkg"
-    cp -rf "${REPO_ROOT}/public/assets/pkg/"* "${LANE_DIR}/assets/pkg/"
-  fi
+  # ★ spec §2.3 / D14：旧的 DX3「把 forge 族物理复制进每个 lane 目录」已删。
+  #   那时 assets-loader 的 withBase 把 laneBase 套到站点级资产上，
+  #   lane 目录里没有 forge-catalog.json / forge/ / pkg/ 就 404。
+  #   现在 resolve('forge-catalog') 与 resolveSiteAsset() 一律走 siteBase
+  #   （站点根 assets/），站点根是唯一产地 —— 再往 lane 里复制就是双源，
+  #   正是 2026-11-06 真站 404 的结构成因。三份 lane 旧副本同步删除。
 done
 
 # 同步 w64 最新多线程二进制

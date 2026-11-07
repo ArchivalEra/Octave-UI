@@ -109,11 +109,14 @@ describe('WebMcpPlugin Deep Module', () => {
 
   describe('Tool Registry & Schemas', () => {
     // 7 条（内容仓 093 裁定 A：omc 工具族按 provision 自然生长；本工具经逐条显式确认）
-    it('lists 7 tools (6 octave + omc_load_msl)', async () => {
+    it('lists 9 tools (7 octave + omc_load_msl + download/compile)', async () => {
+      // ★ 2026-11-07 三路同轴 C2：下载/编译两格补齐（排查②矩阵空格）
       const tools = await plugin.listTools();
-      expect(tools.length).toBe(7);
+      expect(tools.length).toBe(9);
       const names = tools.map((t) => t.name).sort();
       expect(names).toEqual([
+        'octave_compile_package',
+        'octave_download_package',
         'octave_eval',
         'octave_get_system_state',
         'octave_get_workspace',
@@ -262,7 +265,7 @@ describe('WebMcpPlugin Deep Module', () => {
 
       expect(readyDetail).not.toBeNull();
       expect(readyDetail.pluginId).toBe('webmcp');
-      expect(readyDetail.tools.length).toBe(7); // 6 octave + omc_load_msl（内容仓 093 裁定 A）
+      expect(readyDetail.tools.length).toBe(9); // 7 octave + omc_load_msl + download/compile（C2，093 裁定 A 逐条登记）
     });
 
     it('responds to webmcp:call events with webmcp:response', async () => {

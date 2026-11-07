@@ -627,12 +627,14 @@ describe('WebMCP golden master (step 0, recorded against old implementation)', (
       expect(golden(res)).toMatchSnapshot();
     });
 
-    it('guard | octave_list_packages | catalog missing → loadCatalog() runs, its rejection is swallowed (.catch(()=>{}))', async () => {
+    it('guard | octave_list_packages | catalog missing → loadCatalog() rejection is NOT swallowed (fail loud, spec §2.2 S5)', async () => {
       mocks.mockPackageManager.getCatalog.mockReturnValueOnce(null);
       mocks.mockPackageManager.loadCatalog.mockRejectedValueOnce(new Error('catalog fetch failed'));
       const res = await plugin.callTool('octave_list_packages', {});
       expect(golden(res)).toMatchSnapshot();
       expect(mocks.mockPackageManager.loadCatalog).toHaveBeenCalledTimes(1);
+      // 反向断言：不许再吞成 total:0 且 isError:false 的假绿
+      expect((res as any).isError).not.toBe(false);
     });
 
     it('guard | octave_get_workspace | ws.syncVariables resolves [] (empty workspace) → count 0 shape', async () => {

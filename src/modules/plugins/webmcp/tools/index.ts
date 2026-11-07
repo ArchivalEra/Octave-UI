@@ -12,6 +12,8 @@ import { octaveListPackagesTool } from './octaveListPackages';
 import { octaveInstallPackageTool } from './octaveInstallPackage';
 import { octaveGetSystemStateTool } from './octaveGetSystemState';
 import { omcLoadMslTool } from './omcLoadMsl';
+import { octaveDownloadPackageTool } from './octaveDownloadPackage';
+import { octaveCompilePackageTool } from './octaveCompilePackage';
 
 export const octaveToolTable: readonly WebMcpToolSpec[] = [
   octaveEvalTool,
@@ -22,4 +24,7 @@ export const octaveToolTable: readonly WebMcpToolSpec[] = [
   octaveGetSystemStateTool,
   // omc 车道工具族（内容仓 093 裁定 A：provision 自然生长，逐条显式确认）
   omcLoadMslTool,
+  // ★ 2026-11-07 三路同轴 C2：下载/编译两格补齐（排查②矩阵；DEVIATIONS ④ 登记）
+  octaveDownloadPackageTool,
+  octaveCompilePackageTool,
 ];

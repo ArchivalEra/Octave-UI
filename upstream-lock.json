@@ -12,7 +12,7 @@
       "version": "bridge",
       "url": "public/bridge/octave-page.js",
       "file": "public/bridge/octave-page.js",
-      "sha256": "a472a021949c4439f4ca60b676a1cf52c059a8a454cafd84787e1d5db419ffed"
+      "sha256": "575b60fd1a89eea20e98645cbd0c006822a036e2655ed0f770cddf1d291b2393"
     },
     {
       "name": "octave-w64.wasm",

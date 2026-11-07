@@ -65,22 +65,28 @@ jobs:
       - name: Sync engine lanes and bridge glue
         run: |
           set -euo pipefail
-          git -C .engine fetch -q origin wasm32-final master IllegalPerformance
-          ex() { git -C .engine archive "origin/$1" site; }
+          # ★ 2026-11-07 修复（站侧回信 105 + 站侧 Pages 四连红）：wasm32-final /
+          #   IllegalPerformance 分支已被上游删除并**归档为 tag**（pins.json 唯一产地：
+          #   archive/wasm32-final-168ef49、archive/master-a1e2409；master 仍是活分支）。
+          #   旧命令 fetch 分支名 ⇒ `couldn't find remote ref wasm32-final`，Pages 四连红。
+          #   归档 tag 里嵌着 commit 短 SHA（168ef49 / a1e2409），与 pins.json 同源。
+          git -C .engine fetch -q origin master 'refs/tags/archive/wasm32-final-168ef49:refs/tags/archive/wasm32-final-168ef49' 'refs/tags/archive/master-a1e2409:refs/tags/archive/master-a1e2409'
+          ex() { git -C .engine archive "$1" site; }
           mkdir -p public/bridge public/lanes
-          for lane in wasm32-final master IllegalPerformance; do
-            mkdir -p "public/lanes/$lane"
-            ex "$lane" | tar -x --strip-components=1 -C "public/lanes/$lane"
-          done
+          ex "archive/wasm32-final-168ef49" | tar -x --strip-components=1 -C "public/lanes/wasm32-final"
+          mkdir -p "public/lanes/master"
+          ex "origin/master" | tar -x --strip-components=1 -C "public/lanes/master"
+          mkdir -p "public/lanes/IllegalPerformance"
+          ex "archive/master-a1e2409" | tar -x --strip-components=1 -C "public/lanes/IllegalPerformance"
           rm -rf /tmp/site && mkdir -p /tmp/site
-          ex IllegalPerformance | tar -x --strip-components=1 -C /tmp/site
+          ex "archive/master-a1e2409" | tar -x --strip-components=1 -C /tmp/site
           cp -rf /tmp/site/. public/bridge/
           cp -f  /tmp/site/*.js public/ 2>/dev/null || true
           cp -f  /tmp/site/embed-demo.html public/ 2>/dev/null || true
           rm -rf public/w64 && cp -rf /tmp/site/w64 public/w64
           mkdir -p public/assets && cp -rf /tmp/site/assets/. public/assets/ 2>/dev/null || true
           test -f public/w64/octave.wasm
-          echo "ENGINE_SHAS=$(git -C .engine rev-parse --short origin/wasm32-final) $(git -C .engine rev-parse --short origin/master) $(git -C .engine rev-parse --short origin/IllegalPerformance)" >> "$GITHUB_ENV"
+          echo "ENGINE_SHAS=$(git -C .engine rev-parse --short archive/wasm32-final-168ef49) $(git -C .engine rev-parse --short origin/master) $(git -C .engine rev-parse --short archive/master-a1e2409)" >> "$GITHUB_ENV"
 
       # ── OMC 引擎资产同步（同源托管契约 mail/053）──
       # wasm(74.5MB) 被 .gitignore 排除在 git 树外，构建期从受控源拉取——与引擎三车道
