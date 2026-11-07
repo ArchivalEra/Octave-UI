@@ -73,6 +73,18 @@ describe('生产可达性：组合根真的注入了两条缝', () => {
     expect(masterBlock).toMatch(/siteFolders:\s*\[\s*'lanes\/master\/w64'/);
   });
 
+  it('★ B5：LLVM 门经组合根谓词注入 bridge（裁决⑤覆盖 eval shim 路）', () => {
+    const src = readSource('src/modules/appContext.ts');
+    // 谓词注入存在，且真源是插件的 hasLLVM（不是第二份 OPFS 扫描）
+    expect(src).toContain('__octaveLlvmReady');
+    expect(src).toMatch(/__octaveLlvmReady\s*=\s*\(\)\s*=>\s*packageManagerPlugin\.hasLLVM\(\)/);
+    // bridge 侧：install 的 plan 闭包里查注入谓词、带 src 才拦
+    const bridge = readSource('public/bridge/assets-loader.js');
+    expect(bridge).toContain('__octaveLlvmReady');
+    expect(bridge).toMatch(/LLVM_REQUIRED/);
+    expect(bridge).toMatch(/content\.indexOf\('src'\) >= 0/);
+  });
+
   it('★ OMC 走引擎缝（"两个引擎都上 catalogue"）—— 不许在缝之前提前 return', () => {
     const dl = readSource('src/modules/storage/DownloadStore.ts');
     // OMC 分支内部必须调用 tryEngineRelease

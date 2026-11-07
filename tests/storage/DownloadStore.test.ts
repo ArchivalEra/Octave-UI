@@ -273,10 +273,39 @@ describe('DownloadStore Deep Module', () => {
     // 模拟用户从文件树/OPFS中意外删除了对应文件
     await memoryStore.remove('downloads/src/cgi/0.1.2/cgi-0.1.2.tar.gz');
 
-    // stat 发现文件丢失，自动清理清单并返回 null
+    // ★ A3（2026-11-07）：stat 只标脏不写账（读路径零写入）——
+    //    旧实现读一次就重写一次 manifest，读放大写 + 非原子写 = 断电截断账本。
     const res = await store.stat(ref);
     expect(res).toBeNull();
-    expect(store.has(ref)).toBe(false);
+    expect(store.has(ref)).toBe(true);          // 账还在（读不清账）
+    // 显式写路径（download）落地清账：幂等命中失效 ⇒ 重拉
+    const rec2 = await store.download(ref);
+    expect(rec2.files.length).toBeGreaterThan(0);
+    expect(store.has(ref)).toBe(true);
+  });
+
+  it('★ B3 并发去重：同 ref 双发只拉一次（第二发复用第一发的 promise）', async () => {
+    const url = 'https://octave.test/assets/packages/dedup-0.1.0.tar.gz';
+    mockFetch.setFile(url, 'dedup-bytes', sha256OfNode('dedup-bytes'));
+    mockFetch.setJSON('https://octave.test/assets/catalog-dedup.json', {
+      schema: 2, packs: [{ name: 'dedup', version: '0.1.0', size: 11, form: 'pkg',
+        content: ['m'], versions: [{ version: '0.1.0', stage: 'staged', form: 'pkg',
+        content: ['m'], size: 11, sha256: sha256OfNode('dedup-bytes') }] }],
+    } as any);
+    const dedupStore = new DownloadStore({
+      storage: memoryStore, fetchPort: mockFetch, baseUrl: 'https://octave.test',
+      catalogProvider: () => ({ schema: 2, packs: [{ name: 'dedup', version: '0.1.0',
+        size: 11, form: 'pkg', content: ['m'], sha256: sha256OfNode('dedup-bytes'),
+        url: 'assets/packages/dedup-0.1.0.tar.gz' } as any] }) as any,
+    });
+    await dedupStore.init();
+    const ref = { name: 'dedup', version: '0.1.0', kind: 'src', arch: null } as any;
+    const spy = vi.spyOn(mockFetch, 'fetchBytes');
+    const [r1, r2] = await Promise.all([dedupStore.download(ref), dedupStore.download(ref)]);
+    expect(r1.files.length).toBe(r2.files.length);
+    expect(r1.downloadedAt).toBe(r2.downloadedAt);      // 同一条记录 = 复用
+    expect(spy.mock.calls.filter((c) => String(c[0]).includes('dedup-0.1.0')).length).toBe(1);
+    spy.mockRestore();
   });
 
   it('handles 7 closed error codes reliably', async () => {

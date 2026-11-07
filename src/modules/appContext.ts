@@ -41,6 +41,10 @@ export const panelRegistry = panelRegistryInstance;
 // vitest 的 happy-dom 也没有 meta；真正访问 window.OctaveAssets 时才求值一次。
 if (typeof window !== 'undefined') {
   (window as any).__resolveOctaveDeployment = () => getDeployment();
+  // ★ B5（裁决⑤ LLVM 门覆盖 eval shim 路）：bridge 的 install() 对带 src 的包
+  //   查这个谓词。「LLVM 是否已下载」真源 = DownloadStore OPFS 记账（hasLLVM
+  //   唯一产地），bridge 够不着 ⇒ 注入谓词而不是再造第二份真源。
+  (window as any).__octaveLlvmReady = () => packageManagerPlugin.hasLLVM();
 }
 
 /**

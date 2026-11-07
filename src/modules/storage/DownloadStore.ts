@@ -166,7 +166,9 @@ export class DownloadStore {
   private manifest: DownloadManifest = { schema: 1, items: {} };
   private initialized = false;
   private initPromise: Promise<void> | null = null;
-  private activeDownloads: Set<string> = new Set();
+  /** 同 ref 并发去重（2026-11-07 B3）：值 = 在途下载 promise。
+   *  旧 Set 只记账不拦——MCP 与 UI 双发同 ref 会整包双拉；现在第二发直接复用第一发。 */
+  private activeDownloads: Map<string, Promise<DownloadRecord>> = new Map();
 
   constructor(options?: DownloadStoreOptions) {
     if (options?.storage) {
@@ -326,16 +328,72 @@ export class DownloadStore {
       }
       this.manifest = parsed;
     } catch (err: any) {
-      if (err instanceof DownloadError) throw err;
-      throw new DownloadError('INDEX_UNREADABLE', `Failed to read manifest.json: ${err?.message || err}`);
+      // ★ 账本自愈（2026-11-07 暴毙）：createWritable 流式写**非原子**，断电/崩溃会
+      //   把 manifest.json 截断成半行 JSON ⇒ 旧实现在这里 throw INDEX_UNREADABLE，
+      //   整个下载/装载子系统从此起不来，且错误只会以「下载失败」的形态散布到每个
+      //   调用方，没有一处说「账本坏了」。恢复顺序（代价最低先试）：
+      //   ① tmp 完好 ⇒ 从 tmp 恢复（swap 中断态，不丢已完成下载的记账）；
+      //   ② tmp 也坏/缺 ⇒ 把坏账挪成 manifest.json.corrupt-<ts> 留证，重建空账。
+      //   两种自愈都 console.error 响亮——降级是事实，必须让人看见（CONTEXT 降级信号）。
+      console.error(
+        `[DownloadStore] manifest.json unreadable (${err?.message || err}) — attempting recovery`,
+      );
+      const recovered = await this._tryRecoverFromTmp();
+      if (recovered) return;
+      await this._quarantineCorruptAndReset();
     }
   }
 
+  /** ① tmp 完好 ⇒ 读回、验形、转正；失败返回 false 由调用方走隔离。 */
+  private async _tryRecoverFromTmp(): Promise<boolean> {
+    try {
+      const tmpStat = await this.storage.stat('downloads/manifest.json.tmp');
+      if (!tmpStat || (tmpStat.size ?? 0) <= 0) return false;
+      const data = await this.storage.read('downloads/manifest.json.tmp');
+      const parsed = JSON.parse(new TextDecoder().decode(data));
+      if (!parsed || parsed.schema !== 1 || typeof parsed.items !== 'object') return false;
+      this.manifest = parsed;
+      await this.storage.write('downloads/manifest.json', data);
+      await this.storage.remove('downloads/manifest.json.tmp');
+      console.error('[DownloadStore] manifest.json recovered from .tmp (swap-interrupted state)');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** ② 坏账隔离：留证（corrupt-<ts>）+ 重建空账。子系统活着，坏账可人工取证。 */
+  private async _quarantineCorruptAndReset(): Promise<void> {
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const broken = await this.storage.read('downloads/manifest.json');
+      await this.storage.write(`downloads/manifest.json.corrupt-${stamp}`, broken);
+    } catch { /* 坏账读不出就没有可留证的——空账照建 */ }
+    try { await this.storage.remove('downloads/manifest.json'); } catch { /* 不存在即好 */ }
+    this.manifest = { schema: 1, items: {} };
+    await this.saveManifest();
+    console.error(
+      '[DownloadStore] manifest.json was CORRUPT — quarantined as manifest.json.corrupt-<ts>, ' +
+        'ledger reset to empty. Previously downloaded engines/packages must be re-downloaded. ' +
+        '(非原子写 + 断电的后果；本轮已改 tmp→swap 原子提交，不应复发)',
+    );
+  }
+
   private async saveManifest(): Promise<void> {
+    // ★ 原子提交（2026-11-07 A1）：先写 .tmp（完整字节），读回逐字校验后才覆盖
+    //   正式文件。任何一步失败都**不碰**正式文件——最坏留下一个 .tmp，
+    //   下次 init 可从它恢复（见 _tryRecoverFromTmp）。
+    const TMP = 'downloads/manifest.json.tmp';
     try {
       const text = JSON.stringify(this.manifest, null, 2);
       const data = new TextEncoder().encode(text);
+      await this.storage.write(TMP, data);
+      const roundTrip = await this.storage.read(TMP);
+      if (roundTrip.length !== data.length) {
+        throw new Error(`tmp round-trip length mismatch (${roundTrip.length} != ${data.length})`);
+      }
       await this.storage.write('downloads/manifest.json', data);
+      await this.storage.remove(TMP);
     } catch (err: any) {
       throw new DownloadError('STORAGE_WRITE_FAILED', `Failed to write manifest.json: ${err?.message || err}`);
     }
@@ -418,6 +476,14 @@ export class DownloadStore {
    * 对账校验与状态核验 (I3 & 用户裁决③)
    * 检查记录的文件是否真实存在于磁盘。若被用户从文件树中手动删除，自动降级移除记录并返回 null
    */
+  /**
+   * 读路径发现缺件 ⇒ 只标脏不清账（2026-11-07 A3：读零写入）。
+   * 账的清理只在**显式写路径**（download 开头的 flushDirtyRefs / remove / evict）落地。
+   * 为什么：stat 是装载工具/对账的**读**入口，旧实现读一次就把 manifest 重写一次
+   * ——读放大写，与非原子写叠加 = 每一次读都是断电截断账本的机会。
+   */
+  private _dirtyRefs = new Set<string>();
+
   async stat(ref: DownloadRef): Promise<DownloadRecord | null> {
     await this.init();
     const key = refToKey(ref);
@@ -428,13 +494,22 @@ export class DownloadStore {
     for (const f of rec.files) {
       const exists = await this.storage.stat(f.path);
       if (!exists) {
-        delete this.manifest.items[key];
-        await this.saveManifest();
+        this._dirtyRefs.add(key);
         this.broadcastChange(ref, null);
         return null;
       }
     }
     return rec;
+  }
+
+  /** 显式写路径调用：把读路径标脏的缺件账清掉（读发现的坏账在这里落地）。 */
+  private async flushDirtyRefs(): Promise<void> {
+    if (this._dirtyRefs.size === 0) return;
+    for (const key of this._dirtyRefs) {
+      delete this.manifest.items[key];
+    }
+    this._dirtyRefs.clear();
+    await this.saveManifest();
   }
 
   /**
@@ -452,13 +527,34 @@ export class DownloadStore {
     await this.init();
 
     const downloadKey = refToKey(ref);
-    this.activeDownloads.add(downloadKey);
+    // ★ 并发去重（2026-11-07 B3）：同 ref 双发（MCP 与 UI、或双击）复用同一个
+    //   在途 promise——旧 Set 只记账不拦，第二发会整包双拉双记账。
+    const inFlight = this.activeDownloads.get(downloadKey);
+    if (inFlight) return inFlight;
     // #15 通知通道统一（两发定档）：第一发 = 进 downloading 态（record=null，
     // 消费语义「进入下载中」——start 通知保留）；终态（成功 record / 失败 null）
     // 只再发一次，见 catch 与成功路径的 broadcastChange。
     this.broadcastChange(ref, null);
 
+    const run = this._downloadBody(ref, downloadKey, options);
+    this.activeDownloads.set(downloadKey, run);
     try {
+      return await run;
+    } finally {
+      this.activeDownloads.delete(downloadKey);
+    }
+  }
+
+  /** download 的主体（B3 拆出：并发去重的登记在 download() 薄壳里，主体独占执行）。 */
+  private async _downloadBody(
+    ref: DownloadRef,
+    downloadKey: string,
+    options?: { onProgress?: DownloadProgressCallback; signal?: AbortSignal }
+  ): Promise<DownloadRecord> {
+    try {
+      // 读路径标脏的缺件账在这里落地（A3：清账只走显式写路径）
+      await this.flushDirtyRefs();
+
       // 1. 根据 ref 解析权威源下载目标、文件列表与预期哈希 (I1)
       const resolved = await this.resolveTarget(ref);
 

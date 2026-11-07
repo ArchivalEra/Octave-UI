@@ -1102,17 +1102,73 @@
               }
             }
           }
+          // ★ B5（2026-11-07 三路同轴）：裁决⑤ LLVM 前置门覆盖 **eval shim 路**。
+          //   旧形态：PackageManagerPlugin.installPackage 有 llvm_required 门，但 eval 内
+          //   `pkg install` shim 直接走 OctaveAssets.install ⇒ 绕过它。
+          //   「LLVM 是否已下载」的真源在 DownloadStore 的 OPFS 记账（bridge 够不着）——
+          //   硬造第二份真源就是排查②警告的「两个产地」。所以用**组合根注入的谓词**
+          //   （与 setMslDownloadedAsset 同款缝）：未注入 = 门不生效（老宿主/测试零回归）。
+          var llvmReadyFn = (typeof global.__octaveLlvmReady === 'function') ? global.__octaveLlvmReady : null;
+          var srcPkgs = plan.filter(function (p) {
+            return Array.isArray(p.content) && p.content.indexOf('src') >= 0;
+          });
+          var llvmGate = (srcPkgs.length === 0 || !llvmReadyFn)
+            ? Promise.resolve(null)
+            : Promise.resolve().then(llvmReadyFn).then(function (ready) {
+                if (ready) return null;
+                var m = '[ruling-5] ' + srcPkgs.map(function (p) { return p.name; }).join(', ')
+                      + ' 包含 C++ 加速件 (src)，需要现场编译——请先下载 LLVM 工具链 (约 35 MB)';
+                var er = errCode('LLVM_REQUIRED', m);
+                er.__verdict__ = { state: 'failed', name: srcPkgs[0].name,
+                                   cause: 'llvm_required', why: 'llvm_required', retriable: false };
+                throw er;
+              });
+
+          // ★ B4（2026-11-07 三路同轴）：配额预检覆盖 install 路（A5 不再被绕）。
+          //   旧形态 quota 门只在 DownloadStore（UI 下载路），MCP/eval shim 走 install
+          //   全程零配额检查 ⇒ 直写满磁盘才炸。现在 plan 闭包算出总字节后、**任何
+          //   fetch 之前**查 navigator.storage.estimate()，不足即响亮拒绝。
+          //   planOnly 也带 quota 字段（MCP 的"知情面"= UI confirm 弹窗的等价物）。
+          var planBytes = plan.reduce(function (a, p) { return a + (p.size || 0); }, 0);
+          var quotaCheck = function () {
+            if (typeof navigator === 'undefined' || !navigator.storage || !navigator.storage.estimate) {
+              return Promise.resolve({ ok: true, remaining: null });  // 无 estimate 面 ⇒ 不拦（老宿主）
+            }
+            return navigator.storage.estimate().then(function (e) {
+              var remaining = (e.quota || 0) - (e.usage || 0);
+              // 余量不足且又不是 planOnly ⇒ 响亮拒绝（错误码对齐 DownloadStore A5）
+              if (planBytes > remaining) {
+                var m = '存储配额不足：本次需约 ' + (planBytes / 1048576).toFixed(1)
+                      + ' MB，OPFS 余量约 ' + (remaining / 1048576).toFixed(1)
+                      + ' MB —— 请先移除已装引擎/包或清理空间（STORAGE_QUOTA_EXHAUSTED）';
+                var er = errCode('STORAGE_QUOTA_EXHAUSTED', m);
+                er.__verdict__ = { state: 'failed', name: name,
+                                   cause: 'storage-quota-exhausted', why: m, retriable: false };
+                throw er;
+              }
+              return { ok: true, remaining: remaining };
+            }).catch(function (e) {
+              if (e && e.code === 'STORAGE_QUOTA_EXHAUSTED') throw e;
+              return { ok: true, remaining: null };   // estimate 失败 ⇒ 不拦（不假装查过）
+            });
+          };
+
           // ★ planOnly（©5 第③步）：**只算账不下载**（UI 预演"要拉多少"）。零网络字节。
           //   判据：page.on('response') 在该调用期间**没有任何**对 assets/pkg|assets/forge 的响应。
           if (opts.planOnly) {
+            return quotaCheck().then(function (q) {
             var layers = plan.filter(function (p) { return p.form === 'tree'; })
                              .map(function (p) { return { name: p.name, form: p.form, bytes: p.size }; });
             var done = { state: 'ok', name: name, planOnly: true,
                      installed: [], layers: layers,
-                     bytes: plan.reduce(function (a, p) { return a + (p.size || 0); }, 0) };
+                     bytes: planBytes,
+                     quota: q };
             onProgress({ phase: 'done', plan: plan.map(function (p) { return p.name; }), planOnly: true });
             return done;
+            });
           }
+          // 非 planOnly：先过 LLVM 门（裁决⑤）+ 配额门，再进 fetch
+          return llvmGate.then(function () {
           // Forge 的 .m 包只依赖引擎内建的 gunzip/untar ⇒ 先确保它们在
           // 先确保四样在（缺一不可，全部是**既有资产**，不新增机制）：
           //   webio    —— 引擎内建 gunzip/untar（zlib/ustar，解包用）
@@ -1239,7 +1295,8 @@
           e.__verdict__ = { state: st, name: name, cause: cause, why: why,
                             retriable: st === 'cannot-know' };
           throw e;
-        });
+        });   // verdict 映射
+        });   // B4 quotaCheck().then —— 多出的一层 then 闭包
       }
     };
     return API;

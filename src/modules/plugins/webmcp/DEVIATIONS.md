@@ -122,6 +122,16 @@ golden master 快照的更新**只允许出现在对应项的提交里**（spec 
 `docs/acceptance/evidence/C-final-real-omc-2026-11-06.md`（`24 PASS / 0 FAIL`）。
 按 093 裁定 A 绑定③「名册再变仍需逐条显式登记」，此条即为本次登记。
 
+**④ 后续名册变化登记（2026-11-07 三路同轴 C2）：名册 7→9**
+`octave_download_package`（下载落 OPFS，走 PackageManagerModal.executeDownload 同一
+`downloadPackage` seam；补排查②矩阵「MCP 无下载」空格——此前 `omc_load_msl` 的
+NOT_DOWNLOADED 前置在 MCP 车道是死路）与 `octave_compile_package`（走 compilePackage
+同一 seam，裁决⑤ LLVM 门在其内部把守；补「MCP 无编译」空格）。两者 effects 均
+`sandbox-escape`（真网络+持久写）。`listTools()` 7→9 条、键序不变、既有七工具零改动，
+golden master 快照 2 条同批更新；effects 表内 7→9 全标注（nonwire 反向锁同批）。
+wire 变化实测：`listTools()` 9 条、`ready.detail.tools` 9 条（tests/plugins/WebMcpPlugin.test.ts
+两处计数同批 9）。本条即 093 绑定③的本次登记。
+
 ---
 
 ## ④-原 待验收方确认（历史记录，已由上方裁定取代）

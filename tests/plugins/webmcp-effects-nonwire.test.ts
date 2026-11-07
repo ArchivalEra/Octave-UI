@@ -118,8 +118,8 @@ describe('effects：表内元数据（spec B.3），wire 上零字节', () => {
     plugin = makePlugin();
   });
 
-  it('★① 表内：七个在册工具**全部**带 effects 标注（且取值在允许集内）', () => {
-    expect(octaveToolTable.length).toBe(7);
+  it('★① 表内：九个在册工具**全部**带 effects 标注（且取值在允许集内）', () => {
+    expect(octaveToolTable.length).toBe(9);   // 2026-11-07 C2：7→9（+download/compile）
     const legal = new Set(['read', 'mutates-workspace', 'sandbox-escape']);
     const missing = octaveToolTable.filter((t) => !t.effects).map((t) => t.name);
     expect(missing).toEqual([]);
@@ -133,6 +133,9 @@ describe('effects：表内元数据（spec B.3），wire 上零字节', () => {
     expect(byName.get('octave_get_system_state')).toBe('read');
     expect(byName.get('octave_get_workspace')).toBe('read');
     expect(byName.get('octave_list_packages')).toBe('read');
+    // C2 新工具：下载（真网络+写 OPFS）与编译（真网络+写引擎 FS）= sandbox-escape
+    expect(byName.get('octave_download_package')).toBe('sandbox-escape');
+    expect(byName.get('octave_compile_package')).toBe('sandbox-escape');
     // eval 内的 pkg install / urlread ⇒ 保守记逃逸档（spec「effects 修正」）
     expect(byName.get('octave_eval')).toBe('sandbox-escape');
     expect(byName.get('octave_run_cell')).toBe('sandbox-escape');
