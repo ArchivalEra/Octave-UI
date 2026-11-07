@@ -139,7 +139,7 @@ describe('OmcBridge pure omc lane (main flavor)', () => {
 describe('WasmEmbedAdapter boot integration', () => {
   function installMockEmbedHost(): void {
     (globalThis as any).window = {
-      __siteBase: '/',   // spec §2.3：boot() 默认走统一 deployment 产地
+      __siteBase: '/definitely-missing-base/',   // spec §2.3：网络导入必失败（CI 上 public/omc 可能真存在，/ 会让 vite 解析到真文件）
       OctaveEmbed: {
         create: vi.fn().mockResolvedValue({
           id: 'dual-engine',
@@ -198,7 +198,7 @@ describe('WasmEmbedAdapter boot integration', () => {
   // 现在它必须走既有的 FLAVOR_UNAVAILABLE 降级分支：adapter 照常返回、toast 一次。
   function installMockEmbedHostWithoutFs(): void {
     (globalThis as any).window = {
-      __siteBase: '/',   // spec §2.3：boot() 默认走统一 deployment 产地
+      __siteBase: '/definitely-missing-base/',   // spec §2.3：网络导入必失败（CI 上 public/omc 可能真存在，/ 会让 vite 解析到真文件）
       OctaveEmbed: {
         create: vi.fn().mockResolvedValue({
           id: 'dual-engine-no-fs',
