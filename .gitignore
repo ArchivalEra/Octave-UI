@@ -117,6 +117,8 @@ __pycache__/
 # 2026-11-07 额叶切除：新版 Einfacht 机制层与领域闸门落位
 !/gates/
 !/gates/**
+# 但 gates/ 里跑闸门产生的字节码不是产物（运行时缓存）
+gates/**/__pycache__/
 !/measure_octave_ui.py
 !/facts.py
 !/zreflect/lang/
