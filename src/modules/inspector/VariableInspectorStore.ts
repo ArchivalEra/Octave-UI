@@ -69,7 +69,7 @@ export class VariableInspectorStore {
     const detail: VariableDetail = {
       name: variable.name,
       class: variable.class,
-      size: variable.size,
+      size: String(variable.size),
       bytes: variable.bytes,
       isNumeric: isNum,
     };

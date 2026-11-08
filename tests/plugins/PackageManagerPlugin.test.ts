@@ -118,6 +118,20 @@ describe('PackageManagerPlugin Deep Module', () => {
         deps: [],
         description: 'Dual engine compatible package',
       },
+      {
+        // ★ 零手写选项：工具链身份由契约 role 投影，测试夹具与真契约同形
+        //   （真 forge-catalog.json 的 llvm-wasm 条目即 role:'toolchain'）。
+        name: 'llvm-wasm',
+        version: '6.0.12',
+        size: 122980779,
+        form: 'tree',
+        role: 'toolchain',
+        content: [],
+        consumer: ['octave'],
+        deps: [],
+        recipe: 'llvm-wasm',
+        description: 'Browser LLVM toolchain',
+      },
     ],
   };
 
@@ -144,7 +158,7 @@ describe('PackageManagerPlugin Deep Module', () => {
 
   it('loads catalog and indexes packages by name', async () => {
     const cat = await plugin.loadCatalog();
-    expect(cat.packs.length).toBe(7);
+    expect(cat.packs.length).toBe(sampleCatalog.packs.length);
     expect(plugin.getCatalog()).toEqual(sampleCatalog);
 
     const symbolic = plugin.getPackage('symbolic');
@@ -286,14 +300,14 @@ describe('PackageManagerPlugin Deep Module', () => {
 
     // 1. Consumer filter (dual-tool with array consumer ['octave', 'omc'] matches both)
     const octaveOnly = plugin.filterPackages({ consumer: 'octave' });
-    expect(octaveOnly.map((p) => p.name)).toEqual(['cgi', 'symbolic', 'pyodide', 'signal', 'control', 'dual-tool']);
+    expect(octaveOnly.map((p) => p.name)).toEqual(['cgi', 'symbolic', 'pyodide', 'signal', 'control', 'dual-tool', 'llvm-wasm']);
 
     const omcOnly = plugin.filterPackages({ consumer: 'omc' });
     expect(omcOnly.map((p) => p.name)).toEqual(['omc-simulator', 'dual-tool']);
 
     // 2. Form filter
     const treeOnly = plugin.filterPackages({ form: 'tree' });
-    expect(treeOnly.map((p) => p.name)).toEqual(['pyodide']);
+    expect(treeOnly.map((p) => p.name)).toEqual(['pyodide', 'llvm-wasm']);
 
     const pkgOnly = plugin.filterPackages({ form: 'pkg' });
     expect(pkgOnly.map((p) => p.name)).toEqual(['cgi', 'symbolic', 'signal', 'control', 'omc-simulator', 'dual-tool']);

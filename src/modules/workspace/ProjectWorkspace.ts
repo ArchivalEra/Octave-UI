@@ -611,7 +611,7 @@ export class ProjectWorkspace {
       } catch (err: any) {
         cell.status = 'error';
         cell.streamingOutput = `引擎启动失败: ${err?.message || err}`;
-        cell.result = SemanticResultRenderer.parse(cell.streamingOutput, { ok: false });
+        cell.result = SemanticResultRenderer.parse(cell.streamingOutput || '', { ok: false });
         this._isRunning = false;
         this._notify();
         return { ok: false, rc: -1, output: cell.streamingOutput };
@@ -627,7 +627,7 @@ export class ProjectWorkspace {
       // 保持结果与流式输出响应式同步，防止分块输出延迟导致结果卡在残缺状态
       if (cell.status === 'running' || cell.status === 'success') {
         cell.result = SemanticResultRenderer.parse(cell.streamingOutput, {
-          ok: cell.status !== 'error',
+          ok: true,
           rc: 0,
         });
       }
@@ -685,7 +685,7 @@ export class ProjectWorkspace {
       cell.status = 'error';
       const msg = err?.message || String(err);
       if (!cell.streamingOutput) cell.streamingOutput = msg;
-      cell.result = SemanticResultRenderer.parse(cell.streamingOutput, { ok: false });
+      cell.result = SemanticResultRenderer.parse(cell.streamingOutput || '', { ok: false });
       return { ok: false, rc: -1, output: msg };
     } finally {
       unsubOut();

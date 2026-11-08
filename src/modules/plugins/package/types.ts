@@ -1,10 +1,14 @@
 // src/modules/plugins/package/types.ts
 // Forge 包与扩展管理数据模型与接口规范（对齐 mail/001, mail/003, mail/004 内容契约）
 
-export type ContentKind = 'm' | 'src' | 'oct';
-export type DeliveryForm = 'pkg' | 'tree' | 'oct' | 'octdir' | 'file' | 'js';
-export type ConsumerEngine = 'octave' | 'omc';
-export type VersionStage = 'staged' | 'withheld';
+// ★ 2026-11-07 零手写选项：值域不再由 TS 联合闭集声明。
+// 轴名/取值唯一产地 = src/modules/contract/projection.ts 的 OPTION_AXES + facets。
+// 旧名字保留为 string 别名（26 套件 / .m 裸名逐字兼容），但值来自契约投影，
+// 新增形态/stage/consumer 不再需要改这里（mail/read/004 §6「加轴走 optional_keys」）。
+export type ContentKind = string;
+export type DeliveryForm = string;
+export type ConsumerEngine = string;
+export type VersionStage = string;
 
 export interface PackageVersionCandidate {
   version: string;
@@ -30,7 +34,7 @@ export interface ForgePackageItem {
   name: string;
   version: string;
   form: DeliveryForm;
-  content: ContentKind[];
+  content?: ContentKind[];
   consumer?: ConsumerEngine | ConsumerEngine[];
   deps?: string[];
   size?: number;
@@ -39,6 +43,15 @@ export interface ForgePackageItem {
   description?: string;
   links?: Record<string, string> | PackageLinkItem[];
   versions?: PackageVersionCandidate[];
+  // ★ 契约实测存在的字段（原类型缺 ⇒ 全代码 as any）。逐字透传，不解析。
+  sha256?: string;
+  role?: string;
+  kinds?: string[];
+  arch?: string;
+  artifacts?: unknown;
+  note?: string;
+  license?: string;
+  [key: string]: unknown;
 }
 
 export interface ForgeCatalog {
@@ -65,9 +78,11 @@ export type InstallVerdictState = 'ok' | 'failed' | 'not-found' | 'cannot-know';
 
 export interface InstallResult {
   state: InstallVerdictState;
+  name?: string;
   message?: string;
   installed?: string[];
   cause?: string;
+  why?: string;
 }
 
 export interface InstallPlan {
@@ -80,8 +95,9 @@ export interface InstallPlan {
 
 export interface PackageFilter {
   query?: string;
-  consumer?: 'all' | 'octave' | 'omc';
-  form?: 'all' | 'pkg' | 'tree';
+  /** 值来自 facets（轴 consumer / form），零手写闭集。 */
+  consumer?: string;
+  form?: string;
   installedOnly?: boolean;
 }
 

@@ -14,6 +14,7 @@
     "sync-bridge": "bash scripts/sync-bridge.sh",
     "sync:lanes": "bash scripts/sync-lanes.sh",
     "build:lanes": "bash scripts/sync-lanes.sh",
+    "sync:msl": "sh scripts/sync-msl.sh",
     "compress": "bash scripts/compress-static.sh"
   },
   "devDependencies": {

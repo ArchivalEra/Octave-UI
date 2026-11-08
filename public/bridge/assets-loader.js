@@ -692,7 +692,7 @@
     // 判据与 browse 的 Entry 同源 —— 同一事实不允许两个出口两个答案，N6 的教训）。
     function _browseEntry (p) {
       var content = p.content || p.kinds || [];
-      var fromSource = content.indexOf('src') >= 0;
+      var fromSource = content.some(function (c) { return c && c !== 'm'; });
       var ha = hostArchOf(null);
       var archBad = !!(p.arch && ha && p.arch !== ha);
       // 版本候选（表带 versions[] 才有；老表 ⇒ undefined，别编）
@@ -878,7 +878,7 @@
           if (!p) throw errCode('NOT_IN_ANY_LIST', '货架上没有包：' + name);
           var content = p.content || p.kinds || [];
           var srcTar = p.url;
-          if (content.indexOf('src') < 0) {
+          if (!content.some(function (c) { return c && c !== 'm'; })) {
             return { state: 'm-only', name: name,
                      why: '包不含 src（content=' + JSON.stringify(content) + '）⇒ 无可编译件；.m 部分用 install()',
                      diagnostics: diags };
@@ -1102,22 +1102,22 @@
               }
             }
           }
-          // ★ B5（2026-11-07 三路同轴）：裁决⑤ LLVM 前置门覆盖 **eval shim 路**。
-          //   旧形态：PackageManagerPlugin.installPackage 有 llvm_required 门，但 eval 内
-          //   `pkg install` shim 直接走 OctaveAssets.install ⇒ 绕过它。
-          //   「LLVM 是否已下载」的真源在 DownloadStore 的 OPFS 记账（bridge 够不着）——
-          //   硬造第二份真源就是排查②警告的「两个产地」。所以用**组合根注入的谓词**
-          //   （与 setMslDownloadedAsset 同款缝）：未注入 = 门不生效（老宿主/测试零回归）。
+          // ★ 2026-11-07 重写：LLVM 门两件事都从**组合根注入的契约投影**取，
+          //   bridge 零手写 'src' / 'llvm' 字面量，也不再自己扫 OPFS 记账。
+          //   · __octaveNeedsCompile(p) —— 由 ContractIdentity.needsCompile 投影给；
+          //   · __octaveLlvmReady()     —— async，查 Vault 物理对账（工具链身份来自契约）。
+          //   旧形态三套互斥 sha 使门恒关 ⇒ 24 个源码包全被拒（「包装不上」根因）。
           var llvmReadyFn = (typeof global.__octaveLlvmReady === 'function') ? global.__octaveLlvmReady : null;
+          var needsCompileFn = (typeof global.__octaveNeedsCompile === 'function') ? global.__octaveNeedsCompile : null;
           var srcPkgs = plan.filter(function (p) {
-            return Array.isArray(p.content) && p.content.indexOf('src') >= 0;
+            return needsCompileFn ? !!needsCompileFn(p) : (Array.isArray(p.content) && p.content.some(function (c) { return c && c !== 'm'; }));
           });
           var llvmGate = (srcPkgs.length === 0 || !llvmReadyFn)
             ? Promise.resolve(null)
             : Promise.resolve().then(llvmReadyFn).then(function (ready) {
                 if (ready) return null;
                 var m = '[ruling-5] ' + srcPkgs.map(function (p) { return p.name; }).join(', ')
-                      + ' 包含 C++ 加速件 (src)，需要现场编译——请先下载 LLVM 工具链 (约 35 MB)';
+                      + ' 需要现场编译——请先下载编译工具链（体积见货架）';
                 var er = errCode('LLVM_REQUIRED', m);
                 er.__verdict__ = { state: 'failed', name: srcPkgs[0].name,
                                    cause: 'llvm_required', why: 'llvm_required', retriable: false };
@@ -1197,69 +1197,53 @@
                   });
                 }
                 onProgress({ phase: 'fetch', name: p.name, size: p.size });
-                // ★ 下载/装载解耦贯穿 Octave 车道（2026-11-07 后续票①）：
-                //   先问组合根注入的「已下载 OPFS 字节」谓词（与 omc_load_msl 同款缝）——
-                //   有记账就装 OPFS 字节（零网络），没有才现场从站点取。
-                //   sha 仍用货架 p.sha256 核（记账 sha 与货架同源双确认）。
-                var downloadedSrc = null;
-                if (typeof global.__octaveDownloadedBytes === 'function') {
-                  try { downloadedSrc = global.__octaveDownloadedBytes(p); } catch (e) { downloadedSrc = null; }
-                }
-                if (downloadedSrc && downloadedSrc.bytes && downloadedSrc.bytes.length) {
-                  // OPFS 命中：后续与站点路径**逐字同流程**（sha 核 → 落 tmp →
-                  // __forge_install__ 解包 → sync_db → publish），只有字节来源不同。
-                  onProgress({ phase: 'fetch', name: p.name, size: downloadedSrc.bytes.length, source: 'opfs-download' });
-                  var bufD = downloadedSrc.bytes;
-                  return sha256Hex(bufD).then(function (hex) {
-                    if (p.sha256 && hex && hex !== p.sha256) {
-                      throw errCode('SHA_MISMATCH', '包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
-                                      + '… 实得 ' + hex.slice(0, 12) + '…）—— 拒绝安装');
-                    }
-                    var tarD = '/tmp/forge-' + p.name + '-' + p.version + '.tar.gz';
-                    fs().writeFile(tarD, new Uint8Array(bufD));
-                    onProgress({ phase: 'unpack', name: p.name });
-                    var MD = Msafe();
-                    if (!MD || !MD.eval_string) throw errCode('ENGINE_NOT_READY', '引擎还没就绪，不能安装包');
-                    var rcD = MD.eval_string(
-                      "n = __forge_install__ ('" + tarD + "', '" + p.name + "', '/usr/src/octave/m/forge');");
-                    if (rcD !== 0) throw errCode('UNPACK_FAILED', '__forge_install__ 失败（rc=' + rcD + '）：'
-                                                 + 'OPFS 字节解包失败');
-                    MD.eval_string("if (exist('__pkgfix_sync_db__')) try; __pkgfix_sync_db__ (); catch; end; end;");
-                    publish();
-                    acc.push(p.name);
-                    return acc;
-                  });
-                }
-                return fetchBinary(resolveSiteAsset(p.url)).then(function (buf) {
-                  return sha256Hex(buf).then(function (hex) {
-                    if (p.sha256 && hex && hex !== p.sha256) {
-                      throw errCode('SHA_MISMATCH', '包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
-                                      + '… 实得 ' + hex.slice(0, 12) + '…）—— 拒绝安装');
-                    }
-                    var tar = '/tmp/forge-' + p.name + '-' + p.version + '.tar.gz';
-                    fs().writeFile(tar, new Uint8Array(buf));
-                    onProgress({ phase: 'unpack', name: p.name });
-                    // 解包 + 按 `pkg install` 布局落盘：**引擎侧 m 助手**（build/forge/__forge_install__.m）
-                    //   —— 它内部调引擎内建 gunzip+untar（zlib/ustar，不写 JS tar 解析器），
-                    //      再把 inst/ 上提 + 元数据落包根 + 拒绝异架构 .oct（设计稿 §3/§4）。
-                    var M = Msafe();
-                    if (!M || !M.eval_string) throw errCode('ENGINE_NOT_READY', '引擎还没就绪，不能安装包');
-                    var pkgdir = '/usr/src/octave/m/forge/' + p.name;
-                    var rc = M.eval_string(
-                      "n = __forge_install__ ('" + tar + "', '" + p.name + "', '/usr/src/octave/m/forge');");
-                    if (rc !== 0) throw errCode('UNPACK_FAILED', '__forge_install__ 失败（rc=' + rc + '）：'
-                                                  + (M.last_error_message() || ''));
-                    addPaths([pkgdir]);
-                    // 让核心 pkg 数据库重扫（否则 `pkg list` 看不见新包 —— pkgfix 的既有机制）
-                    try {
-                      M.eval_string("if (exist('__pkgfix_sync_db__')) try; __pkgfix_sync_db__ (); catch; end; end");
-                    } catch (e) { /* 数据库重扫失败不致命：包已经装上了 */ }
-                    loaded[key] = { files: 0, addpath: [pkgdir], forge: p };
-                    delete installError[p.name];   // T4：成功就要**清掉**旧失败（否则重试成功仍报错）
-                    onProgress({ phase: 'installed', name: p.name });
-                    publish();
-                    acc.push(p.name);
-                    return acc;
+                // ★ 2026-11-07 彻底重写：字节来源统一成**一个 async seam**。
+                //   旧 `__octaveDownloadedBytes` 返回 Promise 却被同步读 `.bytes`
+                //   ⇒ OPFS 零网络分支恒不可达（用户「包装不上」的断点之一）。
+                //   现在 `global.__octaveLoadBytes(p)` 是组合根注入的 async 函数，
+                //   **必须 await**（Promise.resolve().then 包住，类型/时序都对）。
+                //   命中 ⇒ 用 OPFS 已下载字节（零网络，下载/装载解耦）；
+                //   未命中 ⇒ 回落站点字节。两条路后续 sha→落 tmp→__forge_install__
+                //   →addpath→sync_db→publish **逐字同流程**，只有字节来源不同。
+                var bytesP = (typeof global.__octaveLoadBytes === 'function')
+                  ? Promise.resolve().then(function () { return global.__octaveLoadBytes(p); })
+                  : Promise.resolve(null);
+                return bytesP.then(function (loadedBytes) {
+                  var fromOpfs = loadedBytes && loadedBytes.bytes && loadedBytes.bytes.length;
+                  var bufP = fromOpfs
+                    ? Promise.resolve(loadedBytes.bytes)
+                    : fetchBinary(resolveSiteAsset(p.url));
+                  if (fromOpfs) onProgress({ phase: 'fetch', name: p.name, size: loadedBytes.bytes.length, source: 'opfs-download' });
+                  return bufP.then(function (buf) {
+                    return sha256Hex(buf).then(function (hex) {
+                      if (p.sha256 && hex && hex !== p.sha256) {
+                        throw errCode('SHA_MISMATCH', '包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
+                                        + '… 实得 ' + hex.slice(0, 12) + '…）—— 拒绝安装');
+                      }
+                      var tar = '/tmp/forge-' + p.name + '-' + p.version + '.tar.gz';
+                      fs().writeFile(tar, new Uint8Array(buf));
+                      onProgress({ phase: 'unpack', name: p.name });
+                      // 解包 + 按 `pkg install` 布局落盘：**引擎侧 m 助手**（build/forge/__forge_install__.m）
+                      //   —— 它内部调引擎内建 gunzip+untar（zlib/ustar，不写 JS tar 解析器），
+                      //      再把 inst/ 上提 + 元数据落包根 + 拒绝异架构 .oct（设计稿 §3/§4）。
+                      var M = Msafe();
+                      if (!M || !M.eval_string) throw errCode('ENGINE_NOT_READY', '引擎还没就绪，不能安装包');
+                      var pkgdir = '/usr/src/octave/m/forge/' + p.name;
+                      var rc = M.eval_string(
+                        "n = __forge_install__ ('" + tar + "', '" + p.name + "', '/usr/src/octave/m/forge');");
+                      if (rc !== 0) throw errCode('UNPACK_FAILED', '__forge_install__ 失败（rc=' + rc + '）：'
+                                                    + (M.last_error_message() || ''));
+                      addPaths([pkgdir]);
+                      try {
+                        M.eval_string("if (exist('__pkgfix_sync_db__')) try; __pkgfix_sync_db__ (); catch; end; end");
+                      } catch (e) { /* 数据库重扫失败不致命：包已经装上了 */ }
+                      loaded[key] = { files: 0, addpath: [pkgdir], forge: p };
+                      delete installError[p.name];
+                      onProgress({ phase: 'installed', name: p.name });
+                      publish();
+                      acc.push(p.name);
+                      return acc;
+                    });
                   });
                 });
               });
@@ -1280,7 +1264,7 @@
               // acceleration 与 statusOf 走**同一个判据**（content 含 src ⇒ not-built，否则 none-needed）
               var _entry = _catalogByName[name];
               var _content = (_entry && (_entry.content || _entry.kinds)) || [];
-              var _accel = (_content.indexOf('src') >= 0) ? 'not-built' : 'none-needed';
+              var _accel = (_content.some(function (c) { return c && c !== 'm'; })) ? 'not-built' : 'none-needed';
               return { state: 'ok', name: name, installed: names,
                        layers: _fetchedLayers, bytes: _fetchedBytes,
                        acceleration: _accel };

@@ -11,10 +11,10 @@
 - 本仓 Astro 页面与布局数：[[astro_files]]。
 - 本仓 Vitest 测试套件数：[[test_files]]。
 
-> ⚠️ 上面三行就是正确写法。若把最后一行写成「本仓有 486 行 Python」，
+> ⚠️ 上面三行就是正确写法。若把最后一行写成「本仓有 `486` 行 Python」，
 > `check_facts.py` 会报**正文裸数字** —— 因为那个数字从写下的那一刻起就开始腐烂：
 > 代码一增减，它就成了假话，而没人会记得回来改它。引用键名则永远不会过期。
-> （判据默认查 ≥ 100 的整数，`REFLECT_NAKED_MIN` 可调 —— `1`/`2` 这类小数字
+> （判据默认查 ≥ `100` 的整数，`REFLECT_NAKED_MIN` 可调 —— `1`/`2` 这类小数字
 > 遍地都是，查了全是噪音；围栏代码块 / 行内代码内的数字豁免，复跑命令天然带数字。）
 
 ## 现在是什么
@@ -35,7 +35,7 @@
   `src/modules/plugins/webmcp/DEVIATIONS.md`（ARGS_INVALID / TIMEOUT /
   CAPABILITY_UNAVAILABLE 三项 + omc 工具 wire 变化 + 硬编码兜底口径）。
   判据锚点：`[[webmcp_assembly_chain]]`。
-- **spec v2 全量对账完成（2026-10-29，内容仓 101）**：22 项逐条核过实现面，19 项早已落地，
+- **spec v2 全量对账完成（2026-10-29，内容仓 `101`）**：22 项逐条核过实现面，19 项早已落地，
   3 处真缺口本轮补齐 —— ① 用户故事 14 剪枝判据落地为 `CONTRIBUTING.md`（四问判定表 +
   「能强转成一条 eval ≠ 一行能表达」两条边界）；② B.3 的 `effects` 补为**表内元数据**
   （`read | mutates-workspace | sandbox-escape`，零运行期逻辑，快照 sha256 前后逐字一致证明
@@ -52,9 +52,9 @@
   `DecompressionStream`。逐块校验价值实证：10 块里 1 块网络超时只到 1,262,461/1,669,830 B，
   块级校验当场定位而全局校验要等 9 块拉完。
   **两条实测教训**：① catalogue 是 6 小时派生件，此刻实测两个 `Octave-Full-Wasm`
-  旧 tag 一个 404 一个超时、新 tag 尚未进表 ⇒ 死链容忍不是防御性编程而是必需；
-  ② catalogue **在域名根** `https://isui.ren/static/catalogue.json`（200），
-  不在站点 base 下（`/repo/Octave/static/catalogue.json` 是 404）——我按 base 拼错过一次，
+  旧 tag 一个 `404` 一个超时、新 tag 尚未进表 ⇒ 死链容忍不是防御性编程而是必需；
+  ② catalogue **在域名根** `https://isui.ren/static/catalogue.json`（`200`），
+  不在站点 base 下（`/repo/Octave/static/catalogue.json` 是 `404`）——我按 base 拼错过一次，
   已补 `deriveCatalogueUrl` + 断言防回潮。
 - **D11 / D12 已修**（内容仓 095 / 096 报告的发信级缺陷）：
   - D11：WebMCP 三服务在产物里恒 `undefined`（无参构造 + 浏览器无 `require`）
@@ -98,7 +98,7 @@
   `tests/ui/HeaderBar.svelte.test.ts`，对修复前代码 11 条全红（stash 对拍 2026-10-28）；
   复跑：`CI=true npx vitest run tests/engine/laneSizes.test.ts tests/ui/BootModal.svelte.test.ts tests/ui/HeaderBar.svelte.test.ts`。
   OMC 档已接同一缝（fix/omc-display，2026-10-29）：下载闭包两源之争已结案
-  （真源票 commit `bf0c9e4`，信 100）——闭包真值 = `74,635,990` B（wasm `74,579,404`
+  （真源票 commit `bf0c9e4`，信 `100`）——闭包真值 = `74,635,990` B（wasm `74,579,404`
   + js `56,586`）；catalog 顶层 `size` 是目录口径（多两件 .d.ts），按红线不作显示源。
   注入源 = 构建期 fs.stat `public/omc/` 闭包两件（js 在 git 树内；wasm 由 pages.yml
   fail-loud 步骤 sha 钉拉取 ⇒ 部署构建时必然在场；本地裸检出缺件 ⇒ null ⇒ 降级文案）
@@ -120,28 +120,28 @@
 
 | 键 | 值 | 测于 | 复跑命令 |
 |---|---|---|---|
-| `astro_files` | **2** | 2026-11-07T15:14:44+0800 | `git ls-files -- 'src/*.astro' | wc -l` |
-| `d13_loop_broken` | **两条自我放大环已断（断环不靠节流）：① refresh() 幂等化（_lastNotifiedActiveFile + 条目三元组比对）——环 A subscribe→checkAll→checkPhysical×4→storage.list→refresh→notify 的闭合边；② addpath 按路径指纹去重（_lastAddpathKey）——环 B idle→syncToEngine→eval(addpath)→idle 的闭合边。实测：环 A 39,803 次对账 → RSS +8.9→-0.11 MB/s；环 B 200 次 sync/2s → 2 次 sync/1 次 eval。反向断言 5 条（★ 对旧实现红）** | 2026-11-07T15:14:44+0800 | `python3 -c "import os; p='src/modules/storage/WorkspaceStorageManager.ts'; print(int('_lastAddpathKey' in open(p).read()) + int('_lastNotifiedActiveFile' in open(p).read()))"` |
-| `download_event_two_shot` | **DownloadStore.download() 通知通道统一：三发收敛两发（start null 进 downloading 态 + 终态一次——成功 record / 失败 catch 里 null 后 rethrow，finally 中间那次删除）；终态后显式调 EngineAssetResolver.getInstance().invalidateCache(lane)（#7 显式方法，engine ref 才挂，lane 推法与 removeEngine 同款）⇒ 成功与失败两路单例缓存都失效（tests/storage/DownloadStore.test.ts 3 新用例：事件数===2×2 + 失效挂点 spy 双路，2026-10-23 实测 336/336 绿）** | 2026-11-07T15:14:44+0800 | `pnpm test -- tests/storage/DownloadStore.test.ts` |
-| `engine_layer_no_ui_import` | **engine 层 10 个 ts 文件中含 toastService 的文件数 = 0（应为 0；（OmcBridge 抽离 + 三条 UI 旁路拔除；tests/engine/OmcBridge.test.ts 11 用例，2026-10-22 实测 322/322 绿）** | 2026-11-07T15:14:44+0800 | `python3 -c "import os, glob; fs=glob.glob('src/modules/engine/*.ts'); print(sum(open(f).read().count('toastService') for f in fs) if fs else 'absent')"` |
-| `fake_seams_purged` | **假 seam 清理（wayfinder #10）：src/lib/engine 双壳物理删除（modules/ 为真产地，壳的自证用例同步删）；DownloadStore unit() 死接口核销（生产零消费者）+ 其余公开接口逐一grep 核销（getRecord/index/checkQuota/download/downloadEngine/removeEngine/isEngineDownloading 均有真实消费者，保留）；ProjectWorkspace 7 个 downloadStore 零逻辑透传拆除（HeaderBar 直连appContext downloadStore 单例）+ syncFilesToEngine 直取 adapter.fs.write 改走 supervisor.fsWrite；engineRef 工厂收 7 产地（omc version 如实 '-rust'，Q6C）（tests/engine/ 两文件 + tests/storage/DownloadStore.test.ts + tests/workspace/ProjectWorkspace.test.ts，2026-10-23 实测 346/346 绿）** | 2026-11-07T15:14:44+0800 | `pnpm test` |
-| `get_assets_port_alive` | **getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）** | 2026-11-07T15:14:44+0800 | `python3 -c "import os; p='src/modules/plugins/package/PackageManagerPlugin.ts'; print(open(p).read().count('getAssetsPort') if os.path.exists(p) else 'absent')"` |
-| `header_integrity_badge` | **HeaderBar 徽标三态消费引擎层 integrity（12 处引用）；corrupted ⇒ ⚠ 已损坏、verified/unchecked ⇒ ✓、未下载 ⇒ 下载按钮；三语 header.corrupted_badge（tests/ui/HeaderBar.svelte.test.ts 6 用例，2026-10-23 实测 362/362 绿）** | 2026-11-07T15:14:44+0800 | `python3 -c "import os; p='src/components/HeaderBar.svelte'; print(open(p).read().count('integrity') if os.path.exists(p) else 'absent')"` |
-| `integrity_check_physical` | **integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）** | 2026-11-07T15:14:44+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts` |
-| `md_files` | **116** | 2026-11-07T15:14:44+0800 | `git ls-files -- '*.md' | wc -l` |
-| `md_lines` | **13688** | 2026-11-07T15:14:44+0800 | `git ls-files -z -- '*.md' | xargs -0 -r awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' | wc -l` |
-| `offline_boot_five_piece` | **boot OPFS 优先（verified ⇒ getBlob 读 octave.js 注入，未下载走网络，corrupted ⇒ throw ENGINE_CORRUPTED）+ matchRequest 两拦截键（assets/manifest.json 映射平铺名 assets-manifest.json、octave.build.json；w64 档 manifest.w64.json 不拦）+ 五件指纹（删 assets-manifest 后缓存不命中 ⇒ corrupted）（tests/engine/ 两文件 + DownloadStore 五件套记账，2026-10-23 实测 326/326 绿）** | 2026-11-07T15:14:44+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts tests/engine/WasmEmbedAdapter.test.ts` |
-| `pkg_error_toast_chain` | **包管理器错误呈现链（wayfinder #14）：DX1 banner+code 双呈现（错误同时 toastService.error(短消息, code)——toast-code-badge 消费 code；errors.* 键表三语补齐 7 码全 + assets-loader 14 码子集）；DX2 loading/error 互斥（有 error ⇒ spinner 零命中）+ 重试按钮调 loadCatalog()（#8 已救活）re-fetch 计数+1；R1 终端 onError 通道接 ErrorSanitizer（bridge 硬编码中文在消费端拦，三语各测）（tests/ui/PackageManagerModal.svelte.test.ts 7 用例 + tests/terminal/TerminalController.test.ts R1 扩展 4 用例，2026-10-23 实测 347/347 绿）** | 2026-11-07T15:14:44+0800 | `pnpm test -- tests/ui/PackageManagerModal.svelte.test.ts tests/terminal/TerminalController.test.ts` |
-| `plot_event_bus` | **页面级图表事件总线（wireFigureBusToSink 1 处）解耦装钩与收事件；钩子重赋值安全 + 空 URL 丢弃 + lastFigure 回放（tests/figure/P5FigureChain.test.ts 10 用例，其中 6 条对修复前代码全红）** | 2026-11-07T15:14:44+0800 | `python3 -c "import os; p='src/modules/figure/GraphicsSink.ts'; print(open(p).read().count('wireFigureBusToSink') if os.path.exists(p) else 'absent')"` |
-| `plot_panel_figure_chain` | **GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）** | 2026-11-07T15:14:44+0800 | `python3 -c "import os; p='src/modules/figure/GraphicsSink.ts'; print(open(p).read().count('onFigure') if os.path.exists(p) else 'absent')"` |
-| `py_files` | **36** | 2026-11-07T15:14:44+0800 | `git ls-files -- '*.py' | wc -l` |
-| `py_lines` | **8163** | 2026-11-07T15:14:44+0800 | `git ls-files -z -- '*.py' | xargs -0 -r cat | wc -l` |
-| `sha_ledger_no_decoration` | **DownloadStore sha 台账去装饰化：源内 128hex 字面量 = 0 + combinedSha 拼接产地 = 0（三产地归一）；幂等比对换逐文件三元组（path/sha/bytes，undefined sha 跳 sha 维）⇒ 五件套重下 fetchPort 调用 = 0；intake 出口 64hex 断言（128hex/空串/大写 ⇒ INDEX_UNREADABLE）；KNOWN_ENGINE_METADATA 瘦身（键 omc、无顶层 bytes/sha256，bytes 从 files 累加）+ 多文件 record 顶层 sha = undefined（tests/storage/DownloadStore.test.ts + tests/plugins/PackageManagerPlugin.test.ts，2026-10-23 实测 333/333 绿）** | 2026-11-07T15:14:44+0800 | `pnpm test -- tests/storage/DownloadStore.test.ts tests/plugins/PackageManagerPlugin.test.ts` |
-| `supervisor_no_mock_fallback` | **EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）** | 2026-11-07T15:14:44+0800 | `python3 -c "import os; p='src/modules/engine/EngineSupervisor.ts'; print(open(p).read().count('MockEmbedAdapter') if os.path.exists(p) else 'absent')"` |
-| `svelte_files` | **20** | 2026-11-07T15:14:44+0800 | `git ls-files -- 'src/*.svelte' | wc -l` |
-| `test_files` | **62** | 2026-11-07T15:14:44+0800 | `git ls-files -- 'tests/*.test.ts' | wc -l` |
-| `ts_files` | **149** | 2026-11-07T15:14:44+0800 | `git ls-files -- 'src/*.ts' 'tests/*.ts' | wc -l` |
-| `webmcp_assembly_chain` | **WebMCP 三服务在组合根注入（appContext 调 injectServices；resolveCtx 的 onAssemblyFault 让装配缺陷与设计降级可区分）。D11 修复：七个工具从「五个线上全废」到全可用。反向断言 tests/plugins/webmcp-assembly.test.ts 5 用例（修复前 5/5 全红→修复后全绿，stash 对拍）** | 2026-11-07T15:14:44+0800 | `python3 -c "import os; p='src/modules/plugins/webmcp/WebMcpPlugin.ts'; print(open(p).read().count('injectServices') if os.path.exists(p) else 'absent')"` |
+| `astro_files` | **2** | 2026-11-08T11:56:47+0800 | `git ls-files -- 'src/*.astro' | wc -l` |
+| `d13_loop_broken` | **两条自我放大环已断（断环不靠节流）：① refresh() 幂等化（_lastNotifiedActiveFile + 条目三元组比对）——环 A subscribe→checkAll→checkPhysical×4→storage.list→refresh→notify 的闭合边；② addpath 按路径指纹去重（_lastAddpathKey）——环 B idle→syncToEngine→eval(addpath)→idle 的闭合边。实测：环 A 39,803 次对账 → RSS +8.9→-0.11 MB/s；环 B 200 次 sync/2s → 2 次 sync/1 次 eval。反向断言 5 条（★ 对旧实现红）** | 2026-11-08T11:56:47+0800 | `python3 -c "import os; p='src/modules/storage/WorkspaceStorageManager.ts'; print(int('_lastAddpathKey' in open(p).read()) + int('_lastNotifiedActiveFile' in open(p).read()))"` |
+| `download_event_two_shot` | **DownloadStore.download() 通知通道统一：三发收敛两发（start null 进 downloading 态 + 终态一次——成功 record / 失败 catch 里 null 后 rethrow，finally 中间那次删除）；终态后显式调 EngineAssetResolver.getInstance().invalidateCache(lane)（#7 显式方法，engine ref 才挂，lane 推法与 removeEngine 同款）⇒ 成功与失败两路单例缓存都失效（tests/storage/DownloadStore.test.ts 3 新用例：事件数===2×2 + 失效挂点 spy 双路，2026-10-23 实测 336/336 绿）** | 2026-11-08T11:56:47+0800 | `pnpm test -- tests/storage/DownloadStore.test.ts` |
+| `engine_layer_no_ui_import` | **engine 层 10 个 ts 文件中含 toastService 的文件数 = 0（应为 0；（OmcBridge 抽离 + 三条 UI 旁路拔除；tests/engine/OmcBridge.test.ts 11 用例，2026-10-22 实测 322/322 绿）** | 2026-11-08T11:56:47+0800 | `python3 -c "import os, glob; fs=glob.glob('src/modules/engine/*.ts'); print(sum(open(f).read().count('toastService') for f in fs) if fs else 'absent')"` |
+| `fake_seams_purged` | **假 seam 清理（wayfinder #10）：src/lib/engine 双壳物理删除（modules/ 为真产地，壳的自证用例同步删）；DownloadStore unit() 死接口核销（生产零消费者）+ 其余公开接口逐一grep 核销（getRecord/index/checkQuota/download/downloadEngine/removeEngine/isEngineDownloading 均有真实消费者，保留）；ProjectWorkspace 7 个 downloadStore 零逻辑透传拆除（HeaderBar 直连appContext downloadStore 单例）+ syncFilesToEngine 直取 adapter.fs.write 改走 supervisor.fsWrite；engineRef 工厂收 7 产地（omc version 如实 '-rust'，Q6C）（tests/engine/ 两文件 + tests/storage/DownloadStore.test.ts + tests/workspace/ProjectWorkspace.test.ts，2026-10-23 实测 346/346 绿）** | 2026-11-08T11:56:47+0800 | `pnpm test` |
+| `get_assets_port_alive` | **getAssetsPort() 定义存在且被 appContext catalogProvider 闭包真实调用（tests/plugins/PackageManagerPlugin.test.ts 5 用例，2026-10-22 实测 296/296 绿；tsc 死缝错误消失 61→60）** | 2026-11-08T11:56:47+0800 | `python3 -c "import os; p='src/modules/plugins/package/PackageManagerPlugin.ts'; print(open(p).read().count('getAssetsPort') if os.path.exists(p) else 'absent')"` |
+| `header_integrity_badge` | **HeaderBar 徽标三态消费引擎层 integrity（12 处引用）；corrupted ⇒ ⚠ 已损坏、verified/unchecked ⇒ ✓、未下载 ⇒ 下载按钮；三语 header.corrupted_badge（tests/ui/HeaderBar.svelte.test.ts 6 用例，2026-10-23 实测 362/362 绿）** | 2026-11-08T11:56:47+0800 | `python3 -c "import os; p='src/components/HeaderBar.svelte'; print(open(p).read().count('integrity') if os.path.exists(p) else 'absent')"` |
+| `integrity_check_physical` | **integrity: 完整盘面与记账逐项对上 ⇒ verified / 截断 ⇒ corrupted / 篡改(XOR) ⇒ corrupted / 缓存零重算 / 失效重读 / 无记账 ⇒ unchecked / evict ⇒ false（tests/engine/EngineAssetResolver.test.ts，2026-10-22 实测 291/291 绿）** | 2026-11-08T11:56:47+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts` |
+| `md_files` | **119** | 2026-11-08T11:56:47+0800 | `git ls-files -- '*.md' | wc -l` |
+| `md_lines` | **13899** | 2026-11-08T11:56:47+0800 | `git ls-files -z -- '*.md' | xargs -0 -r awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' | wc -l` |
+| `offline_boot_five_piece` | **boot OPFS 优先（verified ⇒ getBlob 读 octave.js 注入，未下载走网络，corrupted ⇒ throw ENGINE_CORRUPTED）+ matchRequest 两拦截键（assets/manifest.json 映射平铺名 assets-manifest.json、octave.build.json；w64 档 manifest.w64.json 不拦）+ 五件指纹（删 assets-manifest 后缓存不命中 ⇒ corrupted）（tests/engine/ 两文件 + DownloadStore 五件套记账，2026-10-23 实测 326/326 绿）** | 2026-11-08T11:56:47+0800 | `pnpm test -- tests/engine/EngineAssetResolver.test.ts tests/engine/WasmEmbedAdapter.test.ts` |
+| `pkg_error_toast_chain` | **包管理器错误呈现链（wayfinder #14）：DX1 banner+code 双呈现（错误同时 toastService.error(短消息, code)——toast-code-badge 消费 code；errors.* 键表三语补齐 7 码全 + assets-loader 14 码子集）；DX2 loading/error 互斥（有 error ⇒ spinner 零命中）+ 重试按钮调 loadCatalog()（#8 已救活）re-fetch 计数+1；R1 终端 onError 通道接 ErrorSanitizer（bridge 硬编码中文在消费端拦，三语各测）（tests/ui/PackageManagerModal.svelte.test.ts 7 用例 + tests/terminal/TerminalController.test.ts R1 扩展 4 用例，2026-10-23 实测 347/347 绿）** | 2026-11-08T11:56:47+0800 | `pnpm test -- tests/ui/PackageManagerModal.svelte.test.ts tests/terminal/TerminalController.test.ts` |
+| `plot_event_bus` | **页面级图表事件总线（wireFigureBusToSink 1 处）解耦装钩与收事件；钩子重赋值安全 + 空 URL 丢弃 + lastFigure 回放（tests/figure/P5FigureChain.test.ts 10 用例，其中 6 条对修复前代码全红）** | 2026-11-08T11:56:47+0800 | `python3 -c "import os; p='src/modules/figure/GraphicsSink.ts'; print(open(p).read().count('wireFigureBusToSink') if os.path.exists(p) else 'absent')"` |
+| `plot_panel_figure_chain` | **GraphicsSink.onFigure 事件面 + wireFigureSource 转发单一出口 + P5 插件 Blob URL revoke（tests/figure/ 两文件 14 用例，2026-10-22 实测 311/311 绿）** | 2026-11-08T11:56:47+0800 | `python3 -c "import os; p='src/modules/figure/GraphicsSink.ts'; print(open(p).read().count('onFigure') if os.path.exists(p) else 'absent')"` |
+| `py_files` | **62** | 2026-11-08T11:56:47+0800 | `git ls-files -- '*.py' | wc -l` |
+| `py_lines` | **22840** | 2026-11-08T11:56:47+0800 | `git ls-files -z -- '*.py' | xargs -0 -r sh -c 'for f; do [ -f "$f" ] && cat "$f"; done' _ | wc -l` |
+| `sha_ledger_no_decoration` | **DownloadStore sha 台账去装饰化：源内 128hex 字面量 = 0 + combinedSha 拼接产地 = 0（三产地归一）；幂等比对换逐文件三元组（path/sha/bytes，undefined sha 跳 sha 维）⇒ 五件套重下 fetchPort 调用 = 0；intake 出口 64hex 断言（128hex/空串/大写 ⇒ INDEX_UNREADABLE）；KNOWN_ENGINE_METADATA 瘦身（键 omc、无顶层 bytes/sha256，bytes 从 files 累加）+ 多文件 record 顶层 sha = undefined（tests/storage/DownloadStore.test.ts + tests/plugins/PackageManagerPlugin.test.ts，2026-10-23 实测 333/333 绿）** | 2026-11-08T11:56:47+0800 | `pnpm test -- tests/storage/DownloadStore.test.ts tests/plugins/PackageManagerPlugin.test.ts` |
+| `supervisor_no_mock_fallback` | **EngineSupervisor 生产路径零 MockEmbedAdapter 引用；无桥 ⇒ boot/recover throw BOOT_UNAVAILABLE + failed 态（tests/engine/EngineSupervisor.test.ts 18 用例含反向断言，2026-10-22 实测 297/297 绿）** | 2026-11-08T11:56:47+0800 | `python3 -c "import os; p='src/modules/engine/EngineSupervisor.ts'; print(open(p).read().count('MockEmbedAdapter') if os.path.exists(p) else 'absent')"` |
+| `svelte_files` | **20** | 2026-11-08T11:56:47+0800 | `git ls-files -- 'src/*.svelte' | wc -l` |
+| `test_files` | **65** | 2026-11-08T11:56:47+0800 | `git ls-files -- 'tests/*.test.ts' | wc -l` |
+| `ts_files` | **155** | 2026-11-08T11:56:47+0800 | `git ls-files -- 'src/*.ts' 'tests/*.ts' | wc -l` |
+| `webmcp_assembly_chain` | **WebMCP 三服务在组合根注入（appContext 调 injectServices；resolveCtx 的 onAssemblyFault 让装配缺陷与设计降级可区分）。D11 修复：七个工具从「五个线上全废」到全可用。反向断言 tests/plugins/webmcp-assembly.test.ts 5 用例（修复前 5/5 全红→修复后全绿，stash 对拍）** | 2026-11-08T11:56:47+0800 | `python3 -c "import os; p='src/modules/plugins/webmcp/WebMcpPlugin.ts'; print(open(p).read().count('injectServices') if os.path.exists(p) else 'absent')"` |
 
 22 条事实。
 <!-- /AUTO:FACTS -->
@@ -150,30 +150,25 @@
 > 本区块由 `zreflect/facts.py --render-doc` 从发现式名录（zreflect/registry.py 的声明行）渲染，**不要手改**。
 > 执行面（hooks / CI）读 `registry --run <相位>` —— 相位是声明字段（`runs_at`），不是文件名。
 
-| 闸门 | 相位 | 它挡住什么 | 消费的旋钮 |
-|---|---|---|---|
-| `check_ab.py`（A/B 闸门） | commit | A/B 同旗标不变式（非 allow 轴差异 = 混淆变量，A/B 作废） | `REFLECT_AB` |
-| `check_acceptance_no_handbase.py`（验收脚本无手搓 base / 自造实例闸门） | commit | 验收脚本不得自造 createOctaveAssets / __catalogSource / 手搓 lane base | `REFLECT_HARNESS_DIR` |
-| `check_asset_tiers.py`（资产逻辑键跨语言对账闸门） | commit | bridge TIERS 与 TS ASSET_LOGICAL_KEYS 逐字对账（防两份判据漂移） | — |
-| `check_envfile.py`（env 文件闸门） | commit | 守钩子的 REFLECT_* 载体（旋钮 typo / 指向缺失 / 空值） | `REFLECT_ENV_FILE` |
-| `check_facts.py`（事实闸门） | commit | 块一致性 / 裸数字 / 坏引用 | `REFLECT_FACTS`, `REFLECT_DOC`, `REFLECT_NAKED_MIN` |
-| `check_facts_replay.py`（复跑闸门） | commit | 台账 cmd 逐字复跑（裸值契约：stdout 必须等于值） | `REFLECT_FACTS`, `REFLECT_REPLAY`, `REFLECT_REPLAY_TIMEOUT` |
-| `check_i18n.py`（i18n 硬编码闸门） | commit | 检查 Svelte 组件中未国际化的硬编码中文字符串 | — |
-| `check_instruments.py`（仪器生命周期闸门） | commit | 恒常检测（first_seen）+ 被证伪量法登记 | `REFLECT_INSTRUMENTS`, `REFLECT_INSTRUMENT_DAYS`, `REFLECT_FACTS` |
-| `check_invariants.py`（不变量闸门） | commit | 声明式不变量：仓库文件必须/不得含某片段（grep 级） | `REFLECT_INVARIANTS` |
-| `check_license_notices.py`（分发面许可合规闸门） | commit | 随分发的第三方字节必须有许可声明随行（NOTICES/fzstd 头/catalog license/pyodide/MPL） | — |
-| `check_locks.py`（锁定源闸门） | commit | 锁定源清单（URL + 文件 + sha256 的内容指纹） | `REFLECT_LOCKS` |
-| `check_mock_surface.py`（check_mock_surface.py） | commit | mock 面收敛闸门：测试 mock 的 omc_* API 必须是产物导出面的子集 | — |
-| `check_pins.py`（pin 闸门） | commit | 派生树 pin 一致性（stamp commit / dirty / 版本串对读） | `REFLECT_PINS` |
-| `check_questions.py`（悬案闸门） | commit | 未结案的问题必须挂一个能跑的结算件 | `REFLECT_QUESTIONS` |
-| `check_readme_sync.py`（三语 README 闸门） | commit | 语言版本是同一条断言的三份拷贝：结构互链 + 每次推送同批 | `REFLECT_READMES` |
-| `check_retractions.py`（翻案重现检测） | commit | 被推翻的断言不许悄悄回来当现状 | `REFLECT_RETRACTIONS`, `REFLECT_DOCS`, `REFLECT_HISTORY_SECS` |
-| `check_stale.py`（陈旧断言检测） | commit | sha 出处 / 退役名 / 测龄 | `REFLECT_DOCS`, `REFLECT_FACTS`, `REFLECT_HISTORY_SECS`, `REFLECT_RETIRED`, `REFLECT_STALE_DAYS` |
-| `check_theme_tokens.py`（主题变量与硬编码颜色闸门） | commit | 检查 Svelte 组件中的 CSS 变量合法性与禁止硬编码十六进制颜色 | — |
-| `check_unified_seam.py`（统一站点资产接缝静态锁） | commit | S1/S2/S3：site-base、forge-catalog、tier 判据各只有一个产地 | — |
-| `check_wayfinder.py`（wayfinder 闸门） | commit | 决策票 gate: 锚点对账（台账键/闸门文件存在性）+ 形状断言收编（零网络） | `REFLECT_FACTS` |
-| `check_world.py`（world 闸门） | commit | 声明式验证对象：多线仓库共享验证环境的世界对账 | `REFLECT_WORLD`, `REFLECT_WORLD_LINE` |
-| `doctor.py`（开工预检 doctor） | start-of-work | 进程 / 端口活性（查会死的东西 ⇒ runs_at=start-of-work，不进 pre-commit） | `REFLECT_DOCTOR`, `REFLECT_DOCTOR_TIMEOUT` |
+| 闸门 | 相位 | 它挡住什么 | 消费的旋钮 | 可未启用的理由 |
+|---|---|---|---|---|
+| `check_ab.py`（A/B 闸门） | commit | A/B 同旗标不变式（非 allow 轴差异 = 混淆变量，A/B 作废） | `REFLECT_AB` | 不做 A/B 对照实验的仓不需要它：规格未配 ⇒ 明说未启用 |
+| `check_envfile.py`（env 文件闸门） | commit | 守钩子的 REFLECT_* 载体（旋钮 typo / 指向缺失 / 空值） | `REFLECT_ENV_FILE` | 没有 env 载体的仓（旋钮全用默认值）不需要它：规格未配 ⇒ 明说未启用 |
+| `check_facts.py`（事实闸门） | commit | 块一致性 / 裸数字 / 坏引用 | `REFLECT_FACTS`, `REFLECT_DOC`, `REFLECT_NAKED_MIN` | — |
+| `check_facts_replay.py`（复跑闸门） | commit | 台账 cmd 逐字复跑（裸值契约：stdout 必须等于值） | `REFLECT_FACTS`, `REFLECT_REPLAY`, `REFLECT_REPLAY_TIMEOUT` | 显式设 REFLECT_REPLAY=off 时整道闸门关闭（这是整仓出口；未配时照跑） |
+| `check_i18n.py`（语言覆盖闸门） | commit | 本体零语言：用户可见文本必须走 M(code)；语言包可选 | `REFLECT_I18N_ROOT` | — |
+| `check_instruments.py`（仪器生命周期闸门） | commit | 恒常检测（first_seen）+ 被证伪量法登记 | `REFLECT_INSTRUMENTS`, `REFLECT_INSTRUMENT_DAYS`, `REFLECT_FACTS` | 两个旋钮都未配 ⇒ 特化机制没启用（可插拔，本仓按需再开） |
+| `check_invariants.py`（不变量闸门） | commit | 声明式不变量：仓库文件必须/不得含某片段（grep 级） | `REFLECT_INVARIANTS` | 不写声明式不变量的仓不需要它：规格未配 ⇒ 明说未启用（可插拔） |
+| `check_lint.py`（静态机器检查） | commit | ruff 的 C901/F/E9/B，判据在 ruff.toml —— 「已清」必须由每次提交复跑，不是一次手工跑完写进台账（R-004） | — | 本机没装 ruff（外部工具，不是本仓依赖）⇒ 明说未启用；CI 里 pip 装了它，那道会真跑 |
+| `check_locks.py`（锁定源闸门） | commit | 锁定源清单（URL + 文件 + sha256 的内容指纹） | `REFLECT_LOCKS` | 不钉上游字节的仓不需要它：规格未配 ⇒ 明说未启用 |
+| `check_pins.py`（pin 闸门） | commit | 派生树 pin 一致性（stamp commit / dirty / 版本串对读） | `REFLECT_PINS` | 没有派生树的仓不需要它：规格未配 ⇒ 明说未启用 |
+| `check_questions.py`（悬案闸门） | commit | 未结案的问题必须挂一个能跑的结算件 | `REFLECT_QUESTIONS` | — |
+| `check_readme_sync.py`（三语 README 闸门） | commit | 语言版本是同一条断言的三份拷贝：结构互链 + 每次推送同批 | `REFLECT_READMES` | — |
+| `check_retractions.py`（翻案重现检测） | commit | 被推翻的断言不许悄悄回来当现状 | `REFLECT_RETRACTIONS`, `REFLECT_DOCS`, `REFLECT_HISTORY_SECS` | — |
+| `check_snapshots.py`（模块级快照闸门） | commit | 跨模块 import 的可变全局是值拷贝（陈旧快照）：改成 import 模块 + 读属性 | `REFLECT_SNAPSHOT_ROOT` | — |
+| `check_stale.py`（陈旧断言检测） | commit | sha 出处 / 退役名 / 测龄 | `REFLECT_DOCS`, `REFLECT_FACTS`, `REFLECT_HISTORY_SECS`, `REFLECT_RETIRED`, `REFLECT_STALE_DAYS` | — |
+| `check_world.py`（world 闸门） | commit | 声明式验证对象：多线仓库共享验证环境的世界对账 | `REFLECT_WORLD`, `REFLECT_WORLD_LINE` | 单线仓库不需要它：规格未配 ⇒ 明说未启用 |
+| `doctor.py`（开工预检 doctor） | start-of-work | 进程 / 端口活性（查会死的东西 ⇒ runs_at=start-of-work，不进 pre-commit） | `REFLECT_DOCTOR`, `REFLECT_DOCTOR_TIMEOUT` | 本仓没有 doctor.json 规格：不查进程/端口活性 ⇒ 明说未启用 |
 
-22 道闸门（发现式名录派生 —— 手写清单会漂，加闸门 = 落一个声明行，这里自动长出来）。
+17 道闸门（发现式名录派生 —— 手写清单会漂，加闸门 = 落一个声明行，这里自动长出来）；其中 10 道**可未启用**（末列是**声明**理由，不是运行时状态 —— 此刻谁 off 要看 `registry --run <相位>`）。
 <!-- /AUTO:GATES -->

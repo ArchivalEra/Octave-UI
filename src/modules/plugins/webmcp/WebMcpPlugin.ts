@@ -13,12 +13,14 @@
 
 import type { OctavePlugin } from '../types';
 import type { WebMcpToolDefinition, WebMcpToolCallResult, WebMcpContextApi } from './types';
-import { resolveCtx, type WebMcpCtxResolver } from './ctx';
+import { resolveCtx, type WebMcpCtxResolver, type WebMcpPluginServices } from './ctx';
 import { createServer, type WebMcpServer } from './server';
 import type { WebMcpChannel } from './channels/types';
 import { createGlobalHandleChannel } from './channels/globalHandle';
 import { createLegacyEventChannel } from './channels/eventChannel';
 import { createDebugHandle, attachDebugHandle, detachDebugHandle, type WebMcpDebugHandle } from './callStats';
+import { axisValues } from '../../contract/projection';
+import { bindContractEnums } from './tools/octaveListPackages';
 
 // 注入面迁至 ctx.ts（组合根），旧公开导入路径保持可用
 export type { WebMcpPluginServices } from './ctx';
@@ -37,6 +39,13 @@ export class WebMcpPlugin implements OctavePlugin<WebMcpPluginServices>, WebMcpC
 
   constructor(services?: WebMcpPluginServices) {
     this.options = services;
+    // ★ 零手写选项：MCP enum 从契约投影就地灌入（bindProjection 后为真值；
+    //   未绑定时为空数组 = 如实「没有契约就没有选项」，绝不合成手写枚举）。
+    try {
+      bindContractEnums(axisValues('consumer'), axisValues('form'));
+    } catch {
+      bindContractEnums([], []);
+    }
     // 装配缺陷诊断（内容仓 095 D11）：注入与 require 回退双失败时报一次——
     // 「服务没接上」必须能被看见，不许伪装成「能力暂不可用」。
     // 只 console.error（每键一次），返回面不变 ⇒ golden 的服务缺席文案零影响。

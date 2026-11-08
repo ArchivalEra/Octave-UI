@@ -177,9 +177,11 @@ CI=true npx vitest run tests/plugins
 # 类型门（注意看 webmcp-compile-gates 是否零输出）
 npx tsc --noEmit 2>&1 | grep 'webmcp-compile-gates'
 
-# 全量闸门（发现式名录，新增 check_*.py 自动被吃到）
-source Einfacht.env && for g in zreflect/check_*.py; do python3 "$g" || exit 1; done
-sh gates-selftest.sh
+# 全量闸门（2026-11-07 额叶切除后双层执行面）
+set -a; . reflect-hooks/Einfacht.env; set +a
+python3 zreflect/registry.py --run commit          # 上游机制层发现式名录
+./reflect-hooks/pre-commit                          # + gates/ 22 道领域闸门
+env -u REFLECT_NAKED_MIN sh gates-selftest.sh      # 平台自证（上游夹具在 vendored 仓 rc=1 为已知问题）
 ```
 
 提交规范与活状态文档纪律见 [`AGENTS.md`](AGENTS.md)；架构契约与语义边界见 [`CONTEXT.md`](CONTEXT.md)。

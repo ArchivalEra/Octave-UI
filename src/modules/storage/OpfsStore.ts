@@ -166,7 +166,7 @@ export class OpfsStore implements Store {
     // 使用 createWritable 原子流写入
     const writable = await fileHandle.createWritable();
     try {
-      await writable.write(data);
+      await writable.write(new Uint8Array(data).buffer as ArrayBuffer);
     } finally {
       await writable.close();
     }

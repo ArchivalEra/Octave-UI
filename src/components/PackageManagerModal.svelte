@@ -5,6 +5,8 @@
   import type { Locale } from '../modules/i18n/types';
   import type { DownloadRef } from '../modules/storage/downloadTypes';
   import { isTreeForm } from '../modules/storage/catalogueReleaseSource';
+  // ★ 零手写选项：筛选轴值 / 工具链身份 / 内容语义全由契约投影层给。
+  import { axisValues, semanticRoles, semanticForms, availableStageForCompat } from '../modules/contract/projection';
 
   let { isOpen, onClose } = $props<{
     isOpen: boolean;
@@ -12,8 +14,32 @@
   }>();
 
   let searchQuery = $state('');
-  let selectedConsumer = $state<'all' | 'octave' | 'omc'>('all');
-  let selectedForm = $state<'all' | 'pkg' | 'tree'>('all');
+  // 「不过滤」哨兵 = 空串（不在契约实测值集里）；值来自 facets，零手写闭集。
+  let selectedConsumer = $state<string>('');
+  let selectedForm = $state<string>('');
+  let consumerValues = $state<string[]>([]);
+  let formValues = $state<string[]>([]);
+  let toolchainName = $state<string>('');
+  let sourceKind = $state<string>('');
+  let pureKind = $state<string>('');
+  let treeForm = $state<string>('');
+  let withheldStages = $state<string[]>([]);
+
+  function refreshContractAxes(): void {
+    try {
+      consumerValues = [...axisValues('consumer')];
+      formValues = [...axisValues('form')];
+      const sem = semanticRoles();
+      toolchainName = sem.toolchainName;
+      sourceKind = sem.sourceKind;
+      pureKind = axisValues('contentKinds')[0] ?? '';
+      treeForm = semanticForms().treeForm;
+      withheldStages = axisValues('stage').filter((s) => s !== availableStageForCompat());
+    } catch {
+      // 投影未绑定（组合根尚未装配）：保持空，不合成手写缺省。
+      consumerValues = []; formValues = []; toolchainName = ''; sourceKind = ''; pureKind = ''; treeForm = ''; withheldStages = [];
+    }
+  }
   let installedOnly = $state(false);
   let currentLocale = $state<Locale>(i18n.currentLocale);
 
@@ -105,6 +131,8 @@
     retrying = true;
     try {
       await packageManagerPlugin.loadCatalog();
+      // 目录就绪 ⇒ 从同一份装配态契约投影筛选轴 / 语义值（零手写选项）。
+      refreshContractAxes();
       catalogLoaded = true;
       // 装载成功才清错误与重试态——失败路径保持 error 可见、spinner 停转
       errorMsg = null;
@@ -234,16 +262,7 @@
 
   async function executeDownload(item: ForgePackageItem) {
     if (confirmDownloadError) return;
-    const ver = selectedVersions[item.name] || item.version;
-    // tree 判定**唯一产地** = isTreeForm（看版本候选的 form，回落到包级 form）。
-    // 这里原本手写 `item.form === 'tree'`，只看包级、不看版本 ⇒ 与 storage 层
-    // 的 isTreeForm 形成两个产地（Standards 审查第 5 条）。
-    const isTree = isTreeForm(item, ver);
-    const ref: DownloadRef = {
-      name: item.name,
-      version: ver,
-      kind: isTree ? 'runtime' : 'src',
-    };
+    // ★ 零手写：只给契约里的名字，身份/版本/ref 全由投影层 + Vault 推导。
     confirmDownloadItem = null;
     downloadingState = {
       ...downloadingState,
@@ -251,14 +270,7 @@
     };
 
     try {
-      await packageManagerPlugin.downloadPackage(ref, {
-        onProgress: (p) => {
-          downloadingState = {
-            ...downloadingState,
-            [item.name]: p,
-          };
-        },
-      });
+      await packageManagerPlugin.downloadOnly(item.name);
       const nextDl = { ...downloadingState };
       delete nextDl[item.name];
       downloadingState = nextDl;
@@ -267,7 +279,6 @@
       const nextDl = { ...downloadingState };
       delete nextDl[item.name];
       downloadingState = nextDl;
-      // DX1：下载失败双呈现（banner 人读 + toast 带 code）
       const code = errCodeOf(err);
       const codeKey = code ? `errors.${code}` : '';
       const human = (codeKey && t(codeKey) !== codeKey)
@@ -279,36 +290,24 @@
 
   async function downloadLLVM() {
     llvmPromptOpen = false;
-    const llvmPkg = packageManagerPlugin.getPackage('llvm-wasm');
-    const ver = llvmPkg?.version || '6.0.12';
-    const totalBytes = llvmPkg?.size || 122922700;
-    const ref: DownloadRef = {
-      name: 'llvm-wasm',
-      version: ver,
-      kind: 'runtime',
-    };
+    // 工具链名字/体积由契约投影给，零手写 'llvm-wasm' / 版本 / 字节数。
+    const name = toolchainName;
+    if (!name) return;
+    const pkg = packageManagerPlugin.getPackage(name);
     downloadingState = {
       ...downloadingState,
-      'llvm-wasm': { receivedBytes: 0, totalBytes, phase: 'Downloading LLVM' },
+      [name]: { receivedBytes: 0, totalBytes: pkg?.size || 0, phase: 'Downloading toolchain' },
     };
     try {
-      await packageManagerPlugin.downloadPackage(ref, {
-        onProgress: (p) => {
-          downloadingState = {
-            ...downloadingState,
-            'llvm-wasm': p,
-          };
-        },
-      });
+      await packageManagerPlugin.downloadOnly(name);
       const nextDl = { ...downloadingState };
-      delete nextDl['llvm-wasm'];
+      delete nextDl[name];
       downloadingState = nextDl;
       await refreshStatuses();
     } catch (err: any) {
       const nextDl = { ...downloadingState };
-      delete nextDl['llvm-wasm'];
+      delete nextDl[name];
       downloadingState = nextDl;
-      // DX1：LLVM 下载失败双呈现（banner 人读 + toast 带 code）
       const code = errCodeOf(err);
       const codeKey = code ? `errors.${code}` : '';
       const human = (codeKey && t(codeKey) !== codeKey)
@@ -333,7 +332,7 @@
   }
 
   async function triggerInstall(item: ForgePackageItem) {
-    const hasSrc = item.content && item.content.includes('src');
+    const hasSrc = item.content && sourceKind && item.content.includes(sourceKind);
     if (hasSrc) {
       const llvmReady = await packageManagerPlugin.hasLLVM();
       if (!llvmReady) {
@@ -371,7 +370,7 @@
   }
 
   async function handleLoadOrCompile(item: ForgePackageItem) {
-    const hasSrc = item.content && item.content.includes('src');
+    const hasSrc = item.content && sourceKind && item.content.includes(sourceKind);
     if (hasSrc) {
       const llvmReady = await packageManagerPlugin.hasLLVM();
       if (!llvmReady) {
@@ -463,52 +462,44 @@
         <div class="filter-row">
           <div class="filter-group">
             <span class="filter-label">{t('package_manager.filter_engine')}</span>
+            <!-- 「全部」哨兵保留为 data-consumer 的过滤锚点（验收 S6 按按钮序列）；
+                 具体值由契约投影的 facets 生成，新增 consumer 零改代码。 -->
             <button
               class="filter-pill"
-              class:active={selectedConsumer === 'all'}
-              onclick={() => (selectedConsumer = 'all')}
+              class:active={selectedConsumer === ''}
+              onclick={() => (selectedConsumer = '')}
               data-action="filter-consumer"
-              data-consumer="all"
+              data-consumer=""
             >{t('package_manager.filter_all')}</button>
-            <button
-              class="filter-pill"
-              class:active={selectedConsumer === 'octave'}
-              onclick={() => (selectedConsumer = 'octave')}
-              data-action="filter-consumer"
-              data-consumer="octave"
-            >{t('package_manager.filter_octave')}</button>
-            <button
-              class="filter-pill"
-              class:active={selectedConsumer === 'omc'}
-              onclick={() => (selectedConsumer = 'omc')}
-              data-action="filter-consumer"
-              data-consumer="omc"
-            >{t('package_manager.filter_omc')}</button>
+            {#each consumerValues as cv}
+              <button
+                class="filter-pill"
+                class:active={selectedConsumer === cv}
+                onclick={() => (selectedConsumer = cv)}
+                data-action="filter-consumer"
+                data-consumer={cv}
+              >{cv}</button>
+            {/each}
           </div>
 
           <div class="filter-group">
             <span class="filter-label">{t('package_manager.filter_form')}</span>
             <button
               class="filter-pill"
-              class:active={selectedForm === 'all'}
-              onclick={() => (selectedForm = 'all')}
+              class:active={selectedForm === ''}
+              onclick={() => (selectedForm = '')}
               data-action="filter-form"
-              data-form="all"
+              data-form=""
             >{t('package_manager.filter_all')}</button>
-            <button
-              class="filter-pill"
-              class:active={selectedForm === 'pkg'}
-              onclick={() => (selectedForm = 'pkg')}
-              data-action="filter-form"
-              data-form="pkg"
-            >{t('package_manager.filter_pkg')}</button>
-            <button
-              class="filter-pill"
-              class:active={selectedForm === 'tree'}
-              onclick={() => (selectedForm = 'tree')}
-              data-action="filter-form"
-              data-form="tree"
-            >{t('package_manager.filter_tree')}</button>
+            {#each formValues as fv}
+              <button
+                class="filter-pill"
+                class:active={selectedForm === fv}
+                onclick={() => (selectedForm = fv)}
+                data-action="filter-form"
+                data-form={fv}
+              >{fv}</button>
+            {/each}
           </div>
 
           <label class="checkbox-label">
@@ -569,20 +560,20 @@
                   </div>
                   <div class="badge-row">
                     <!-- consumer 分流标签 -->
-                    <span class="badge consumer-badge" class:omc={item.consumer === 'omc'}>
-                      {item.consumer || 'octave'}
+                    <span class="badge consumer-badge" class:omc={item.consumer === consumerValues[consumerValues.length - 1]}>
+                      {item.consumer || consumerValues[0] || ''}
                     </span>
-                    <!-- 投送形态 -->
-                    <span class="badge form-badge" class:tree={item.form === 'tree'}>
-                      {item.form === 'tree' ? t('package_manager.tag_tree') : t('package_manager.tag_pkg')}
+                    <!-- 投送形态：tree 值由契约投影给，零手写 -->
+                    <span class="badge form-badge" class:tree={item.form === treeForm}>
+                      {item.form === treeForm ? t('package_manager.tag_tree') : t('package_manager.tag_pkg')}
                     </span>
-                    <!-- 内容构成 -->
-                    {#if item.form === 'tree'}
+                    <!-- 内容构成：值逐字来自契约，文案按轴值索引 -->
+                    {#if item.form === treeForm}
                       <span class="badge runtime-badge">{t('package_manager.tag_runtime')}</span>
                     {:else if item.content && item.content.length > 0}
                       {#each item.content as c}
                         <span class="badge content-badge content-{c}">
-                          {c === 'm' ? t('package_manager.content_m') : c === 'src' ? t('package_manager.content_src') : t('package_manager.content_oct')}
+                          {c === pureKind ? t('package_manager.content_m') : c === sourceKind ? t('package_manager.content_src') : t('package_manager.content_oct')}
                         </span>
                       {/each}
                     {/if}
@@ -640,8 +631,8 @@
                         data-package={item.name}
                       >
                         {#each versions as v}
-                          <option value={v.version} disabled={v.stage === 'withheld'}>
-                            {v.version} {v.stage === 'withheld' ? t('package_manager.stage_withheld') : ''}
+                          <option value={v.version} disabled={withheldStages.includes(String(v.stage))}>
+                            {v.version} {withheldStages.includes(String(v.stage)) ? t('package_manager.stage_withheld') : ''}
                           </option>
                         {/each}
                       </select>
@@ -709,11 +700,11 @@
                         <button class="btn-action btn-installing" disabled data-action="installing" data-package={item.name}>
                           <span class="btn-spinner"></span> {t('package_manager.btn_loading')}
                         </button>
-                      {:else if item.content && item.content.includes('src')}
+                      {:else if item.content && sourceKind && item.content.includes(sourceKind)}
                         <button class="btn-action btn-compile" onclick={() => handleLoadOrCompile(item)} data-action="compile" data-package={item.name}>
                           {t('package_manager.btn_compile')}
                         </button>
-                      {:else if item.role === 'toolchain' || item.name === 'llvm-wasm'}
+                      {:else if toolchainName && item.name === toolchainName}
                         <!-- 编译工具链由 DownloadStore 管理，不走解释器装载 (mail/024) -->
                       {:else}
                         <button class="btn-action btn-install" onclick={() => handleLoadOrCompile(item)} data-action="install" data-package={item.name}>

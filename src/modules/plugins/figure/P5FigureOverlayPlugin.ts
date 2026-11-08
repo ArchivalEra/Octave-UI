@@ -51,6 +51,7 @@ export class P5FigureOverlayPlugin implements OctavePlugin {
   readonly id = 'p5-figure-overlay';
   readonly name = 'P5 Figure Graphics Overlay';
   readonly version = '1.0.0';
+  readonly description = 'Renders overlay figures from the graphics sink.';
   enabled = true;
 
   private _listeners = new Set<FigureRenderListener>();

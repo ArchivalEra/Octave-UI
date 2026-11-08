@@ -1,7 +1,10 @@
 // src/modules/storage/downloadTypes.ts
 // 纯下载模块 (DownloadStore) 核心类型代数与 7 错误码封闭集（落实 mail/009, mail/010, host-007, host-008）
 
-type DownloadKind = 'src' | 'pre' | 'engine';
+// ★ 2026-11-07：'runtime' 是能力层产物（form:"tree"）的历史运行时形状，
+//   三处调用点早已在造它却越出类型（靠 as 强转绕过）。补进联合让类型与执行一致；
+//   重写后的 Market/Vault 不再从市场侧造 ref，旧兼容层仍可用。
+type DownloadKind = 'src' | 'pre' | 'engine' | 'runtime';
 
 /**
  * 资产唯一身份引用代数（用户裁决②：包与引擎共用统一代数）
