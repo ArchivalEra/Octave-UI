@@ -93,35 +93,26 @@ jobs:
           test -f public/bridge/assets-loader.js
           echo "ENGINE_SHAS=$(git -C .engine rev-parse --short archive/wasm32-final-168ef49) $(git -C .engine rev-parse --short origin/master) $(git -C .engine rev-parse --short archive/master-a1e2409)" >> "$GITHUB_ENV"
 
-      # ── OMC 引擎资产同步（同源托管契约 mail/053）──
-      # wasm(74.5MB) 被 .gitignore 排除在 git 树外，构建期从受控源拉取——与引擎三车道
-      # 走 git 仓同构。本机路径（site-omc）在 CI runner 上不存在，旧步骤的 if-present
-      # 静默跳过曾致线上 /omc/*.wasm 永远 404（2026-10-24 实测抓到）——本步骤 fail-loud：
-      # 下载失败 / sha 不符 ⇒ 整条流水线红，绝不绿着缺件。
-      # sha 与 DownloadStore.KNOWN_ENGINE_METADATA 同值（下载侧校验的同一指纹）。
-      - name: Sync OMC engine assets (release asset, sha-pinned)
-        run: |
-          set -euo pipefail
-          mkdir -p public/omc
-          curl -fL --retry 3 -o public/omc/OpenModelicaCompiler_bg.wasm \
-            "https://github.com/ArchivalEra/OpenModelica-Full-Wasm/releases/download/v0.1.0-wasm32/OpenModelicaCompiler_bg.wasm"
-          echo "8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001  public/omc/OpenModelicaCompiler_bg.wasm" | sha256sum -c -
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # ── MSL 站内资产镜像（内容仓 084 A2：form:"file" 单 zip，落**兄弟目录**，不混进 omc/——
-      # 引擎 form:"tree" 的 size 是目录字节和，混入会虚胀 ~19.5MB 闭包预算）。
-      # 落位 = `assets/msl/`：以宿主表的 url 字段为权威（与 forge-catalog.json 同源）。
+      # ── release 资产同步（MSL + OMC 两件）：**走分发契约**，不是裸 curl ──
+      # 旧形态每件都是 `curl .../releases/download/<tag>/<file>` —— 与产品运行期
+      # 走的 `catalogue → manifest → chunks → 逐块 sha → 拼接 → 双 sha` 正交
+      # （用户：「这样就跟实际路径正交了」「市场不能下不同版本的 release？」）。
+      # 现在由 scripts/sync-release-assets.mjs 复用本仓照 Static-Contract
+      # 参考客户端移植的 TS 消费侧，按 **entry.name 全表扫 + 权威产地排序**定位
+      # release（不猜版本、不手抄 release id），codecs 有序链优先 zstd。
       #
-      # ★ 2026-11-08：不再用裸 curl 从 `v0.1.0-wasm32` 整包 release 拉单个 zip
-      #   —— 那与产品运行期走的分发契约（catalogue → manifest → chunks → 双 sha）
-      #   正交。现在 `scripts/sync-msl.mjs` 复用本仓照 Static-Contract 参考客户端
-      #   移植的 TS 消费侧（与 DownloadStore 同一条字节链），vite-node 是
-      #   lockfile 里已有的传递依赖，零新增包。脚本自身逐块 sha + 拼接后
-      #   bytes/sha + 落盘指纹 fail-closed，故这里无需再 sha256sum/stat。
-      - name: Sync MSL asset (distribution contract, TS consumer)
-        run: pnpm sync:msl
+      # 同时修掉一个既有 CI 红：4d1b000 把 public/omc/OpenModelicaCompiler.js
+      # 从 git 树删掉、却没同步 deploy-contract 的 must ⇒ main 从那次起 CI 必红
+      # （run 42347195522 / 42446442823）。该产物在 OpenModelica-Full-Wasm/v0.2.0-wasm32
+      # 的 manifest 里，契约本来就能下。
+      #
+      # vite-node 是 lockfile 里已有的传递依赖（零新增包）；脚本自身 fail-closed，
+      # 故这里不再 sha256sum/stat。
+      - name: Sync release assets (distribution contract, TS consumer)
+        run: pnpm sync:assets
 
       # 测试闸门：UI/引擎契约回归在此拦下（16 套件 / 119 用例）。
       - name: Test

@@ -15,7 +15,8 @@
     "sync:lanes": "bash scripts/sync-lanes.sh",
     "build:lanes": "bash scripts/sync-lanes.sh",
     "sync:msl": "sh scripts/sync-msl.sh",
-    "compress": "bash scripts/compress-static.sh"
+    "compress": "bash scripts/compress-static.sh",
+    "sync:assets": "sh scripts/sync-msl.sh"
   },
   "devDependencies": {
     "@astrojs/svelte": "^7.0.4",

@@ -13,4 +13,4 @@ if [ -z "$CLI" ] || [ ! -f "$CLI" ]; then
   echo "FATAL: vite-node CLI not found under node_modules/.pnpm/ — run 'pnpm install --frozen-lockfile' first" >&2
   exit 2
 fi
-exec node "$CLI" --script "$REPO/scripts/sync-msl.mjs"
+exec node "$CLI" --script "$REPO/scripts/sync-release-assets.mjs"

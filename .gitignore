@@ -125,3 +125,6 @@ __pycache__/
 
 # 构建期经分发契约拉下的 MSL 字节（adapt 会拷进 bridge/；绝不进仓）
 public/bridge/assets/msl/
+
+# 2026-11-08：OMC .js 与 wasm 同族（release 资产，构建期由分发契约拉取，不进仓）
+public/omc/OpenModelicaCompiler.js
