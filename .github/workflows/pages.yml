@@ -101,22 +101,21 @@ jobs:
             "https://github.com/ArchivalEra/OpenModelica-Full-Wasm/releases/download/v0.1.0-wasm32/OpenModelicaCompiler_bg.wasm"
           echo "8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001  public/omc/OpenModelicaCompiler_bg.wasm" | sha256sum -c -
 
-      # ── MSL 站内资产镜像（内容仓 084 A2：form:"file" 单 zip，落**兄弟目录**，不混进 omc/——
-      # 引擎 form:"tree" 的 size 是目录字节和，混入会虚胀 ~19.5MB 闭包预算）。
-      # 落位 = `assets/msl/`：以**宿主表的 url 字段为权威**（表是公开机器产物，消费端按它取；
-      # 宿主既有布局 assets/pyodide/、assets/llvm/ 同族）。
-      # 锚 = OM 台账键 msl_asset_sha / msl_asset_bytes（fail-closed，同引擎模式）。
-      - name: Sync MSL asset (release asset, sha-pinned)
-        run: |
-          set -euo pipefail
-          mkdir -p public/assets/msl
-          curl -fL --retry 3 -o public/assets/msl/msl-4.1.0-maint.om.zip \
-            "https://github.com/ArchivalEra/OpenModelica-Full-Wasm/releases/download/v0.1.0-wasm32/msl-4.1.0-maint.om.zip"
-          echo "a97d8d94ca7f7960f7f1c209613a35d65bcfa2426660e5052617e71326308535  public/assets/msl/msl-4.1.0-maint.om.zip" | sha256sum -c -
-          test "$(stat -c%s public/assets/msl/msl-4.1.0-maint.om.zip)" = "19482938"
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # ── MSL 站内资产镜像（内容仓 084 A2：form:"file" 单 zip，落**兄弟目录**，不混进 omc/——
+      # 引擎 form:"tree" 的 size 是目录字节和，混入会虚胀 ~19.5MB 闭包预算）。
+      # 落位 = `assets/msl/`：以宿主表的 url 字段为权威（与 forge-catalog.json 同源）。
+      #
+      # ★ 2026-11-08：不再用裸 curl 从 `v0.1.0-wasm32` 整包 release 拉单个 zip
+      #   —— 那与产品运行期走的分发契约（catalogue → manifest → chunks → 双 sha）
+      #   正交。现在 `scripts/sync-msl.mjs` 复用本仓照 Static-Contract 参考客户端
+      #   移植的 TS 消费侧（与 DownloadStore 同一条字节链），vite-node 是
+      #   lockfile 里已有的传递依赖，零新增包。脚本自身逐块 sha + 拼接后
+      #   bytes/sha + 落盘指纹 fail-closed，故这里无需再 sha256sum/stat。
+      - name: Sync MSL asset (distribution contract, TS consumer)
+        run: pnpm sync:msl
 
       # 测试闸门：UI/引擎契约回归在此拦下（16 套件 / 119 用例）。
       - name: Test

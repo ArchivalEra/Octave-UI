@@ -122,3 +122,6 @@ __pycache__/
 !/zreflect/lang/
 !/zreflect/lang/**/*.json
 !/zreflect/*.json.example
+
+# 构建期经分发契约拉下的 MSL 字节（adapt 会拷进 bridge/；绝不进仓）
+public/bridge/assets/msl/

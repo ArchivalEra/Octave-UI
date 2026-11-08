@@ -56,6 +56,30 @@ python3 zreflect/check_facts_replay.py     → 8 条 cmd 逐字一致 / 14 条 w
 按剧本：**不造假占位文件、不改 vendored 自证**，生产判据以
 `registry --run commit`（11 ran / 0 failed）为准。
 
+## 后续修正（2026-11-08）：构建期 MSL 不再与运行期正交
+
+额叶切除当天，`deploy-contract.mjs verify` 缺 `assets/msl/msl-4.1.0-maint.om.zip`
+时，曾用裸 `curl` 从 GitHub 整包 release 拉单个 zip 凑存在性。用户指出
+「这样就跟实际路径正交了，实际应该是用那个照 contract 仓库的 example 改的 ts 来拉」。
+
+- **正交点**：`pages.yml` 旧步骤取 `v0.1.0-wasm32/msl-4.1.0-maint.om.zip`
+  （整包 release 的单资产）；产品运行期是 `catalogue → manifest → chunks → 逐块 sha
+  → 拼接 → 双 sha`（`catalogueReleaseSource.ts` / `chunkAssembler.ts`），
+  本仓那套 TS 正是照 `Static-Contract/examples/fetch-concurrent.ts` 移植的。
+- **修法**：新增 `scripts/sync-msl.mjs`（+ `sync-msl.sh` 薄壳），用 lockfile 里
+  已有的 `vite-node` 加载**现成 TS 消费侧**：`loadCatalogue` /
+  `fetchReleaseManifest` / `selectVariant` / `assembleEntry` / `computeSha256`；
+  只在 Node 侧注入 `FetchPort`（带退避重试）与 `CodecDecoders`（`node:zlib`）。
+  按 `entry.name === 'msl-4.1.0-maint.om.zip'` 全表扫、不猜 release id；
+  落盘后钉 `a97d8d94…` + 19482938 字节（与 `forge-catalog.json` 同源）。
+- **CI**：`pages.yml` 删裸 curl + `sha256sum` + `stat`，改 `pnpm sync:msl`
+  并移到 `Install dependencies` 之后；`deploy-contract.mjs:236` 的 verify
+  存在性断言原样保留。零新增 npm 依赖。
+- **实测（2026-11-08）**：`pnpm sync:msl` 命中
+  `OpenModelica-Full-Wasm/msl-4.1.0-maint.om`（identity / 4 chunks），
+  拼接后 19482938 B、sha `a97d8d94…`，`Contract · verify` 通过。
+  构建期与运行期从此走同一条字节链。
+
 ## Out of Scope
 
 - 不改上游 vendored 机制层任何文件（012 信「整层换、别半换」）。
